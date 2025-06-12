@@ -26,12 +26,24 @@ class ImageDisplay:
             self.display_scale = 1.0
 
         # Convert to PhotoImage
-        self.photo = ImageTk.PhotoImage(display_image)  # Fix: create PhotoImage directly
+        self.photo = ImageTk.PhotoImage(display_image)
 
         # Clear canvas and display image
         self.canvas.delete('all')
-        self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
-        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+        image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+
+        # Ensure scroll region is set to the image dimensions
+        self.canvas.configure(scrollregion=(0, 0, self.photo.width(), self.photo.height()))
+
+        # Force canvas to update
+        self.canvas.update_idletasks()
+
+        # Reset view to top-left
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
+
+        # Ensure the image is visible
+        self.displayed_image = display_image
 
     def start_roi_selection(self, event):
         """Start ROI selection on canvas"""

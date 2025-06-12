@@ -38,8 +38,6 @@ def analyze_image(image, roi_coords=None):
     except Exception as e:
         raise Exception(f"Analysis error: {str(e)}")
 
-# Remove the _analyze_worker function as it belongs in the UI module
-
 def calculate_contrast_improved(gray):
     """Improved contrast calculation using multiple methods"""
     # Method 1: RMS contrast (better for DIC)

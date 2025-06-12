@@ -195,6 +195,12 @@ class DICQualityInspector:
 
     def start_screenshot(self):
         """Start screenshot capture process"""
+        import ctypes
+        from ctypes import windll
+
+        # Set DPI awareness for consistent coordinates
+        windll.shcore.SetProcessDpiAwareness(1)
+
         self.root.withdraw()  # Hide main window
 
         # Create screenshot window
@@ -209,6 +215,10 @@ class DICQualityInspector:
                                 font=('Arial', 16, 'bold'), fg='white', bg='black')
         instructions.pack(expand=True)
 
+        # Create canvas for drawing selection rectangle
+        selection_canvas = tk.Canvas(screenshot_window, highlightthickness=0)
+        selection_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+
         # Screenshot selection variables
         self.start_x = self.start_y = 0
         self.rect_id = None
@@ -216,30 +226,36 @@ class DICQualityInspector:
         def start_selection(event):
             self.start_x, self.start_y = event.x, event.y
             if self.rect_id:
-                screenshot_window.delete(self.rect_id)
+                selection_canvas.delete(self.rect_id)
 
         def update_selection(event):
             if self.rect_id:
-                screenshot_window.delete(self.rect_id)
-            canvas = tk.Canvas(screenshot_window, highlightthickness=0)
-            canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            self.rect_id = canvas.create_rectangle(self.start_x, self.start_y,
-                                                   event.x, event.y, outline='red', width=3)
+                selection_canvas.delete(self.rect_id)
+            self.rect_id = selection_canvas.create_rectangle(self.start_x, self.start_y,
+                                                             event.x, event.y, outline='red', width=3)
 
         def end_selection(event):
-            screenshot_window.destroy()
-            self.root.deiconify()  # Show main window
-
-            # Capture the selected area
+            # Store selection coordinates
             x1, y1 = min(self.start_x, event.x), min(self.start_y, event.y)
             x2, y2 = max(self.start_x, event.x), max(self.start_y, event.y)
 
-            if abs(x2 - x1) > 10 and abs(y2 - y1) > 10:  # Minimum size check
+            # Close screenshot window
+            screenshot_window.destroy()
+
+            if abs(x2 - x1) > 10 and abs(y2 - y1) > 10:
                 try:
-                    # Capture screenshot
+                    # Take screenshot
                     screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
 
-                    # Convert to numpy array
+                    # Debug info
+                    print(f"Selection area: {x2 - x1}x{y2 - y1} at ({x1},{y1})")
+                    print(f"Captured image size: {screenshot.width}x{screenshot.height}")
+
+                    # Show main window after capture is ready
+                    self.root.deiconify()
+                    self.root.update()
+
+                    # Store image data
                     self.original_image = np.array(screenshot)
                     self.current_image = self.original_image.copy()
 
@@ -247,17 +263,23 @@ class DICQualityInspector:
                     self.roi_coords = None
                     self.update_roi_info()
 
-                    # Display image
-                    self.display_image(screenshot)
+                    # Use same approach as load_image_from_path
+                    self.image_display.display_image(screenshot)
 
-                    # Enable ROI selection and analysis
+                    # Reset view position
+                    self.image_canvas.xview_moveto(0)
+                    self.image_canvas.yview_moveto(0)
+
+                    # Enable buttons
                     self.roi_btn.config(state='normal')
                     self.analyze_btn.config(state='normal')
-                    self.status_var.set(f"Screenshot captured: {x2 - x1}x{y2 - y1} pixels - Select ROI for analysis")
+                    self.status_var.set(f"Screenshot captured: {screenshot.width}x{screenshot.height} pixels")
 
                 except Exception as e:
+                    self.root.deiconify()
                     messagebox.showerror("Error", f"Failed to capture screenshot: {str(e)}")
             else:
+                self.root.deiconify()
                 self.status_var.set("Screenshot cancelled - area too small")
 
         def cancel_screenshot(event):
