@@ -1,6 +1,16 @@
+# metrics.py
+
 import cv2
 import numpy as np
 from tkinter import messagebox
+
+def get_analysis_region(image, roi_coords):
+    """Extract region of interest from image"""
+    if roi_coords is None:
+        return image
+
+    x1, y1, x2, y2 = roi_coords
+    return image[y1:y2, x1:x2]
 
 def analyze_image(image, roi_coords=None):
     """Analyze the DIC pattern quality"""
@@ -21,24 +31,24 @@ def analyze_image(image, roi_coords=None):
         results = {}
 
         # Enhanced analysis for DIC applications
-        results['contrast'] = calculate_contrast_improved(gray)
-        results['speckle_density'] = calculate_speckle_density_improved(gray)
+        results['contrast'] = calculate_contrast(gray)
+        results['speckle_density'] = calculate_speckle_density(gray)
         results['gradient_magnitude'] = calculate_gradient_magnitude(gray)
-        results['noise_level'] = calculate_noise_level_improved(gray)
-        results['pattern_uniformity'] = calculate_uniformity_improved(gray)
-        results['feature_size'] = analyze_feature_size_improved(gray)
+        results['noise_level'] = calculate_noise_level(gray)
+        results['pattern_uniformity'] = calculate_uniformity(gray)
+        results['feature_size'] = analyze_feature_size(gray)
         results['intensity_distribution'] = analyze_intensity_distribution(gray)
         results['edge_quality'] = analyze_edge_quality(gray)
 
         # Improved overall score calculation
-        results['overall_score'] = calculate_overall_score_improved(results)
+        results['overall_score'] = calculate_overall_score(results)
 
         return results
 
     except Exception as e:
         raise Exception(f"Analysis error: {str(e)}")
 
-def calculate_contrast_improved(gray):
+def calculate_contrast(gray):
     """Improved contrast calculation using multiple methods"""
     # Method 1: RMS contrast (better for DIC)
     rms_contrast = np.sqrt(np.mean((gray - np.mean(gray))**2)) / np.mean(gray) * 100
@@ -55,7 +65,7 @@ def calculate_contrast_improved(gray):
     contrast = (rms_contrast + michelson_contrast) / 2
     return round(min(contrast, 100), 1)
 
-def calculate_speckle_density_improved(gray):
+def calculate_speckle_density(gray):
     """Improved speckle density calculation"""
     # Use multiple feature detection methods
 
@@ -84,7 +94,7 @@ def calculate_speckle_density_improved(gray):
 
     return round(density, 1)
 
-def calculate_noise_level_improved(gray):
+def calculate_noise_level(gray):
     """Improved noise level estimation"""
     # Use multiple noise estimation methods
 
@@ -107,7 +117,7 @@ def calculate_noise_level_improved(gray):
 
     return round(max(0, min(snr, 50)), 1)
 
-def calculate_uniformity_improved(gray):
+def calculate_uniformity(gray):
     """Improved pattern uniformity calculation"""
     # Use overlapping windows for better uniformity assessment
     h, w = gray.shape
@@ -149,7 +159,7 @@ def calculate_uniformity_improved(gray):
     overall_uniformity = (mean_uniformity + std_uniformity + grad_uniformity) / 3
     return round(max(0, min(overall_uniformity, 100)), 1)
 
-def analyze_feature_size_improved(gray):
+def analyze_feature_size(gray):
     """Improved feature size analysis"""
     # Use watershed segmentation for better feature separation
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -245,7 +255,7 @@ def analyze_edge_quality(gray):
 
     return round(min(edge_quality, 100), 1)
 
-def calculate_overall_score_improved(results):
+def calculate_overall_score(results):
     """Improved overall score calculation with DIC-specific weighting"""
     # DIC-specific weights
     weights = {

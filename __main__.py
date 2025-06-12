@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+# This script is used to run the application from the command line.
+# __main__.py
 import sys
 import os
 
