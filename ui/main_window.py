@@ -151,6 +151,11 @@ class DICQualityInspector:
                               anchor='w', bg='#95a5a6', fg='white')
         status_bar.pack(side='bottom', fill='x')
 
+        # Bind canvas events for ROI selection
+        self.image_canvas.bind('<ButtonPress-1>', self.start_roi_selection)
+        self.image_canvas.bind('<B1-Motion>', self.update_roi_selection)
+        self.image_canvas.bind('<ButtonRelease-1>', self.end_roi_selection)
+
     def load_image(self):
         """Load image from file"""
         file_types = [
@@ -299,10 +304,90 @@ class DICQualityInspector:
         self.roi_selection_mode = not self.roi_selection_mode
         if self.roi_selection_mode:
             self.roi_btn.config(text="🎯 ROI Mode ON", bg='#e74c3c')
-            self.status_var.set("ROI Selection Mode: Click and drag on image to select analysis region")
+            self.status_var.set("ROI Selection Mode: Click and drag on the image to select the analysis region")
         else:
             self.roi_btn.config(text="🎯 Select ROI", bg='#9b59b6')
             self.status_var.set("ROI Selection Mode OFF")
+
+    def start_roi_selection(self, event):
+        """Start ROI selection on canvas"""
+        if not self.roi_selection_mode or self.original_image is None:
+            return
+
+        # Get canvas coordinates
+        canvas_x = self.image_canvas.canvasx(event.x)
+        canvas_y = self.image_canvas.canvasy(event.y)
+
+        self.roi_start = (canvas_x, canvas_y)
+
+        # Clear previous ROI rectangle
+        if self.roi_rect:
+            self.image_canvas.delete(self.roi_rect)
+
+    def update_roi_selection(self, event):
+        """Update ROI selection rectangle"""
+        if not self.roi_selection_mode or not self.roi_start:
+            return
+
+        # Get canvas coordinates
+        canvas_x = self.image_canvas.canvasx(event.x)
+        canvas_y = self.image_canvas.canvasy(event.y)
+
+        # Clear previous rectangle
+        if self.roi_rect:
+            self.image_canvas.delete(self.roi_rect)
+
+        # Draw new rectangle
+        self.roi_rect = self.image_canvas.create_rectangle(
+            self.roi_start[0], self.roi_start[1], canvas_x, canvas_y,
+            outline='red', width=2, dash=(5, 5)
+        )
+
+    def end_roi_selection(self, event):
+        """End ROI selection and store coordinates"""
+        if not self.roi_selection_mode or not self.roi_start:
+            return
+
+        # Get canvas coordinates
+        canvas_x = self.image_canvas.canvasx(event.x)
+        canvas_y = self.image_canvas.canvasy(event.y)
+
+        # Calculate scaling factor between displayed image and original
+        scale = getattr(self.image_display, 'display_scale', 1.0)
+
+        # Convert canvas coordinates to image coordinates
+        x1 = int(min(self.roi_start[0], canvas_x) / scale)
+        y1 = int(min(self.roi_start[1], canvas_y) / scale)
+        x2 = int(max(self.roi_start[0], canvas_x) / scale)
+        y2 = int(max(self.roi_start[1], canvas_y) / scale)
+
+        # Ensure coordinates are within image bounds
+        h, w = self.original_image.shape[:2]
+        x1 = max(0, min(x1, w - 1))
+        y1 = max(0, min(y1, h - 1))
+        x2 = max(0, min(x2, w - 1))
+        y2 = max(0, min(y2, h - 1))
+
+        # Store ROI if it's large enough
+        if abs(x2 - x1) > 10 and abs(y2 - y1) > 10:
+            self.roi_coords = (x1, y1, x2, y2)
+            self.update_roi_info()
+            self.status_var.set(f"ROI Selected: {x2 - x1}x{y2 - y1} pixels - Ready for analysis")
+        else:
+            self.status_var.set("ROI too small - please select a larger area")
+
+        # Turn off ROI selection mode
+        self.roi_btn.config(text="🎯 Select ROI", bg='#9b59b6')
+        self.roi_selection_mode = False
+
+    def clear_roi(self):
+        """Clear the current ROI selection"""
+        self.roi_coords = None
+        if self.roi_rect:
+            self.image_canvas.delete(self.roi_rect)
+            self.roi_rect = None
+        self.update_roi_info()
+        self.status_var.set("ROI cleared - will analyze full image")
 
     def update_roi_info(self):
         """Update ROI information display"""
@@ -599,12 +684,3 @@ class DICQualityInspector:
 
             pil_image = Image.fromarray(self.current_image)
             self.image_display.display_image(pil_image)
-
-    def clear_roi(self):
-        """Clear the current ROI selection"""
-        self.roi_coords = None
-        if self.roi_rect:
-            self.image_canvas.delete(self.roi_rect)
-            self.roi_rect = None
-        self.update_roi_info()
-        self.status_var.set("ROI cleared - will analyze full image")
