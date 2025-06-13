@@ -157,11 +157,6 @@ class DICQualityInspector:
                                       command=lambda: self.image_display.reset_display())
         reset_display_btn.pack(side='left', padx=2)
 
-        reset_view_btn = tk.Button(process_frame, text="Reset View",
-                                   bg='#3498db', fg='white', padx=10,
-                                   command=lambda: self.image_display.reset_view())
-        reset_view_btn.pack(side='left', padx=2)
-
         # Right panel - Analysis results
         right_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
         right_panel.pack(side='right', fill='y', padx=5)

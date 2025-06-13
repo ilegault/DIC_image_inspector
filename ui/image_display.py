@@ -574,8 +574,15 @@ class ImageDisplay:
         if hasattr(self.main_window, 'original_image') and self.main_window.original_image is not None:
             self.main_window.current_image = self.main_window.original_image.copy()
             pil_image = Image.fromarray(self.main_window.current_image)
-            self.display_image(pil_image)
-            self.reset_view()
+
+            # Use display_image_preserve_view instead of display_image
+            # Capture current view state
+            current_zoom = self.zoom_level
+            visible_x = self.canvas.xview()
+            visible_y = self.canvas.yview()
+
+            # Display image while preserving view position
+            self.display_image_preserve_view(pil_image, current_zoom, visible_x, visible_y)
 
         # Update status
         self.main_window.status_var.set("Display reset - ROI cleared and original image restored")
