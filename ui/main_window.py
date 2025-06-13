@@ -31,7 +31,7 @@ class DICQualityInspector:
         self.create_gui()
 
         # Create managers
-        self.image_display = ImageDisplay(self.image_canvas)
+        self.image_display = ImageDisplay(self.image_canvas, self)
         self.file_operations = FileOperations(self)
         self.roi_handler = ROIHandler(self)
         self.analyze_btn.config(command=self.analyze_image)
@@ -118,22 +118,49 @@ class DICQualityInspector:
 
         self.image_canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
 
-        self.image_canvas.pack(side='left', fill='both', expand=True)
-        v_scrollbar.pack(side='right', fill='y')
-        h_scrollbar.pack(side='bottom', fill='x')
+        # Change the positioning of components
+        self.image_canvas.grid(row=0, column=0, sticky='nsew')
+        v_scrollbar.grid(row=0, column=1, sticky='ns')
+        h_scrollbar.grid(row=1, column=0, sticky='ew')
+
+        # Configure grid weights to make the canvas expand
+        canvas_frame.grid_rowconfigure(0, weight=1)
+        canvas_frame.grid_columnconfigure(0, weight=1)
 
         # Image processing buttons
         process_frame = tk.Frame(left_panel, bg='#34495e')
         process_frame.pack(pady=10)
 
-        tk.Button(process_frame, text="Original",
-                  bg='#95a5a6', fg='white', padx=10).pack(side='left', padx=2)
-        tk.Button(process_frame, text="Edges",
-                  bg='#95a5a6', fg='white', padx=10).pack(side='left', padx=2)
-        tk.Button(process_frame, text="Gradient",
-                  bg='#95a5a6', fg='white', padx=10).pack(side='left', padx=2)
-        tk.Button(process_frame, text="Clear ROI",
-                  bg='#e74c3c', fg='white', padx=10).pack(side='left', padx=2)
+        # Add this to the btn_frame in create_gui method
+        self.help_btn = tk.Button(btn_frame, text="❓ Help",
+                                  bg="#7f8c8d", fg="white", font=("Arial", 12, "bold"),
+                                  padx=10, pady=5, command=self.show_help)
+        self.help_btn.pack(side="left", padx=5)
+
+        original_btn = tk.Button(process_frame, text="Original",
+                                 bg='#95a5a6', fg='white', padx=10,
+                                 command=lambda: self.image_display.show_original())
+        original_btn.pack(side='left', padx=2)
+
+        edges_btn = tk.Button(process_frame, text="Edges",
+                              bg='#95a5a6', fg='white', padx=10,
+                              command=lambda: self.image_display.show_edges())
+        edges_btn.pack(side='left', padx=2)
+
+        gradient_btn = tk.Button(process_frame, text="Gradient",
+                                 bg='#95a5a6', fg='white', padx=10,
+                                 command=lambda: self.image_display.show_gradient())
+        gradient_btn.pack(side='left', padx=2)
+
+        reset_display_btn = tk.Button(process_frame, text="Reset Display",
+                                      bg='#e74c3c', fg='white', padx=10,
+                                      command=lambda: self.image_display.reset_display())
+        reset_display_btn.pack(side='left', padx=2)
+
+        reset_view_btn = tk.Button(process_frame, text="Reset View",
+                                   bg='#3498db', fg='white', padx=10,
+                                   command=lambda: self.image_display.reset_view())
+        reset_view_btn.pack(side='left', padx=2)
 
         # Right panel - Analysis results
         right_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
@@ -165,6 +192,11 @@ class DICQualityInspector:
         status_bar = tk.Label(self.root, textvariable=self.status_var, relief='sunken',
                               anchor='w', bg='#95a5a6', fg='white')
         status_bar.pack(side='bottom', fill='x')
+
+        quality_map_btn = tk.Button(process_frame, text="Quality Map",
+                                    bg='#2ecc71', fg='white', padx=10,
+                                    command=lambda: self.image_display.show_quality_map())
+        quality_map_btn.pack(side='left', padx=2)
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -267,7 +299,7 @@ class DICQualityInspector:
         screenshot_window.focus_set()
 
     def analyze_image(self):
-        """Analyze image quality for DIC"""
+        """Analyze image quality for DIC and show quality map"""
         if self.original_image is None:
             return
 
@@ -371,6 +403,98 @@ class DICQualityInspector:
         roi_text = "ROI" if self.roi_coords else "full image"
         self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
 
+    def _update_results_display_and_show_map(self):
+        """Update the results display and show quality map"""
+        self._update_results_display()
+        self.image_display.show_quality_map()
+
+    def _update_results_display_and_show_map_with_view(self, zoom_level, x_view, y_view):
+        """Update results display and show quality map while preserving view"""
+        # First update the results panel
+        self._update_results_display()
+
+        # Then show quality map with preserved view
+        if hasattr(self, 'original_image') and self.original_image is not None:
+            if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords:
+                # Store the view state temporarily
+                self.image_display.temp_zoom = zoom_level
+                self.image_display.temp_x_view = x_view
+                self.image_display.temp_y_view = y_view
+
+                # Show the quality map using the preserved view
+                self.image_display.show_quality_map_preserve_view()
+
+    def show_help(self):
+        """Show comprehensive help for the application"""
+        help_text = """
+    DIC Image Quality Inspector - Help Guide
+
+    • Getting Started:
+      - Load an image using "Load Image" or capture with "Screen Capture"
+      - Images can be in PNG, JPEG, TIFF, or BMP formats
+
+    • Region of Interest (ROI):
+      - Click "Select ROI" to enable ROI selection mode
+      - Click and drag on the image to select your analysis region
+      - Clear the current ROI with the "Clear ROI" button
+
+    • Image Navigation:
+      - Zoom: Use the mouse wheel to zoom in/out
+      - Pan: Hold Ctrl + click and drag to move around
+      - Reset View: Click "Reset View" to return to original view
+
+    • Image Processing:
+      - Original: Return to the unprocessed image
+      - Edges: Display edge detection visualization
+      - Gradient: Display gradient magnitude visualization
+
+    • Analysis:
+      - Click "Analyze" to process the image quality metrics
+      - Results are shown in the right panel
+      - Higher overall scores indicate better DIC pattern quality
+      - Recommendations provide guidance to improve your pattern
+
+    • Report:
+      - Save a detailed analysis report using "Save Report"
+
+    • Troubleshooting:
+      - If ROI selection appears off, try resetting the view first
+      - For best results, ensure proper lighting in original images
+      - Large images may take longer to process
+        """
+
+        # Create a custom dialog with scrollable text
+        help_dialog = tk.Toplevel(self.root)
+        help_dialog.title("DIC Image Quality Inspector - Help")
+        help_dialog.geometry("600x500")
+        help_dialog.transient(self.root)
+        help_dialog.grab_set()
+
+        # Add scrollable text area
+        text_frame = tk.Frame(help_dialog)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        text_widget = tk.Text(text_frame, wrap="word", bg="#f0f0f0",
+                              font=("Arial", 11), padx=10, pady=10)
+        text_widget.pack(side="left", fill="both", expand=True)
+
+        # Connect scrollbar to text widget
+        scrollbar.config(command=text_widget.yview)
+        text_widget.config(yscrollcommand=scrollbar.set)
+
+        # Insert help text
+        text_widget.insert("1.0", help_text)
+        text_widget.config(state="disabled")  # Make read-only
+
+        # Close button
+        close_button = tk.Button(help_dialog, text="Close",
+                                 bg="#3498db", fg="white", font=("Arial", 11, "bold"),
+                                 command=help_dialog.destroy, padx=20, pady=5)
+        close_button.pack(pady=10)
+
     def _generate_recommendations(self, results):
         """Generate recommendations based on analysis results"""
         recommendations = []
@@ -406,8 +530,13 @@ class DICQualityInspector:
     def _analyze_worker(self):
         """Worker thread to perform image analysis"""
         try:
+            # Store current view state before analysis
+            current_zoom = self.image_display.zoom_level
+            visible_x = self.image_canvas.xview()
+            visible_y = self.image_canvas.yview()
+
             # Get the image to analyze
-            analysis_region = get_analysis_region(self.original_image, self.roi_coords)
+            analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
 
             # Perform analysis
             results = analyze_image(analysis_region)
@@ -415,13 +544,20 @@ class DICQualityInspector:
             # Store results
             self.analysis_results = results
 
-            # Update GUI on main thread
-            self.root.after(0, self._update_results_display)
+            # Update GUI on main thread, passing the view state
+            self.root.after(0, lambda: self._update_results_display_and_show_map_with_view(
+                current_zoom, visible_x, visible_y))
+
+            # Sync ROI with quality map
+            if self.roi_handler and self.roi_handler.roi_coords:
+                self.roi_handler.sync_roi_with_view(current_zoom, visible_x, visible_y)
 
         except Exception as e:
-            # Show error in GUI thread
-            self.root.after(0, lambda: messagebox.showerror("Analysis Error", f"Failed to analyze image: {str(e)}"))
+            error_message = str(e)
+            self.root.after(0, lambda msg=error_message: messagebox.showerror(
+                "Analysis Error", f"Failed to analyze image: {msg}"))
 
         finally:
             # Re-enable analyze button in GUI thread
             self.root.after(0, lambda: self.analyze_btn.config(state='normal'))
+

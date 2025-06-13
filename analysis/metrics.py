@@ -1,4 +1,4 @@
-# metrics.py
+# analysis.metrics.py
 
 import cv2
 import numpy as np
@@ -113,7 +113,8 @@ def calculate_noise_level(gray):
     if noise_estimate > 0:
         snr = 20 * np.log10(signal_strength / noise_estimate)
     else:
-        snr = 50
+        # Avoid division by zero
+        snr = 50  # Set a reasonable maximum SNR value
 
     return round(max(0, min(snr, 50)), 1)
 

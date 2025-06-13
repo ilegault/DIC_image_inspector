@@ -1,7 +1,7 @@
-# Remove the relative import dot
+# app.py
+
 import tkinter as tk
 
-# Use absolute imports
 try:
     # When run as a package
     from ui.main_window import DICQualityInspector

@@ -1,113 +1,181 @@
 # roi_handler.py
 
+from ui.image_display import ImageDisplay
+
 class ROIHandler:
     def __init__(self, main_window):
         """Initialize with a reference to the main window"""
         self.main_window = main_window
-        self.roi_selection_mode = False
-        self.roi_start = None
+        self.canvas = main_window.image_canvas  # Store the canvas reference
         self.roi_rect = None
         self.roi_coords = None
-        self.main_window.image_canvas.bind("<ButtonPress-1>", self.start_roi_selection)
-        self.main_window.image_canvas.bind("<B1-Motion>", self.update_roi_selection)
-        self.main_window.image_canvas.bind("<ButtonRelease-1>", self.end_roi_selection)
-        self.main_window.roi_btn.config(command=self.toggle_roi_selection)
+        self.roi_selection_mode = False
+        self.roi_start = None
 
     def toggle_roi_selection(self):
         """Toggle ROI selection mode"""
         self.roi_selection_mode = not self.roi_selection_mode
         if self.roi_selection_mode:
-            self.main_window.roi_btn.config(text="🎯 ROI Mode ON", bg='#e74c3c')
-            self.main_window.status_var.set(
-                "ROI Selection Mode: Click and drag on the image to select the analysis region")
+            self.main_window.roi_btn.config(bg='#e74c3c')  # Red when active
+            self.main_window.status_var.set("ROI selection mode: Click and drag to select analysis region")
+            self.canvas.config(cursor="crosshair")
         else:
-            self.main_window.roi_btn.config(text="🎯 Select ROI", bg='#9b59b6')
-            self.main_window.status_var.set("ROI Selection Mode OFF")
+            self.main_window.roi_btn.config(bg='#9b59b6')  # Purple when inactive
+            self.main_window.status_var.set("ROI selection mode disabled")
+            self.canvas.config(cursor="")
 
     def start_roi_selection(self, event):
-        """Start ROI selection on canvas"""
-        if not self.roi_selection_mode or self.main_window.original_image is None:
+        """Start ROI selection"""
+        if not self.roi_selection_mode:
             return
 
-        # Get canvas coordinates
-        canvas_x = self.main_window.image_canvas.canvasx(event.x)
-        canvas_y = self.main_window.image_canvas.canvasy(event.y)
+        # Convert window coordinates to canvas coordinates
+        x = self.canvas.canvasx(event.x)
+        y = self.canvas.canvasy(event.y)
+        self.roi_start = (x, y)
 
-        self.roi_start = (canvas_x, canvas_y)
-
-        # Clear previous ROI rectangle
+        # Clear any existing ROI
         if self.roi_rect:
-            self.main_window.image_canvas.delete(self.roi_rect)
+            self.canvas.delete(self.roi_rect)
+            self.roi_rect = None
+            self.roi_coords = None
 
     def update_roi_selection(self, event):
-        """Update ROI selection rectangle"""
+        """Update ROI during selection"""
         if not self.roi_selection_mode or not self.roi_start:
             return
 
-        # Get canvas coordinates
-        canvas_x = self.main_window.image_canvas.canvasx(event.x)
-        canvas_y = self.main_window.image_canvas.canvasy(event.y)
+        # Convert window coordinates to canvas coordinates
+        x = self.canvas.canvasx(event.x)
+        y = self.canvas.canvasy(event.y)
 
-        # Clear previous rectangle
+        # Delete previous rectangle
         if self.roi_rect:
-            self.main_window.image_canvas.delete(self.roi_rect)
+            self.canvas.delete(self.roi_rect)
 
         # Draw new rectangle
-        self.roi_rect = self.main_window.image_canvas.create_rectangle(
-            self.roi_start[0], self.roi_start[1], canvas_x, canvas_y,
-            outline='red', width=2, dash=(5, 5)
-        )
+        self.roi_rect = self.canvas.create_rectangle(
+            self.roi_start[0], self.roi_start[1], x, y,
+            outline='red', width=2, dash=(4, 4))
 
     def end_roi_selection(self, event):
-        """End ROI selection and store coordinates"""
+        """Finish ROI selection"""
         if not self.roi_selection_mode or not self.roi_start:
             return
 
-        # Get canvas coordinates
-        canvas_x = self.main_window.image_canvas.canvasx(event.x)
-        canvas_y = self.main_window.image_canvas.canvasy(event.y)
+        # Convert window coordinates to canvas coordinates
+        x = self.canvas.canvasx(event.x)
+        y = self.canvas.canvasy(event.y)
 
-        # Calculate scaling factor between displayed image and original
-        scale = getattr(self.main_window.image_canvas, 'display_scale', 1.0)
+        # Ensure x1 < x2 and y1 < y2
+        x1 = min(self.roi_start[0], x)
+        y1 = min(self.roi_start[1], y)
+        x2 = max(self.roi_start[0], x)
+        y2 = max(self.roi_start[1], y)
 
-        # Convert canvas coordinates to image coordinates
-        x1 = int(min(self.roi_start[0], canvas_x) / scale)
-        y1 = int(min(self.roi_start[1], canvas_y) / scale)
-        x2 = int(max(self.roi_start[0], canvas_x) / scale)
-        y2 = int(max(self.roi_start[1], canvas_y) / scale)
-
-        # Ensure coordinates are within image bounds
-        h, w = self.main_window.original_image.shape[:2]
-        x1 = max(0, min(x1, w - 1))
-        y1 = max(0, min(y1, h - 1))
-        x2 = max(0, min(x2, w - 1))
-        y2 = max(0, min(y2, h - 1))
-
-        # Store ROI if it's large enough
-        if abs(x2 - x1) > 10 and abs(y2 - y1) > 10:
-            self.roi_coords = (x1, y1, x2, y2)
-            self.update_roi_info()
-            self.main_window.status_var.set(f"ROI Selected: {x2 - x1}x{y2 - y1} pixels - Ready for analysis")
-        else:
-            self.main_window.status_var.set("ROI too small - please select a larger area")
-
-        # Turn off ROI selection mode
-        self.main_window.roi_btn.config(text="🎯 Select ROI", bg='#9b59b6')
-        self.roi_selection_mode = False
-
-    def clear_roi(self):
-        """Clear the current ROI selection"""
-        self.roi_coords = None
-        if self.roi_rect:
-            self.main_window.image_canvas.delete(self.roi_rect)
+        # Minimum ROI size check
+        if (x2 - x1) < 10 or (y2 - y1) < 10:
+            # ROI too small, clear it
+            self.canvas.delete(self.roi_rect)
             self.roi_rect = None
+            self.roi_coords = None
+            self.update_roi_info()
+            return
+
+        # Get display scale from canvas
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
+
+        # Convert from displayed coordinates to original image coordinates
+        orig_x1 = int(x1 / display_scale)
+        orig_y1 = int(y1 / display_scale)
+        orig_x2 = int(x2 / display_scale)
+        orig_y2 = int(y2 / display_scale)
+
+        # Store ROI in original image coordinates
+        self.roi_coords = (orig_x1, orig_y1, orig_x2, orig_y2)
+
+        # Update ROI info display
         self.update_roi_info()
-        self.main_window.status_var.set("ROI cleared - will analyze full image")
+
+        # Exit ROI selection mode
+        self.roi_selection_mode = False
+        self.main_window.roi_btn.config(bg='#9b59b6')  # Purple when inactive
+        self.canvas.config(cursor="")
+
+        # Update status
+        width = orig_x2 - orig_x1
+        height = orig_y2 - orig_y1
+        self.main_window.status_var.set(f"ROI selected: {width}x{height} pixels at ({orig_x1},{orig_y1})")
 
     def update_roi_info(self):
-        """Update ROI information display"""
+        """Update ROI information label"""
         if self.roi_coords:
             x1, y1, x2, y2 = self.roi_coords
-            self.main_window.roi_info_label.config(text=f"ROI: {x2 - x1}x{y2 - y1} pixels at ({x1},{y1})")
+            width = x2 - x1
+            height = y2 - y1
+            self.main_window.roi_info_label.config(
+                text=f"ROI: {width}x{height} pixels at ({x1},{y1})")
         else:
-            self.main_window.roi_info_label.config(text="ROI: Not Selected (analyzing full image)")
+            self.main_window.roi_info_label.config(
+                text="ROI: Not Selected (analyzing full image)")
+
+    def clear_roi(self):
+        """Clear the current ROI"""
+        if self.roi_rect:
+            self.canvas.delete(self.roi_rect)
+            self.roi_rect = None
+            self.roi_coords = None
+            self.update_roi_info()
+            self.main_window.status_var.set("ROI cleared - full image will be analyzed")
+
+    def redraw_roi(self):
+        """Redraw ROI on the canvas after image changes/zoom"""
+        if not self.roi_coords:
+            return
+
+        # Clear existing ROI rectangle
+        if self.roi_rect:
+            self.canvas.delete(self.roi_rect)
+
+        # Get current display scale from canvas
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
+
+        # Convert from original image coordinates to current display coordinates
+        x1, y1, x2, y2 = self.roi_coords
+        disp_x1 = int(x1 * display_scale)
+        disp_y1 = int(y1 * display_scale)
+        disp_x2 = int(x2 * display_scale)
+        disp_y2 = int(y2 * display_scale)
+
+        # Draw new rectangle
+        self.roi_rect = self.canvas.create_rectangle(
+            disp_x1, disp_y1, disp_x2, disp_y2,
+            outline='red', width=2, dash=(4, 4))
+
+        # Make sure ROI is visible
+        self.canvas.tag_raise(self.roi_rect)
+
+    def sync_roi_with_view(self, zoom_level=None, visible_x=None, visible_y=None):
+        """Synchronize ROI with current view after analysis"""
+        if not self.roi_coords:
+            return
+
+        # If parameters are provided, use them
+        if zoom_level is not None and visible_x is not None and visible_y is not None:
+            # Store them for debugging if needed
+            self._last_sync = {
+                'zoom': zoom_level,
+                'x_view': visible_x,
+                'y_view': visible_y
+            }
+
+        # Redraw the ROI to match current view scale
+        self.redraw_roi()
+
+    def debug_roi_coords(self):
+        """Print current ROI coordinates and scales for debugging"""
+        if self.roi_coords:
+            display_scale = getattr(self.canvas, 'display_scale', 1.0)
+            zoom_level = getattr(self.main_window.image_display, 'zoom_level', 1.0)
+            roi = self.roi_coords
+            print(f"ROI: {roi} | Display scale: {display_scale} | Zoom: {zoom_level}")

@@ -1,4 +1,4 @@
-# file_operations.py
+# analysis.file_operations.py
 from tkinter import ttk, filedialog, messagebox
 import numpy as np
 from PIL import Image, ImageTk, ImageGrab
