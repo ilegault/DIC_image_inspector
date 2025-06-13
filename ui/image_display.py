@@ -36,12 +36,25 @@ class ImageDisplay:
         self.pan_start_y = 0
         self.panning = False  # Add this flag to track panning state
 
-    def display_image(self, pil_image):
-        """Display image on canvas"""
-        # Reset zoom when new image is loaded
-        self.zoom_level = 1.0
+    def display_image(self, pil_image, preserve_view=False):
+        """Display image with option to preserve current view
 
-        # Resize for display if too large
+        Args:
+            pil_image: PIL Image to display
+            preserve_view: If True, maintain current zoom level and scroll position
+        """
+        # Store current view state if needed
+        if preserve_view and self.displayed_image:
+            current_zoom = self.zoom_level
+            visible_x = self.canvas.xview()
+            visible_y = self.canvas.yview()
+        else:
+            # Default to reset view
+            current_zoom = 1.0
+            visible_x = (0, 1)
+            visible_y = (0, 1)
+
+        # Calculate scale
         display_image = pil_image.copy()
         max_size = 800
 
@@ -53,8 +66,15 @@ class ImageDisplay:
         else:
             self.display_scale = 1.0
 
-        # Store the display scale on the canvas for ROI handler to use
-        self.canvas.display_scale = self.display_scale
+        # Set zoom level (either preserve or reset)
+        if not preserve_view:
+            self.zoom_level = 1.0
+
+        # Process image with current zoom
+        if self.zoom_level != 1.0:
+            new_width = int(display_image.width * self.zoom_level)
+            new_height = int(display_image.height * self.zoom_level)
+            display_image = display_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(display_image)
@@ -63,18 +83,26 @@ class ImageDisplay:
         self.canvas.delete('all')
         self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
 
-        # Ensure scroll region is set to the image dimensions
+        # Update scroll region to match the image dimensions
         self.canvas.configure(scrollregion=(0, 0, self.photo.width(), self.photo.height()))
+
+        # Update canvas.display_scale for ROI handler
+        self.canvas.display_scale = self.display_scale * self.zoom_level
+
+        # Store the displayed image
+        self.displayed_image = display_image
 
         # Force canvas to update
         self.canvas.update_idletasks()
 
-        # Reset view to top-left
-        self.canvas.xview_moveto(0)
-        self.canvas.yview_moveto(0)
+        # Restore previous view position if preserving view
+        if preserve_view:
+            self.canvas.xview_moveto(visible_x[0])
+            self.canvas.yview_moveto(visible_y[0])
 
-        # Ensure the image is visible
-        self.displayed_image = display_image
+        # Redraw ROI with updated scale and view
+        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
+            self.main_window.roi_handler.redraw_roi()
 
     def zoom(self, event):
         """Handle zoom with mouse wheel"""
@@ -267,16 +295,6 @@ class ImageDisplay:
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             self.main_window.roi_handler.redraw_roi()
 
-    def reset_view(self):
-        """Reset zoom and pan to original state"""
-        if not self.displayed_image:
-            return
-
-        self.zoom_level = 1.0
-        self.apply_zoom()
-        self.canvas.xview_moveto(0)
-        self.canvas.yview_moveto(0)
-
     def show_original(self):
         """Show the original image."""
         if self.main_window and self.main_window.original_image is not None:
@@ -353,8 +371,15 @@ class ImageDisplay:
             pil_image = Image.fromarray(self.main_window.current_image)
             self.display_image(pil_image)
 
-    def show_quality_map(self):
-        """Show a color-coded quality map of the DIC pattern within the ROI"""
+    def show_quality_map(self, preserve_view=True):
+        """Toggle the visibility of the quality map overlay in the ROI
+
+        If the quality map hasn't been generated yet, it will be created.
+        Otherwise, it toggles between showing the original image and the map.
+
+        Args:
+            preserve_view: If True, maintain current zoom level and scroll position
+        """
         if not self.main_window or self.main_window.original_image is None:
             return
 
@@ -371,86 +396,54 @@ class ImageDisplay:
             messagebox.showinfo("Information", "Invalid ROI - please select a valid region")
             return
 
-        # Store current view state
-        current_zoom, visible_x, visible_y = self.sync_view_state()
+        # Check if we already have a quality map stored
+        if not hasattr(self.main_window, 'quality_map') or self.main_window.quality_map is None:
+            # Extract the ROI from the original image
+            roi = self.main_window.original_image[y1:y2, x1:x2].copy()
 
-        # Extract the ROI from the original image (not the displayed one)
-        roi = self.main_window.original_image[y1:y2, x1:x2].copy()
+            # Create quality map
+            quality_map = self._generate_quality_map(roi)
 
-        # Create quality map
-        quality_map = self._generate_quality_map(roi)
+            # Apply colormap to the quality map (jet colormap)
+            colored_map = cv2.applyColorMap((quality_map * 255).astype(np.uint8), cv2.COLORMAP_JET)
 
-        # Apply colormap to the quality map (jet colormap)
-        colored_map = cv2.applyColorMap((quality_map * 255).astype(np.uint8), cv2.COLORMAP_JET)
+            # Store the map and roi for later toggling
+            self.main_window.quality_map = colored_map
+            self.main_window.quality_map_roi = (x1, y1, x2, y2)
+            self.main_window.quality_map_visible = True
 
-        # Create a composite image - original with quality map overlay in ROI
-        composite = self.main_window.original_image.copy()
-        composite[y1:y2, x1:x2] = cv2.addWeighted(
-            roi, 0.3,  # Original image with 30% opacity
-            colored_map, 0.7,  # Quality map with 70% opacity
-            0
-        )
+            status_msg = "Quality map generated - Red areas indicate poor quality, blue/green areas are better"
+        else:
+            # Toggle visibility
+            self.main_window.quality_map_visible = not getattr(self.main_window, 'quality_map_visible', False)
+            status_msg = "Quality map " + ("shown" if self.main_window.quality_map_visible else "hidden")
 
-        # Update the current image
-        self.main_window.current_image = composite
+        # Display appropriate image based on toggle state
+        if getattr(self.main_window, 'quality_map_visible', False) and hasattr(self.main_window, 'quality_map'):
+            # Create a composite image with the quality map
+            x1, y1, x2, y2 = self.main_window.quality_map_roi
+            roi = self.main_window.original_image[y1:y2, x1:x2].copy()
+            colored_map = self.main_window.quality_map
+
+            composite = self.main_window.original_image.copy()
+            composite[y1:y2, x1:x2] = cv2.addWeighted(
+                roi, 0.3,  # Original image with 30% opacity
+                colored_map, 0.7,  # Quality map with 70% opacity
+                0
+            )
+
+            # Update the current image
+            self.main_window.current_image = composite
+        else:
+            # Show original image
+            self.main_window.current_image = self.main_window.original_image.copy()
+
+        # Convert to PIL and display
         pil_image = Image.fromarray(self.main_window.current_image)
-
-        # Use the method that preserves view
-        self.display_image_preserve_view(pil_image, current_zoom, visible_x, visible_y)
+        self.display_image(pil_image, preserve_view)
 
         # Update status
-        self.main_window.status_var.set(
-            "Quality map generated - Red areas indicate poor quality, blue/green areas are better")
-
-    def display_image_preserve_view(self, pil_image, prev_zoom, prev_x_view, prev_y_view):
-        """Display image while preserving zoom level and view position"""
-        # Calculate scale but don't reset zoom
-        display_image = pil_image.copy()
-        max_size = 800
-
-        if max(display_image.size) > max_size:
-            ratio = max_size / max(display_image.size)
-            new_size = (int(display_image.size[0] * ratio), int(display_image.size[1] * ratio))
-            display_image = display_image.resize(new_size, Image.Resampling.LANCZOS)
-            self.display_scale = ratio
-        else:
-            self.display_scale = 1.0
-
-        # Set zoom level to previous value instead of resetting
-        self.zoom_level = prev_zoom
-
-        # Process image with current zoom
-        if self.zoom_level != 1.0:
-            new_width = int(display_image.width * self.zoom_level)
-            new_height = int(display_image.height * self.zoom_level)
-            display_image = display_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        # Convert to PhotoImage
-        self.photo = ImageTk.PhotoImage(display_image)
-
-        # Clear canvas and display image
-        self.canvas.delete('all')
-        self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
-
-        # Update scroll region to match the image dimensions
-        self.canvas.configure(scrollregion=(0, 0, self.photo.width(), self.photo.height()))
-
-        # Update canvas.display_scale for ROI handler
-        self.canvas.display_scale = self.display_scale * self.zoom_level
-
-        # Store the displayed image
-        self.displayed_image = display_image
-
-        # Force canvas to update
-        self.canvas.update_idletasks()
-
-        # Restore previous view position
-        self.canvas.xview_moveto(prev_x_view[0])
-        self.canvas.yview_moveto(prev_y_view[0])
-
-        # Redraw ROI with updated scale and view
-        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
-            self.main_window.roi_handler.redraw_roi()
+        self.main_window.status_var.set(status_msg)
 
     def _generate_quality_map(self, roi):
         """Generate a quality map for the ROI with pixel-by-pixel analysis"""
@@ -499,65 +492,6 @@ class ImageDisplay:
 
         return quality_map
 
-    def show_quality_map_preserve_view(self):
-        """Show quality map while preserving the exact view state"""
-        if not self.main_window or self.main_window.original_image is None:
-            return
-
-        # Check if ROI exists
-        if not hasattr(self.main_window, 'roi_handler') or not self.main_window.roi_handler.roi_coords:
-            messagebox.showinfo("Information", "Please select a ROI first to generate a quality map")
-            return
-
-        # Get the ROI from the handler
-        x1, y1, x2, y2 = self.main_window.roi_handler.roi_coords
-
-        # Validate ROI dimensions
-        if x2 <= x1 or y2 <= y1 or x1 < 0 or y1 < 0:
-            messagebox.showinfo("Information", "Invalid ROI - please select a valid region")
-            return
-
-        # Use the temporarily stored view state if available, otherwise use current
-        current_zoom = getattr(self, 'temp_zoom', self.zoom_level)
-        visible_x = getattr(self, 'temp_x_view', self.canvas.xview())
-        visible_y = getattr(self, 'temp_y_view', self.canvas.yview())
-
-        # Clear temporary view state
-        if hasattr(self, 'temp_zoom'):
-            delattr(self, 'temp_zoom')
-        if hasattr(self, 'temp_x_view'):
-            delattr(self, 'temp_x_view')
-        if hasattr(self, 'temp_y_view'):
-            delattr(self, 'temp_y_view')
-
-        # Extract the ROI from the original image
-        roi = self.main_window.original_image[y1:y2, x1:x2].copy()
-
-        # Create quality map
-        quality_map = self._generate_quality_map(roi)
-
-        # Apply colormap to the quality map (jet colormap)
-        colored_map = cv2.applyColorMap((quality_map * 255).astype(np.uint8), cv2.COLORMAP_JET)
-
-        # Create a composite image - original with quality map overlay in ROI
-        composite = self.main_window.original_image.copy()
-        composite[y1:y2, x1:x2] = cv2.addWeighted(
-            roi, 0.3,  # Original image with 30% opacity
-            colored_map, 0.7,  # Quality map with 70% opacity
-            0
-        )
-
-        # Update the current image
-        self.main_window.current_image = composite
-        pil_image = Image.fromarray(self.main_window.current_image)
-
-        # Use the method that preserves view
-        self.display_image_preserve_view(pil_image, current_zoom, visible_x, visible_y)
-
-        # Update status
-        self.main_window.status_var.set(
-            "Quality map generated - Red areas indicate poor quality, blue/green areas are better")
-
     def debug_roi_coords(self):
         """Print current ROI coordinates and scales for debugging"""
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
@@ -575,14 +509,18 @@ class ImageDisplay:
             self.main_window.current_image = self.main_window.original_image.copy()
             pil_image = Image.fromarray(self.main_window.current_image)
 
-            # Use display_image_preserve_view instead of display_image
             # Capture current view state
             current_zoom = self.zoom_level
             visible_x = self.canvas.xview()
             visible_y = self.canvas.yview()
 
             # Display image while preserving view position
-            self.display_image_preserve_view(pil_image, current_zoom, visible_x, visible_y)
+            self.display_image(pil_image, preserve_view=True)
+
+            # Store view state for later use if needed
+            self.temp_zoom = current_zoom
+            self.temp_x_view = visible_x
+            self.temp_y_view = visible_y
 
         # Update status
         self.main_window.status_var.set("Display reset - ROI cleared and original image restored")

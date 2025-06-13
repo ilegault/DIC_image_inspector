@@ -398,26 +398,28 @@ class DICQualityInspector:
         roi_text = "ROI" if self.roi_coords else "full image"
         self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
 
-    def _update_results_display_and_show_map(self):
-        """Update the results display and show quality map"""
-        self._update_results_display()
-        self.image_display.show_quality_map()
+    def _update_results_display_and_show_map(self, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
+        """Update the results display and show quality map
 
-    def _update_results_display_and_show_map_with_view(self, zoom_level, x_view, y_view):
-        """Update results display and show quality map while preserving view"""
+        Args:
+            preserve_view: If True, maintain current zoom level and scroll position
+            zoom_level: Current zoom level (only used if preserve_view is True)
+            x_view: Current x view position (only used if preserve_view is True)
+            y_view: Current y view position (only used if preserve_view is True)
+        """
         # First update the results panel
         self._update_results_display()
 
-        # Then show quality map with preserved view
+        # Then show quality map with view preservation if requested
         if hasattr(self, 'original_image') and self.original_image is not None:
-            if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords:
+            if preserve_view and zoom_level is not None and x_view is not None and y_view is not None:
                 # Store the view state temporarily
                 self.image_display.temp_zoom = zoom_level
                 self.image_display.temp_x_view = x_view
                 self.image_display.temp_y_view = y_view
 
-                # Show the quality map using the preserved view
-                self.image_display.show_quality_map_preserve_view()
+            # Show the quality map, passing the preserve_view parameter
+            self.image_display.show_quality_map(preserve_view=preserve_view)
 
     def show_help(self):
         """Show comprehensive help for the application"""
@@ -540,8 +542,8 @@ class DICQualityInspector:
             self.analysis_results = results
 
             # Update GUI on main thread, passing the view state
-            self.root.after(0, lambda: self._update_results_display_and_show_map_with_view(
-                current_zoom, visible_x, visible_y))
+            self.root.after(0, lambda: self._update_results_display_and_show_map(
+                preserve_view=True, zoom_level=current_zoom, x_view=visible_x, y_view=visible_y))
 
             # Sync ROI with quality map
             if self.roi_handler and self.roi_handler.roi_coords:
