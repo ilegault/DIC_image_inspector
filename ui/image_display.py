@@ -396,8 +396,19 @@ class ImageDisplay:
             messagebox.showinfo("Information", "Invalid ROI - please select a valid region")
             return
 
-        # Check if we already have a quality map stored
-        if not hasattr(self.main_window, 'quality_map') or self.main_window.quality_map is None:
+        # Get the current image ID - create if not present
+        current_image_id = getattr(self.main_window, 'current_image_id', None)
+
+        # If no quality map exists, or if we have a new image/ROI, regenerate the map
+        regenerate_map = (
+                not hasattr(self.main_window, 'quality_map') or
+                self.main_window.quality_map is None or
+                not hasattr(self.main_window, 'quality_map_image_id') or
+                self.main_window.quality_map_image_id != current_image_id or
+                getattr(self.main_window, 'quality_map_roi', None) != (x1, y1, x2, y2)
+        )
+
+        if regenerate_map:
             # Extract the ROI from the original image
             roi = self.main_window.original_image[y1:y2, x1:x2].copy()
 
@@ -412,6 +423,9 @@ class ImageDisplay:
             self.main_window.quality_map_roi = (x1, y1, x2, y2)
             self.main_window.quality_map_visible = True
 
+            # Store the image ID this quality map was generated for
+            self.main_window.quality_map_image_id = current_image_id
+
             status_msg = "Quality map generated - Red areas indicate poor quality, blue/green areas are better"
         else:
             # Toggle visibility
@@ -420,20 +434,34 @@ class ImageDisplay:
 
         # Display appropriate image based on toggle state
         if getattr(self.main_window, 'quality_map_visible', False) and hasattr(self.main_window, 'quality_map'):
-            # Create a composite image with the quality map
-            x1, y1, x2, y2 = self.main_window.quality_map_roi
-            roi = self.main_window.original_image[y1:y2, x1:x2].copy()
-            colored_map = self.main_window.quality_map
+            try:
+                # Create a composite image with the quality map
+                x1, y1, x2, y2 = self.main_window.quality_map_roi
+                roi = self.main_window.original_image[y1:y2, x1:x2].copy()
+                colored_map = self.main_window.quality_map
 
-            composite = self.main_window.original_image.copy()
-            composite[y1:y2, x1:x2] = cv2.addWeighted(
-                roi, 0.3,  # Original image with 30% opacity
-                colored_map, 0.7,  # Quality map with 70% opacity
-                0
-            )
-
-            # Update the current image
-            self.main_window.current_image = composite
+                # Check if shapes match before using addWeighted
+                if roi.shape[:2] == colored_map.shape[:2]:
+                    composite = self.main_window.original_image.copy()
+                    composite[y1:y2, x1:x2] = cv2.addWeighted(
+                        roi, 0.3,  # Original image with 30% opacity
+                        colored_map, 0.7,  # Quality map with 70% opacity
+                        0
+                    )
+                    # Update the current image
+                    self.main_window.current_image = composite
+                else:
+                    # Shapes don't match, regenerate the map
+                    messagebox.showinfo("Information", "Quality map needs to be regenerated")
+                    self.main_window.quality_map = None
+                    # Recursively call this function to regenerate the map
+                    self.show_quality_map(preserve_view)
+                    return
+            except Exception as e:
+                # If there's any error in processing, fall back to original image
+                messagebox.showerror("Error", f"Error processing quality map: {str(e)}")
+                self.main_window.quality_map = None
+                self.main_window.current_image = self.main_window.original_image.copy()
         else:
             # Show original image
             self.main_window.current_image = self.main_window.original_image.copy()
