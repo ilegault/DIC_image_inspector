@@ -76,7 +76,7 @@ class ImageDisplay:
         if self.zoom_level != 1.0:
             new_width = int(display_image.width * self.zoom_level)
             new_height = int(display_image.height * self.zoom_level)
-            display_image = display_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            display_image = display_image.resize((new_width, new_height), resample = Image.Resampling.NEAREST)
 
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(display_image)
