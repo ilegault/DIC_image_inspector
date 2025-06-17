@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 from tkinter import messagebox
-from analysis.metrics import get_analysis_region
+
+from analysis.quality_map.map_generator import generate_quality_map, apply_colormap
+
 
 class ImageDisplay:
     def __init__(self, canvas, main_window=None):
@@ -372,155 +374,6 @@ class ImageDisplay:
 
             pil_image = Image.fromarray(self.main_window.current_image)
             self.display_image(pil_image)
-
-    def show_quality_map(self, preserve_view=True):
-        """Toggle the visibility of the quality map overlay in the ROI
-
-        If the quality map hasn't been generated yet, it will be created.
-        Otherwise, it toggles between showing the original image and the map.
-
-        Args:
-            preserve_view: If True, maintain current zoom level and scroll position
-        """
-        if not self.main_window or self.main_window.original_image is None:
-            return
-
-        # Check if ROI exists
-        if not hasattr(self.main_window, 'roi_handler') or not self.main_window.roi_handler.roi_coords:
-            messagebox.showinfo("Information", "Please select a ROI first to generate a quality map")
-            return
-
-        # Get the ROI from the handler
-        x1, y1, x2, y2 = self.main_window.roi_handler.roi_coords
-
-        # Validate ROI dimensions
-        if x2 <= x1 or y2 <= y1 or x1 < 0 or y1 < 0:
-            messagebox.showinfo("Information", "Invalid ROI - please select a valid region")
-            return
-
-        # Get the current image ID - create if not present
-        current_image_id = getattr(self.main_window, 'current_image_id', None)
-
-        # If no quality map exists, or if we have a new image/ROI, regenerate the map
-        regenerate_map = (
-                not hasattr(self.main_window, 'quality_map') or
-                self.main_window.quality_map is None or
-                not hasattr(self.main_window, 'quality_map_image_id') or
-                self.main_window.quality_map_image_id != current_image_id or
-                getattr(self.main_window, 'quality_map_roi', None) != (x1, y1, x2, y2)
-        )
-
-        if regenerate_map:
-            # Extract the ROI from the original image
-            roi = self.main_window.original_image[y1:y2, x1:x2].copy()
-
-            # Create quality map
-            quality_map = self._generate_quality_map(roi)
-
-            # Apply colormap to the quality map (jet colormap)
-            colored_map = cv2.applyColorMap((quality_map * 255).astype(np.uint8), cv2.COLORMAP_JET)
-
-            # Store the map and roi for later toggling
-            self.main_window.quality_map = colored_map
-            self.main_window.quality_map_roi = (x1, y1, x2, y2)
-            self.main_window.quality_map_visible = True
-
-            # Store the image ID this quality map was generated for
-            self.main_window.quality_map_image_id = current_image_id
-
-            status_msg = "Quality map generated - Red areas indicate poor quality, blue/green areas are better"
-        else:
-            # Toggle visibility
-            self.main_window.quality_map_visible = not getattr(self.main_window, 'quality_map_visible', False)
-            status_msg = "Quality map " + ("shown" if self.main_window.quality_map_visible else "hidden")
-
-        # Display appropriate image based on toggle state
-        if getattr(self.main_window, 'quality_map_visible', False) and hasattr(self.main_window, 'quality_map'):
-            try:
-                # Create a composite image with the quality map
-                x1, y1, x2, y2 = self.main_window.quality_map_roi
-                roi = self.main_window.original_image[y1:y2, x1:x2].copy()
-                colored_map = self.main_window.quality_map
-
-                # Check if shapes match before using addWeighted
-                if roi.shape[:2] == colored_map.shape[:2]:
-                    composite = self.main_window.original_image.copy()
-                    composite[y1:y2, x1:x2] = cv2.addWeighted(
-                        roi, 0.3,  # Original image with 30% opacity
-                        colored_map, 0.7,  # Quality map with 70% opacity
-                        0
-                    )
-                    # Update the current image
-                    self.main_window.current_image = composite
-                else:
-                    # Shapes don't match, regenerate the map
-                    messagebox.showinfo("Information", "Quality map needs to be regenerated")
-                    self.main_window.quality_map = None
-                    # Recursively call this function to regenerate the map
-                    self.show_quality_map(preserve_view)
-                    return
-            except Exception as e:
-                # If there's any error in processing, fall back to original image
-                messagebox.showerror("Error", f"Error processing quality map: {str(e)}")
-                self.main_window.quality_map = None
-                self.main_window.current_image = self.main_window.original_image.copy()
-        else:
-            # Show original image
-            self.main_window.current_image = self.main_window.original_image.copy()
-
-        # Convert to PIL and display
-        pil_image = Image.fromarray(self.main_window.current_image)
-        self.display_image(pil_image, preserve_view)
-
-        # Update status
-        self.main_window.status_var.set(status_msg)
-
-    def _generate_quality_map(self, roi):
-        """Generate a quality map for the ROI with pixel-by-pixel analysis"""
-        # Convert to grayscale if needed
-        if len(roi.shape) == 3:
-            gray = cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = roi.copy()
-
-        # Create an empty quality map (normalized to 0-1)
-        quality_map = np.zeros_like(gray, dtype=float)
-
-        # Window size for local analysis
-        window_size = 15
-        half_window = window_size // 2
-
-        # Pad the image to handle borders
-        padded = cv2.copyMakeBorder(gray, half_window, half_window, half_window, half_window,
-                                    cv2.BORDER_REFLECT)
-
-        h, w = gray.shape
-
-        # Calculate gradient magnitude for the entire image
-        grad_x = cv2.Sobel(padded, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(padded, cv2.CV_64F, 0, 1, ksize=3)
-        grad_mag = np.sqrt(grad_x ** 2 + grad_y ** 2)
-
-        # Perform local analysis
-        for y in range(h):
-            for x in range(w):
-                # Extract local window from padded image
-                window = padded[y:y + window_size, x:x + window_size]
-                grad_window = grad_mag[y:y + window_size, x:x + window_size]
-
-                # Calculate local quality metrics
-                local_contrast = np.std(window) / (np.mean(window) + 1e-5)
-                local_gradient = np.mean(grad_window)
-
-                # Simple quality score based on contrast and gradient
-                quality = (local_contrast * 0.5 + local_gradient / 50 * 0.5)
-                quality_map[y, x] = quality
-
-        # Normalize quality map to 0-1 range
-        if np.max(quality_map) > 0:
-            quality_map = quality_map / np.max(quality_map)
-
-        return quality_map
 
     def debug_roi_coords(self):
         """Print current ROI coordinates and scales for debugging"""

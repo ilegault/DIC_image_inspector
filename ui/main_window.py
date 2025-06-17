@@ -1,15 +1,13 @@
 # module: ui.main_window
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 import numpy as np
-from PIL import Image, ImageTk, ImageGrab
+from PIL import ImageGrab
 import threading
-from analysis.metrics import analyze_image
 from ui.image_display import ImageDisplay
-from analysis.roi_handler import ROIHandler
-from analysis.file_operations import FileOperations
-from analysis.metrics import get_analysis_region
+from ui.roi_handler import ROIHandler
+from ui.file_operations import FileOperations
 
 class DICQualityInspector:
     def __init__(self, root):
@@ -535,19 +533,18 @@ class DICQualityInspector:
             # Get the image to analyze
             analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
 
-            # Perform analysis
-            results = analyze_image(analysis_region)
+            # Use new analyzer instead of direct function call
+            from analysis.analyzer import DICAnalyzer
+            analyzer = DICAnalyzer()
+            results = analyzer.analyze(analysis_region)
 
             # Store results
             self.analysis_results = results
 
-            # Update GUI on main thread, passing the view state
+            # Update GUI on main thread
             self.root.after(0, lambda: self._update_results_display_and_show_map(
-                preserve_view=True, zoom_level=current_zoom, x_view=visible_x, y_view=visible_y))
-
-            # Sync ROI with quality map
-            if self.roi_handler and self.roi_handler.roi_coords:
-                self.roi_handler.sync_roi_with_view(current_zoom, visible_x, visible_y)
+                preserve_view=True, zoom_level=current_zoom,
+                x_view=visible_x, y_view=visible_y))
 
         except Exception as e:
             error_message = str(e)
