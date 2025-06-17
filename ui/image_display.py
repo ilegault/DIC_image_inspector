@@ -191,6 +191,8 @@ class ImageDisplay:
         """Apply zoom at specified relative position without resetting view"""
         if not self.displayed_image:
             return
+        
+        #fix this please
 
         # Calculate new size
         new_width = int(self.displayed_image.width * self.zoom_level)
