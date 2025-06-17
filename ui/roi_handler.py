@@ -179,3 +179,13 @@ class ROIHandler:
             zoom_level = getattr(self.main_window.image_display, 'zoom_level', 1.0)
             roi = self.roi_coords
             print(f"ROI: {roi} | Display scale: {display_scale} | Zoom: {zoom_level}")
+
+    def display_image(self, pil_image):
+        """Display the given PIL image in the image display area"""
+        self.main_window.image_display.display_image(pil_image)
+        self.redraw_roi()
+
+        # If the image is replaced or cropped, recalculate ROI:
+        image_shape_changed = False
+        if image_shape_changed:
+            self.clear_roi()
