@@ -5,7 +5,8 @@ import numpy as np
 from PIL import Image, ImageTk
 from tkinter import messagebox
 
-from analysis.quality_map.map_generator import generate_quality_map, apply_colormap
+from analysis.quality_map.map_generator import generate_quality_map, visualize_quality_map
+from analysis.utils.image_processing import get_analysis_region
 
 
 class ImageDisplay:
@@ -18,6 +19,9 @@ class ImageDisplay:
         self.zoom_level = 1.0
         self.image_item = None
         self.zoom_overlay_item = None  # Overlay for zoomed view
+        self.quality_map_visible = False
+        self.quality_map_data = None
+        self.quality_visualization = None
 
         # Setup mouse bindings for panning and zooming
         self.canvas.bind("<MouseWheel>", self.zoom)  # Windows mousewheel
@@ -104,7 +108,9 @@ class ImageDisplay:
 
         # Redraw ROI with updated scale and view
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
-            self.main_window.roi_handler.redraw_roi()
+            # Prevent recursion when showing quality map
+            if not hasattr(self, '_updating_quality_map') or not self._updating_quality_map:
+                self.main_window.roi_handler.redraw_roi()
 
     def zoom(self, event):
         """Handle zoom with mouse wheel"""
@@ -193,8 +199,14 @@ class ImageDisplay:
         """Apply zoom at specified relative position without resetting view"""
         if not self.displayed_image:
             return
-        
-        #fix this please
+
+        # If old_zoom not provided, store current zoom level
+        if old_zoom is None:
+            old_zoom = self.zoom_level
+
+        # Get current view fractions before updating canvas
+        old_x_view = self.canvas.xview()
+        old_y_view = self.canvas.yview()
 
         # Calculate new size
         new_width = int(self.displayed_image.width * self.zoom_level)
@@ -209,10 +221,6 @@ class ImageDisplay:
         # Update photo image
         self.photo = ImageTk.PhotoImage(resized_image)
 
-        # Store current view fractions before updating canvas
-        old_x_view = self.canvas.xview()
-        old_y_view = self.canvas.yview()
-
         # Update canvas
         self.canvas.delete(self.image_item)
         self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
@@ -223,28 +231,62 @@ class ImageDisplay:
         # Update the canvas.display_scale for ROI handler to use
         self.canvas.display_scale = self.display_scale * self.zoom_level
 
+        # Calculate zoom ratio
+        zoom_ratio = self.zoom_level / old_zoom
+
+        # Calculate the view center based on rel_x and rel_y
+        center_x = old_x_view[0] + (old_x_view[1] - old_x_view[0]) * rel_x
+        center_y = old_y_view[0] + (old_y_view[1] - old_y_view[0]) * rel_y
+
+        # Calculate new view position
+        visible_width = self.canvas.winfo_width() / new_width
+        visible_height = self.canvas.winfo_height() / new_height
+
+        # Apply zoom adjustment to maintain the relative position
+        new_x = center_x - (rel_x * visible_width)
+        new_y = center_y - (rel_y * visible_height)
+
+        # Clamp values to valid range (0 to 1-visible_fraction)
+        new_x = max(0, min(1.0 - visible_width, new_x))
+        new_y = max(0, min(1.0 - visible_height, new_y))
+
+        # Apply new view position
+        self.canvas.xview_moveto(new_x)
+        self.canvas.yview_moveto(new_y)
+
         # Make sure to redraw ROI with updated position
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             self.main_window.roi_handler.redraw_roi()
 
-        # If coming from direct zoom level adjustment (not mouse wheel),
-        # maintain the view position proportionally
-        if old_zoom is not None:
-            zoom_ratio = self.zoom_level / old_zoom
-            center_x = old_x_view[0] + (old_x_view[1] - old_x_view[0]) * rel_x
-            center_y = old_y_view[0] + (old_y_view[1] - old_y_view[0]) * rel_y
+    def reset_display(self):
+        """Reset the display to original view and state"""
+        if self.main_window is None or not hasattr(self.main_window, 'original_image'):
+            return
 
-            # Calculate new view center accounting for zoom
-            new_x = center_x - (rel_x * (self.canvas.winfo_width() / new_width))
-            new_y = center_y - (rel_y * (self.canvas.winfo_height() / new_height))
+        # Reset zoom level
+        self.zoom_level = 1.0
 
-            # Ensure we don't go out of bounds
-            new_x = max(0, min(1.0 - self.canvas.winfo_width() / new_width, new_x))
-            new_y = max(0, min(1.0 - self.canvas.winfo_height() / new_height, new_y))
+        # Reset quality map display state
+        if hasattr(self, 'showing_quality_overlay'):
+            self.showing_quality_overlay = False
 
-            # Apply new view
-            self.canvas.xview_moveto(new_x)
-            self.canvas.yview_moveto(new_y)
+        # Reset quality map button appearance if it exists
+        if hasattr(self.main_window, 'quality_map_btn'):
+            self.main_window.quality_map_btn.config(bg='#2ecc71')  # Green when inactive
+
+        # Show original image
+        self.show_original()
+
+        # Reset scroll position to top-left
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
+
+        # Clear ROI selection
+        if hasattr(self.main_window, 'roi_handler'):
+            self.main_window.roi_handler.clear_roi()
+
+        # Update status
+        self.main_window.status_var.set("Display reset to original view")
 
     def reset_cursor(self, event):
         """Reset cursor when Ctrl key is released."""
@@ -300,80 +342,144 @@ class ImageDisplay:
             self.main_window.roi_handler.redraw_roi()
 
     def show_original(self):
-        """Show the original image."""
-        if self.main_window and self.main_window.original_image is not None:
-            self.main_window.current_image = self.main_window.original_image.copy()
-            pil_image = Image.fromarray(self.main_window.current_image)
-            self.display_image(pil_image)
+        """Display the original image"""
+        if self.main_window.original_image is None:
+            return
+
+        # Reset to original image
+        self.main_window.current_image = self.main_window.original_image.copy()
+
+        # Convert NumPy array to PIL image
+        pil_image = Image.fromarray(self.main_window.current_image)
+
+        # Display the image
+        self.display_image(pil_image)
+
+        # Redraw ROI if it exists
+        self.main_window.roi_handler.redraw_roi()
+
+        # Update status
+        self.main_window.status_var.set("Showing original image")
 
     def show_edges(self):
-        """Show edge-enhanced image."""
-        if self.main_window and self.main_window.original_image is not None:
-            # Get analysis region
-            analysis_region = get_analysis_region(
-                self.main_window.original_image, self.main_window.roi_coords)
+        """Display edge detection visualization of the image"""
+        if self.main_window.original_image is None:
+            return
 
-            # Convert to grayscale
-            if len(analysis_region.shape) == 3:
-                gray = cv2.cvtColor(analysis_region, cv2.COLOR_RGB2GRAY)
-            else:
-                gray = analysis_region
+        # Get the appropriate image region based on ROI
+        image = get_analysis_region(
+            self.main_window.original_image,
+            self.main_window.roi_handler.roi_coords
+        )
 
-            # Apply edge detection
-            edges = cv2.Canny(gray, 50, 150)
+        # Convert to grayscale if needed
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image.copy()
 
-            # Convert back to RGB for display
-            edge_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+        # Apply Canny edge detection
+        edges = cv2.Canny(gray, 50, 150)
 
-            # If ROI is selected, create a composite image
-            if self.main_window.roi_coords:
-                composite = self.main_window.original_image.copy()
-                x1, y1, x2, y2 = self.main_window.roi_coords
-                composite[y1:y2, x1:x2] = edge_rgb
-                self.main_window.current_image = composite
-            else:
-                self.main_window.current_image = edge_rgb
+        # Create a colored edge visualization
+        edge_visualization = np.zeros_like(self.main_window.original_image)
+        if len(self.main_window.original_image.shape) == 3:
+            # For color images, create colored edge overlay
+            edge_visualization[..., 2] = edges  # Set red channel to edges
+        else:
+            # For grayscale, create RGB visualization
+            edge_visualization = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
 
-            # Display the processed image
-            pil_image = Image.fromarray(self.main_window.current_image)
-            self.display_image(pil_image)
+        # Update current image
+        self.main_window.current_image = edge_visualization
+
+        # Convert to PIL and display
+        pil_image = Image.fromarray(edge_visualization)
+        self.display_image(pil_image)
+
+        # Redraw ROI
+        self.main_window.roi_handler.redraw_roi()
+
+        # Update status
+        self.main_window.status_var.set("Showing edge detection visualization")
 
     def show_gradient(self):
-        """Show gradient magnitude image."""
-        if self.main_window and self.main_window.original_image is not None:
-            # Get analysis region
-            analysis_region = get_analysis_region(
-                self.main_window.original_image, self.main_window.roi_coords)
+        """Display gradient magnitude visualization of the image"""
+        if self.main_window.original_image is None:
+            return
 
-            # Convert to grayscale
-            if len(analysis_region.shape) == 3:
-                gray = cv2.cvtColor(analysis_region, cv2.COLOR_RGB2GRAY)
+        # Get the appropriate image region based on ROI
+        image = get_analysis_region(
+            self.main_window.original_image,
+            self.main_window.roi_handler.roi_coords
+        )
+
+        # Convert to grayscale if needed
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image.copy()
+
+        # Calculate gradients
+        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+
+        # Calculate gradient magnitude
+        magnitude = cv2.magnitude(grad_x, grad_y)
+
+        # Normalize for visualization
+        cv2.normalize(magnitude, magnitude, 0, 255, cv2.NORM_MINMAX)
+        gradient_vis = magnitude.astype(np.uint8)
+
+        # Apply colormap for better visualization
+        gradient_vis_colored = cv2.applyColorMap(gradient_vis, cv2.COLORMAP_JET)
+
+        # Convert to RGB if needed
+        if len(gradient_vis_colored.shape) == 2:
+            gradient_vis_colored = cv2.cvtColor(gradient_vis_colored, cv2.COLOR_GRAY2RGB)
+        elif gradient_vis_colored.shape[2] == 3:
+            gradient_vis_colored = cv2.cvtColor(gradient_vis_colored, cv2.COLOR_BGR2RGB)
+
+        # Update current image
+        self.main_window.current_image = gradient_vis_colored
+
+        # Convert to PIL and display
+        pil_image = Image.fromarray(gradient_vis_colored)
+        self.display_image(pil_image)
+
+        # Redraw ROI
+        self.main_window.roi_handler.redraw_roi()
+
+        # Update status
+        self.main_window.status_var.set("Showing gradient magnitude visualization")
+
+    def _display_array(self, array):
+        """Convert a numpy array to PIL image and display it on canvas
+
+        Args:
+            array: Numpy array (grayscale, RGB, or RGBA) to display
+        """
+        try:
+            # Convert to uint8 if not already
+            if array.dtype != np.uint8:
+                array = np.clip(array, 0, 255).astype(np.uint8)
+
+            # Convert to PIL Image based on shape
+            if len(array.shape) == 2:  # Grayscale
+                pil_image = Image.fromarray(array, 'L')
+            elif array.shape[2] == 3:  # RGB
+                pil_image = Image.fromarray(array, 'RGB')
+            elif array.shape[2] == 4:  # RGBA
+                pil_image = Image.fromarray(array, 'RGBA')
             else:
-                gray = analysis_region
+                raise ValueError(f"Unsupported array shape: {array.shape}")
 
-            # Calculate gradient
-            grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-            grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-            gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
-
-            # Normalize to 0-255
-            gradient_normalized = cv2.normalize(gradient_magnitude, None, 0, 255, cv2.NORM_MINMAX)
-            gradient_normalized = gradient_normalized.astype(np.uint8)
-
-            # Convert to RGB
-            gradient_rgb = cv2.cvtColor(gradient_normalized, cv2.COLOR_GRAY2RGB)
-
-            # If we have ROI, create a composite image
-            if self.main_window.roi_coords:
-                composite = self.main_window.original_image.copy()
-                x1, y1, x2, y2 = self.main_window.roi_coords
-                composite[y1:y2, x1:x2] = gradient_rgb
-                self.main_window.current_image = composite
-            else:
-                self.main_window.current_image = gradient_rgb
-
-            pil_image = Image.fromarray(self.main_window.current_image)
+            # Display the PIL image
             self.display_image(pil_image)
+
+        except Exception as e:
+            print(f"Error displaying array: {str(e)}")
+            messagebox.showerror("Display Error", f"Failed to display image: {str(e)}")
 
     def debug_roi_coords(self):
         """Print current ROI coordinates and scales for debugging"""
@@ -381,35 +487,160 @@ class ImageDisplay:
             roi = self.main_window.roi_handler.roi_coords
             print(f"ROI: {roi} | Display scale: {self.display_scale} | Zoom: {self.zoom_level}")
 
-    def reset_display(self):
-        """Reset the display by clearing ROI and showing original image"""
-        # Clear ROI if it exists
-        if hasattr(self.main_window, 'roi_handler'):
-            self.main_window.roi_handler.clear_roi()
+    def show_quality_map(self):
+        """Display quality map as overlay on original image"""
+        if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
+            return
 
-        # Reset to original image
-        if hasattr(self.main_window, 'original_image') and self.main_window.original_image is not None:
-            self.main_window.current_image = self.main_window.original_image.copy()
-            pil_image = Image.fromarray(self.main_window.current_image)
+        # Store current view state
+        current_zoom = self.zoom_level
+        visible_x = self.canvas.xview()
+        visible_y = self.canvas.yview()
 
-            # Capture current view state
-            current_zoom = self.zoom_level
-            visible_x = self.canvas.xview()
-            visible_y = self.canvas.yview()
+        # Get the original image as the base
+        original_image = self.main_window.original_image.copy()
 
-            # Display image while preserving view position
-            self.display_image(pil_image, preserve_view=True)
+        # Get ROI coordinates
+        roi_coords = self.main_window.roi_handler.roi_coords
 
-            # Store view state for later use if needed
-            self.temp_zoom = current_zoom
-            self.temp_x_view = visible_x
-            self.temp_y_view = visible_y
+        # Only overlay the quality map on the ROI region
+        if roi_coords:
+            x1, y1, x2, y2 = roi_coords
 
-        # Update status
-        self.main_window.status_var.set("Display reset - ROI cleared and original image restored")
+            print(f"DEBUG: ROI coordinates: {roi_coords}")
+            print(f"DEBUG: Original image shape: {original_image.shape}")
+            print(f"DEBUG: Quality map shape: {self.quality_map_data.shape}")
+
+            # Create a colored version of the quality map
+            normalized_map = (self.quality_map_data * 255).astype(np.uint8)
+            colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
+            colored_map = cv2.applyColorMap(normalized_map, colormap_const)
+            colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
+
+            # Extract the ROI region from the original image
+            roi_height, roi_width = y2 - y1, x2 - x1
+
+            # Make sure quality map has the right dimensions for the ROI
+            if colored_map.shape[:2] != (roi_height, roi_width):
+                colored_map = cv2.resize(colored_map, (roi_width, roi_height))
+
+            # Create blended overlay just for the ROI region
+            roi_overlay = cv2.addWeighted(
+                original_image[y1:y2, x1:x2], 0.3,  # Keep 30% of original
+                colored_map, 0.7,  # Add 70% of quality map
+                0
+            )
+
+            # Apply the overlay only to the ROI region of the original image
+            original_image[y1:y2, x1:x2] = roi_overlay
+
+            print(f"DEBUG: Applied quality map overlay to ROI region only")
+        else:
+            # No ROI selected, apply to entire image (existing behavior)
+            overlay = visualize_quality_map(original_image, self.quality_map_data)
+            original_image = overlay
+
+        # Convert to PIL image for display
+        visualization_pil = Image.fromarray(original_image)
+
+        # Set a flag to prevent recursion during display
+        self._updating_quality_map = True
+
+        # Display the visualization with preserved view
+        self.display_image(visualization_pil, preserve_view=True)
+
+        # Clear the flag
+        self._updating_quality_map = False
+
+        # Restore view state exactly
+        self.zoom_level = current_zoom
+        self.canvas.xview_moveto(visible_x[0])
+        self.canvas.yview_moveto(visible_y[0])
+
+        # Update state
+        self.showing_quality_overlay = True
+
+    def toggle_quality_map_overlay(self):
+        """Toggle quality map overlay on/off"""
+        print("DEBUG: toggle_quality_map_overlay called")
+
+        # Initialize the state if it doesn't exist
+        if not hasattr(self, 'showing_quality_overlay'):
+            self.showing_quality_overlay = False
+            print("DEBUG: Initialized showing_quality_overlay to False")
+
+        # Print current state before toggling
+        print(f"DEBUG: Current state before toggle: showing_quality_overlay = {self.showing_quality_overlay}")
+
+        # Toggle the state
+        self.showing_quality_overlay = not self.showing_quality_overlay
+        print(f"DEBUG: New state after toggle: showing_quality_overlay = {self.showing_quality_overlay}")
+
+        # Show or hide quality map based on toggle state
+        if self.showing_quality_overlay:
+            print("DEBUG: Should show quality map")
+
+            # Check if we have quality map data
+            if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
+                print("DEBUG: No quality map data available")
+                self.main_window.analyze_image()  # Will generate quality map
+                return
+
+            print(
+                f"DEBUG: quality_map_data shape: {self.quality_map_data.shape if self.quality_map_data is not None else 'None'}")
+
+            # Change button appearance
+            if hasattr(self.main_window, 'quality_map_btn'):
+                print("DEBUG: Changing button to active state")
+                self.main_window.quality_map_btn.config(bg='#e74c3c')  # Red when active
+
+            # Show quality map overlay
+            self.show_quality_map()
+        else:
+            print("DEBUG: Should hide quality map and show original")
+
+            # Return to original image view
+            self.show_original()
+
+            # Change button appearance
+            if hasattr(self.main_window, 'quality_map_btn'):
+                print("DEBUG: Changing button to inactive state")
+                self.main_window.quality_map_btn.config(bg='#2ecc71')  # Green when inactive
+
+    def overlay_quality_map(self, colormap_name='JET', alpha=0.7):
+        """
+        Overlay quality map on the base image
+
+        Args:
+            colormap_name: OpenCV colormap name (default: JET)
+            alpha: Alpha blending factor (0-1)
+
+        Returns:
+            Overlaid image with quality map visualization
+        """
+        from analysis.quality_map.map_generator import visualize_quality_map
+
+        if self.quality_map_data is None:
+            return None
+
+        # Get base image
+        if self.main_window.original_image is None:
+            return None
+
+        # Get analysis region based on ROI
+        base_image = get_analysis_region(
+            self.main_window.original_image,
+            self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+        )
+
+        # Generate visualization overlay using the existing function
+        overlay = visualize_quality_map(base_image, self.quality_map_data,
+                                        colormap_name=colormap_name, alpha=alpha)
+
+        return overlay
 
     def sync_view_state(self):
-        """Capture current view state and store it for later use"""
+        """Store current view state for later restoration"""
         current_zoom = self.zoom_level
         visible_x = self.canvas.xview()
         visible_y = self.canvas.yview()
@@ -423,3 +654,23 @@ class ImageDisplay:
         self.temp_y_view = visible_y
 
         return current_zoom, visible_x, visible_y
+
+    def restore_view_state(self, zoom_level, x_view, y_view):
+        """Restore a previously saved view state"""
+        # Debug info
+        print(f"Restoring view state: zoom={zoom_level}, x={x_view}, y={y_view}")
+
+        # First set zoom level
+        self.zoom_level = zoom_level
+
+        # Then restore scroll positions
+        if x_view and y_view:
+            self.canvas.xview_moveto(x_view[0])
+            self.canvas.yview_moveto(y_view[0])
+
+        # Redraw the image with the restored zoom level
+        self.main_window.display_current_image()
+
+        # Notify ROI handler to update if needed
+        if hasattr(self.main_window, 'roi_handler'):
+            self.main_window.roi_handler.redraw_roi()

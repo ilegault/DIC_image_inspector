@@ -1,109 +1,92 @@
+# analysis/analyzer.py
+
 import cv2
 import numpy as np
-from .metrics.metrics_manager import MetricsManager
-from .quality_map.map_generator import generate_quality_map
+from analysis.metrics.metrics_manager import MetricsManager
+from analysis.quality_map.map_generator import generate_quality_map
+from analysis.utils.image_processing import get_analysis_region
 
 
 class DICAnalyzer:
-    """Main facade for Digital Image Correlation quality analysis"""
+    """Main analyzer for DIC image quality assessment
 
-    def __init__(self, config=None):
-        """Initialize analyzer with optional configuration
+    Coordinates all the different analysis components and provides a simplified
+    interface for the main application.
+    """
 
-        Args:
-            config (dict, optional): Configuration parameters
-        """
-        self.config = config or {}
-        # Default parameters
-        self.subset_size = self.config.get('subset_size', 21)
-        self.overlap = self.config.get('overlap', 0.5)
+    def __init__(self):
+        """Initialize the analyzer with default parameters"""
+        self.subset_size = None
+        self.overlap = 0.5
 
     def analyze(self, image):
-        """Analyze image quality for DIC applications
+        """Analyze an image for DIC quality metrics
 
         Args:
-            image: Input image (numpy array)
+            image: Numpy array of the image to analyze (ROI or full image)
 
         Returns:
-            dict: Analysis results with metrics and scores
+            dict: Complete analysis results with all metrics
         """
         # Convert to grayscale if needed
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         else:
-            gray = image
+            gray = image.copy()
 
-        # Calculate metrics
-        metrics_manager = MetricsManager(image)
-        results = metrics_manager.calculate_all_metrics()
-        results['contrast'] = self._calculate_contrast(gray)
-        results['speckle_density'] = self._calculate_speckle_density(gray)
-        results['gradient_magnitude'] = self._calculate_gradient_magnitude(gray)
-        results['noise_level'] = self._calculate_noise_level(gray)
-        results['pattern_uniformity'] = self._calculate_uniformity(gray)
-        results['feature_size'] = self._analyze_feature_size(gray)
-        results['intensity_distribution'] = self._analyze_intensity_distribution(gray)
-        results['edge_quality'] = self._analyze_edge_quality(gray)
+        # Initialize metrics manager - automatically determines optimal subset size
+        metrics_manager = MetricsManager(gray)
 
-        # Calculate overall score
-        results['overall_score'] = self._calculate_overall_score(results)
+        # Store the subset size for reference
+        self.subset_size = metrics_manager.subset_size
 
-        return results
+        # Run all metrics calculations
+        metrics = metrics_manager.calculate_all_metrics()
 
-    def generate_quality_map(self, image):
-        """Generate a quality heat map for the image"""
-        return generate_quality_map(image)
+        # Generate the quality map visualization
+        quality_map, visualization = generate_quality_map(image)
 
-    def _calculate_contrast(self, image):
-        # Implementation
-        return 65.0
+        # Store quality map in results
+        metrics['quality_map'] = quality_map
+        metrics['quality_visualization'] = visualization
 
-    def _calculate_speckle_density(self, image):
-        # Implementation
-        return 120.0
+        # Format results for display in the UI
+        formatted_results = self._format_results(metrics)
 
-    def _calculate_gradient_magnitude(self, image):
-        # Implementation
-        return 45.0
+        return formatted_results
 
-    def _calculate_noise_level(self, image):
-        # Implementation
-        return 25.0
+    def _format_results(self, metrics):
+        """Format raw metrics into a standardized structure for the UI
 
-    def _calculate_uniformity(self, image):
-        # Implementation
-        return 80.0
+        Args:
+            metrics: Raw metrics from the metrics manager
 
-    def _analyze_feature_size(self, image):
-        # Implementation
-        return 7.5
+        Returns:
+            dict: Formatted metrics ready for display
+        """
+        results = {
+            # Overall score (0-100)
+            'overall_score': metrics.get('overall_score', 0),
 
-    def _analyze_intensity_distribution(self, image):
-        # Implementation
-        return 75.0
+            # Main metrics with appropriate scaling and units
+            'contrast': round(metrics.get('contrast', 0) * 100, 1),
+            'speckle_density': round(metrics.get('speckle_density', 0), 1),
+            'gradient_magnitude': round(metrics.get('gradient_magnitude', 0), 1),
+            'noise_level': round(metrics.get('noise_level', 0), 1),
+            'pattern_uniformity': round(metrics.get('pattern_uniformity', 0), 1),
+            'feature_size': round(metrics.get('feature_size', 0), 1),
+            'intensity_distribution': round(metrics.get('intensity_distribution', 0), 1),
+            'edge_quality': round(metrics.get('edge_quality', 0), 1),
 
-    def _analyze_edge_quality(self, image):
-        # Implementation
-        return 60.0
+            # Additional metrics
+            'avg_subset_quality': round(metrics.get('avg_subset_quality', 0) * 100, 1),
 
-    def _calculate_overall_score(self, results):
-        """Calculate overall quality score from individual metrics"""
-        # Simple weighted average for now
-        weights = {
-            'contrast': 0.15,
-            'speckle_density': 0.15,
-            'gradient_magnitude': 0.15,
-            'noise_level': 0.1,
-            'pattern_uniformity': 0.15,
-            'feature_size': 0.1,
-            'intensity_distribution': 0.1,
-            'edge_quality': 0.1
+            # Store quality map and visualization
+            'quality_map': metrics.get('quality_map'),
+            'quality_visualization': metrics.get('quality_visualization'),
+
+            # Store subset metrics for detailed analysis
+            'subset_metrics': metrics.get('subset_metrics_map', {}),
         }
 
-        # Normalize metrics to 0-100 scale
-        # This is very simplified - you'd want to properly normalize each metric
-        score = 0
-        for key, weight in weights.items():
-            score += results[key] * weight
-
-        return min(max(int(score), 0), 100)
+        return results

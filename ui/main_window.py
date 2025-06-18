@@ -8,6 +8,9 @@ import threading
 from ui.image_display import ImageDisplay
 from ui.roi_handler import ROIHandler
 from ui.file_operations import FileOperations
+from analysis.utils.image_processing import get_analysis_region
+from analysis.quality_map.map_generator import generate_quality_map
+from analysis.analyzer import DICAnalyzer  # Ensure this import is correct
 
 class DICQualityInspector:
     def __init__(self, root):
@@ -32,12 +35,14 @@ class DICQualityInspector:
         self.image_display = ImageDisplay(self.image_canvas, self)
         self.file_operations = FileOperations(self)
         self.roi_handler = ROIHandler(self)
-        self.analyze_btn.config(command=self.analyze_image)
 
         # Connect UI elements to manager methods
         self.load_btn.config(command=self.file_operations.load_image)
         self.roi_btn.config(command=self.roi_handler.toggle_roi_selection)
         self.screenshot_btn.config(command=self.start_screenshot)
+        self.analyze_btn.config(command=self.analyze_image)
+        self.quality_map_btn.config(command=self.image_display.toggle_quality_map_overlay)
+        self.quality_map_btn.config(state='disabled')
 
         # Connect ROI events
         self.image_canvas.bind('<ButtonPress-1>', self.roi_handler.start_roi_selection)
@@ -186,10 +191,9 @@ class DICQualityInspector:
                               anchor='w', bg='#95a5a6', fg='white')
         status_bar.pack(side='bottom', fill='x')
 
-        quality_map_btn = tk.Button(process_frame, text="Quality Map",
-                                    bg='#2ecc71', fg='white', padx=10,
-                                    command=lambda: self.image_display.show_quality_map())
-        quality_map_btn.pack(side='left', padx=2)
+        self.quality_map_btn = tk.Button(process_frame, text="Quality Map",
+                                         bg='#2ecc71', fg='white', padx=10)
+        self.quality_map_btn.pack(side='left', padx=2)
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -197,6 +201,16 @@ class DICQualityInspector:
 
         # Set DPI awareness for consistent coordinates
         windll.shcore.SetProcessDpiAwareness(1)
+
+        # Reset analysis results and quality map data when taking a new screenshot
+        self.analysis_results = {}
+        if hasattr(self.image_display, 'quality_map_data'):
+            self.image_display.quality_map_data = None
+            self.image_display.quality_visualization = None
+            self.image_display.showing_quality_overlay = False
+
+        # Disable the quality map button until analysis is performed
+        self.quality_map_btn.config(state='disabled')
 
         self.root.withdraw()  # Hide main window
 
@@ -208,8 +222,8 @@ class DICQualityInspector:
         screenshot_window.attributes('-topmost', True)
 
         instructions = tk.Label(screenshot_window,
-                                text="Click and drag to select area for DIC analysis\nPress ESC to cancel",
-                                font=('Arial', 16, 'bold'), fg='white', bg='black')
+                                text="Click and drag to select a screen region, or press ESC to cancel",
+                                font=('Arial', 16), fg="white", bg="black")
         instructions.pack(expand=True)
 
         # Create canvas for drawing selection rectangle
@@ -244,10 +258,6 @@ class DICQualityInspector:
                     # Take screenshot
                     screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
 
-                    # Debug info
-                    print(f"Selection area: {x2 - x1}x{y2 - y1} at ({x1},{y1})")
-                    print(f"Captured image size: {screenshot.width}x{screenshot.height}")
-
                     # Show main window after capture is ready
                     self.root.deiconify()
                     self.root.update()
@@ -279,17 +289,28 @@ class DICQualityInspector:
                 self.root.deiconify()
                 self.status_var.set("Screenshot cancelled - area too small")
 
-        def cancel_screenshot(event):
+        def cancel_screenshot(event=None):
             screenshot_window.destroy()
             self.root.deiconify()
-            self.status_var.set("Screenshot cancelled")
+            return "break"
 
         # Bind events
         screenshot_window.bind('<Button-1>', start_selection)
         screenshot_window.bind('<B1-Motion>', update_selection)
         screenshot_window.bind('<ButtonRelease-1>', end_selection)
+
+        # Add multiple bindings to ensure ESC key is captured
         screenshot_window.bind('<Escape>', cancel_screenshot)
-        screenshot_window.focus_set()
+        selection_canvas.bind('<Escape>', cancel_screenshot)
+        instructions.bind('<Escape>', cancel_screenshot)
+
+        # Bind key press at the application level
+        screenshot_window.bind_all('<Escape>', cancel_screenshot)
+
+        # Force focus and grab all events
+        screenshot_window.focus_force()
+        screenshot_window.grab_set()
+        screenshot_window.update()
 
     def analyze_image(self):
         """Analyze image quality for DIC and show quality map"""
@@ -396,28 +417,84 @@ class DICQualityInspector:
         roi_text = "ROI" if self.roi_coords else "full image"
         self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
 
-    def _update_results_display_and_show_map(self, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
+    def _update_results_display_and_show_map(self, results=None, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
         """Update the results display and show quality map
 
         Args:
-            preserve_view: If True, maintain current zoom level and scroll position
-            zoom_level: Current zoom level (only used if preserve_view is True)
-            x_view: Current x view position (only used if preserve_view is True)
-            y_view: Current y view position (only used if preserve_view is True)
+            results: The analysis results to display
+            preserve_view: Whether to preserve current view position
+            zoom_level: Current zoom level to restore
+            x_view: X view position to restore
+            y_view: Y view position to restore
         """
-        # First update the results panel
+        # First update the results display with the provided results
+        if results:
+            self.analysis_results = results
+
+        # Update the results panel
         self._update_results_display()
 
-        # Then show quality map with view preservation if requested
-        if hasattr(self, 'original_image') and self.original_image is not None:
-            if preserve_view and zoom_level is not None and x_view is not None and y_view is not None:
-                # Store the view state temporarily
-                self.image_display.temp_zoom = zoom_level
-                self.image_display.temp_x_view = x_view
-                self.image_display.temp_y_view = y_view
+        # Get the image to analyze
+        analysis_region = get_analysis_region(
+            self.original_image,
+            self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
+        )
 
-            # Show the quality map, passing the preserve_view parameter
-            self.image_display.show_quality_map(preserve_view=preserve_view)
+        # Generate and show quality map
+        quality_map, visualization = generate_quality_map(analysis_region)
+
+        # Display the quality map
+        self.image_display.show_quality_map()
+
+    def _analyze_worker(self):
+        """Worker thread to perform image analysis"""
+        try:
+            # Store current view state before analysis
+            current_zoom = self.image_display.zoom_level
+            visible_x = self.image_canvas.xview()
+            visible_y = self.image_canvas.yview()
+
+            # Get the analysis region (ROI or full image)
+            analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
+
+            # Print original and analysis region dimensions for debugging
+            print(f"DEBUG: Original image shape: {self.original_image.shape}")
+            print(f"DEBUG: Analysis region shape: {analysis_region.shape}")
+
+            # Generate quality map based on analysis region
+            quality_map, visualization = generate_quality_map(analysis_region)
+
+            # Store quality map data for later use
+            self.image_display.quality_map_data = quality_map
+            self.image_display.quality_visualization = visualization
+
+            # Use the DICAnalyzer class for analysis
+            analyzer = DICAnalyzer()
+            results = analyzer.analyze(analysis_region)
+
+            # Store results
+            self.analysis_results = results
+
+            # Update GUI on the main thread
+            self.root.after(0, lambda: self._update_results_display())
+
+            # Enable the quality map button after successful analysis
+            self.root.after(0, lambda: self.quality_map_btn.config(state='normal'))
+
+            # Show quality map after updating results
+            self.root.after(100, lambda: self.image_display.show_quality_map())
+
+        except Exception as e:
+            import traceback
+            error_message = str(e)
+            traceback_info = traceback.format_exc()
+            print(f"Analysis Error: {error_message}\n{traceback_info}")  # Debug information
+            self.root.after(0, lambda msg=error_message: messagebox.showerror(
+                "Analysis Error", f"Failed to analyze image: {msg}"))
+
+        finally:
+            # Re-enable analyze button in GUI thread
+            self.root.after(0, lambda: self.analyze_btn.config(state='normal'))
 
     def show_help(self):
         """Show comprehensive help for the application"""
@@ -521,37 +598,3 @@ class DICQualityInspector:
             recommendations.append("Consider recreating the speckle pattern")
 
         return recommendations
-
-    def _analyze_worker(self):
-        """Worker thread to perform image analysis"""
-        try:
-            # Store current view state before analysis
-            current_zoom = self.image_display.zoom_level
-            visible_x = self.image_canvas.xview()
-            visible_y = self.image_canvas.yview()
-
-            # Get the image to analyze
-            analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
-
-            # Use new analyzer instead of direct function call
-            from analysis.analyzer import DICAnalyzer
-            analyzer = DICAnalyzer()
-            results = analyzer.analyze(analysis_region)
-
-            # Store results
-            self.analysis_results = results
-
-            # Update GUI on main thread
-            self.root.after(0, lambda: self._update_results_display_and_show_map(
-                preserve_view=True, zoom_level=current_zoom,
-                x_view=visible_x, y_view=visible_y))
-
-        except Exception as e:
-            error_message = str(e)
-            self.root.after(0, lambda msg=error_message: messagebox.showerror(
-                "Analysis Error", f"Failed to analyze image: {msg}"))
-
-        finally:
-            # Re-enable analyze button in GUI thread
-            self.root.after(0, lambda: self.analyze_btn.config(state='normal'))
-

@@ -109,27 +109,46 @@ class MetricsManager:
             'correlation_potential': 0.05,
         }
 
-        # Special handling for metrics with optimal ranges
+        # Set default score
         score = 0
-        for metric, weight in weights.items():
-            if metric not in metrics:
+        total_weight = 0
+
+        # Process each metric safely
+        for key, weight in weights.items():
+            # Skip if metric is missing
+            if key not in metrics:
+                continue
+
+            # Get metric value, ensure it's a number
+            value = metrics.get(key, 0)
+            if not isinstance(value, (int, float)) or value is None:
                 continue
 
             # Custom normalization for metrics with optimal ranges
-            if metric == 'feature_size':
-                feature_size = metrics[metric]
+            if key == 'feature_size':
+                feature_size = value
                 if 3 <= feature_size <= 15:
                     # Scale based on ideal range (7-10px)
                     normalized = 100 if 7 <= feature_size <= 10 else \
                         50 + ((feature_size - 3) * 50 / 4 if feature_size < 7 else
-                                  50 - (feature_size - 10) * 50 / 5)
+                              50 - (feature_size - 10) * 50 / 5)
                 else:
                     normalized = min(50, max(0, feature_size * 50 / 3 if feature_size < 3 else \
                         50 - (feature_size - 15) * 5))
             else:
                 # Default normalization
-                normalized = min(100, max(0, metrics[metric]))
+                normalized = min(100, max(0, value))
 
+            # Add to weighted score
             score += normalized * weight
+            total_weight += weight
 
-        return round(score, 1)
+        # If no valid metrics were found, return 0
+        if total_weight == 0:
+            return 0
+
+        # Adjust score based on actual weights used
+        if total_weight < 1.0:
+            score = score / total_weight
+
+        return round(min(max(int(score), 0), 100), 1)

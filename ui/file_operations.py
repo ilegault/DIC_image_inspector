@@ -10,23 +10,31 @@ class FileOperations:
         self.main_window = main_window
 
     def load_image(self):
-        """Load image from file"""
-        file_types = [
-            ('All Supported', '*.png *.jpg *.jpeg *.tiff *.tif *.bmp'),
-            ('PNG files', '*.png'),
-            ('JPEG files', '*.jpg *.jpeg'),
-            ('TIFF files', '*.tiff *.tif'),
-            ('All files', '*.*')
+        """Load an image from file"""
+        filetypes = [
+            ("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff"),
+            ("All files", "*.*")
         ]
 
-        filename = filedialog.askopenfilename(title="Select DIC Image", filetypes=file_types)
+        filename = filedialog.askopenfilename(title="Select Image File", filetypes=filetypes)
+
         if filename:
             try:
+                # Reset analysis results and quality map data when loading a new image
+                self.main_window.analysis_results = {}
+                if hasattr(self.main_window.image_display, 'quality_map_data'):
+                    self.main_window.image_display.quality_map_data = None
+                    self.main_window.image_display.quality_visualization = None
+                    self.main_window.image_display.showing_quality_overlay = False
+
+                # Disable the quality map button until analysis is performed
+                self.main_window.quality_map_btn.config(state='disabled')
+
+                # Load and process the image
                 self.load_image_from_path(filename)
-                self.main_window.status_var.set(
-                    f"Loaded: {os.path.basename(filename)} - Select ROI for focused analysis")
+
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to load image: {str(e)}")
+                messagebox.showerror("Load Error", f"Failed to load image: {str(e)}")
 
     def load_image_from_path(self, path):
         """Load and display image from file path"""
