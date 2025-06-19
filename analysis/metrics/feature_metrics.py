@@ -8,13 +8,13 @@ from scipy.ndimage import measurements
 
 
 def calculate_speckle_density(binary_image):
-    """Calculate the density of speckle features in the image with improved filtering
+    """Calculate the density of speckle features in the image with improved scaling
 
     Args:
         binary_image: Binary image with speckles (255) on background (0)
 
     Returns:
-        float: Speckle density in features per megapixel, adjusted for resolution
+        float: Speckle density in features per megapixel, adjusted for scale
     """
     # Get connected components (exclude background at index 0)
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
@@ -23,14 +23,18 @@ def calculate_speckle_density(binary_image):
     height, width = binary_image.shape
     image_area_mpx = (height * width) / 1_000_000
 
-    # Adaptive minimum area based on image resolution
-    # For higher resolution images, use larger minimum area
-    min_area = max(4, int(image_area_mpx * 2))
+    # Calculate average feature size in this particular image to set better thresholds
+    areas = [stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)]
+    if areas:
+        median_area = np.median(areas)
+        # More adaptive approach based on image content
+        min_area = max(3, int(median_area * 0.2))  # Allow smaller features (20% of median)
+        max_area = min(int(binary_image.size * 0.05), int(median_area * 5.0))  # Cap at 5x median
+    else:
+        min_area = 4
+        max_area = int(binary_image.size * 0.05)
 
-    # Maximum area to filter out large artifacts (relative to image size)
-    max_area = int(binary_image.size * 0.05)  # 5% of image size
-
-    # Count only valid speckles (exclude background, noise, and large artifacts)
+    # Count only valid speckles using adaptive thresholds
     valid_speckles = sum(1 for i in range(1, num_labels)
                          if min_area <= stats[i, cv2.CC_STAT_AREA] <= max_area)
 
@@ -38,8 +42,12 @@ def calculate_speckle_density(binary_image):
     if image_area_mpx > 0:
         density = valid_speckles / image_area_mpx
 
+        # Scale density for small windows to avoid artificially high values
+        if image_area_mpx < 0.1:  # Very small regions (<0.1 MPx)
+            density = density * (0.7 + 3.0 * image_area_mpx)  # More aggressive scaling
+
         # Apply normalization for very high resolution images
-        if image_area_mpx > 10:  # Over 10 megapixels
+        if image_area_mpx > 5:  # Over 5 megapixels
             density = density * 0.85  # Reduce density slightly for high-res
     else:
         density = 0
@@ -47,71 +55,130 @@ def calculate_speckle_density(binary_image):
     return density
 
 
+def detect_speckles(gray_image):
+    """
+    Common speckle detection function that can be reused across the codebase
+
+    Args:
+        gray_image: Grayscale image to analyze
+
+    Returns:
+        tuple: (binary_image, stats, labels, centroids, avg_feature_size)
+    """
+    from analysis.core.subset_analyzer import determine_optimal_subset_size
+
+    # Determine optimal subset size for adaptive parameters
+    subset_size = determine_optimal_subset_size(gray_image)
+
+    # Use adaptive thresholding with parameters based on subset size
+    block_size = max(7, min(subset_size // 3, 15))
+    if block_size % 2 == 0:  # Block size must be odd
+        block_size += 1
+
+    binary = cv2.adaptiveThreshold(
+        gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY, block_size, 2
+    )
+
+    # Get connected components
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+
+    # Calculate average feature size (excluding background)
+    if num_labels > 1:
+        areas = [stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)]
+        valid_areas = [a for a in areas if a > 3 and a < gray_image.size * 0.05]
+        avg_feature_size = np.median(valid_areas) if valid_areas else 0
+    else:
+        avg_feature_size = 0
+
+    return binary, stats, labels, centroids, avg_feature_size
+
+
 def analyze_feature_size(gray):
-    """Analyze the size distribution of speckles
+    """
+    Analyze the size distribution of speckles
 
     Args:
         gray: Grayscale image to analyze
 
     Returns:
-        dict: Statistics about feature sizes
+        dict: Statistics about feature size distribution and quality score
     """
-    # Apply adaptive thresholding to identify speckles
-    binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
+    # Use common detection function first
+    binary, stats, labels, centroids, avg_feature_size = detect_speckles(gray)
 
-    # Find connected components
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    # Now focus on analyzing the feature sizes rather than detection
+    num_labels = len(stats)
 
-    if num_labels <= 1:  # Only background
+    if num_labels <= 1:  # No features detected
         return {
-            'mean_size': 0,
+            'avg_size': 0,
             'median_size': 0,
             'std_size': 0,
             'min_size': 0,
             'max_size': 0,
-            'size_uniformity': 0,
-            'count': 0
+            'size_variation': 1.0,
+            'feature_count': 0,
+            'density': 0,
+            'quality_score': 0
         }
 
-    # Get areas of all speckles (skip background at index 0)
-    areas = stats[1:, cv2.CC_STAT_AREA]
+    # Extract areas (skip background at index 0)
+    areas = [stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)]
 
-    # Filter out noise (very small components)
-    valid_areas = areas[areas >= 4]
+    # Filter for valid features
+    valid_areas = [a for a in areas if a > 3 and a < gray.size * 0.05]
 
-    if len(valid_areas) == 0:
+    if not valid_areas:
         return {
-            'mean_size': 0,
+            'avg_size': 0,
             'median_size': 0,
             'std_size': 0,
             'min_size': 0,
             'max_size': 0,
-            'size_uniformity': 0,
-            'count': 0
+            'size_variation': 1.0,
+            'feature_count': 0,
+            'density': 0,
+            'quality_score': 0
         }
 
-    # Calculate statistics
-    mean_size = np.mean(valid_areas)
+    # Calculate size statistics
+    avg_size = np.mean(valid_areas)
     median_size = np.median(valid_areas)
     std_size = np.std(valid_areas)
     min_size = np.min(valid_areas)
     max_size = np.max(valid_areas)
 
-    # Calculate uniformity (coefficient of variation inverted and normalized)
-    cv_value = std_size / mean_size if mean_size > 0 else float('inf')
-    size_uniformity = max(0, min(100, 100 * (1 - cv_value)))
+    # Size variation (coefficient of variation)
+    size_variation = std_size / avg_size if avg_size > 0 else 1.0
+
+    # Calculate density
+    height, width = gray.shape
+    feature_count = len(valid_areas)
+    image_area_mpx = (height * width) / 1_000_000
+    density = feature_count / image_area_mpx if image_area_mpx > 0 else 0
+
+    # Calculate quality score based on feature size distribution
+    # Ideal size for DIC is typically 3-5 pixels radius (28-75 sq pixels area)
+    ideal_size = 50
+    size_score = 100 * (1.0 - min(1.0, abs(median_size - ideal_size) / ideal_size))
+
+    # Penalize high variation
+    uniformity_score = 100 * (1.0 - min(1.0, size_variation))
+
+    # Overall quality score
+    quality_score = 0.6 * size_score + 0.4 * uniformity_score
 
     return {
-        'mean_size': mean_size,
+        'avg_size': avg_size,
         'median_size': median_size,
         'std_size': std_size,
         'min_size': min_size,
         'max_size': max_size,
-        'size_uniformity': size_uniformity,
-        'count': len(valid_areas)
+        'size_variation': size_variation,
+        'feature_count': feature_count,
+        'density': density,
+        'quality_score': quality_score
     }
 
 

@@ -13,6 +13,7 @@ from .contrast_metrics import (
 # Import feature/speckle metrics
 from .feature_metrics import (
     calculate_speckle_density,
+    detect_speckles,
     analyze_feature_size,
     evaluate_gradient_quality,
     measure_intensity_contrast,
@@ -71,6 +72,7 @@ __all__ = [
 
     # Feature metrics
     'calculate_speckle_density',
+    'detect_speckles',
     'analyze_feature_size',
     'evaluate_gradient_quality',
     'measure_intensity_contrast',

@@ -70,11 +70,11 @@ class DICAnalyzer:
 
             # Main metrics with appropriate scaling and units
             'contrast': round(metrics.get('contrast', 0), 1),
+            'feature_size': round(metrics.get('feature_size', 0), 1),
             'speckle_density': round(metrics.get('speckle_density', 0), 1),
             'gradient_magnitude': round(metrics.get('gradient_magnitude', 0), 1),
             'noise_level': round(metrics.get('noise_level', 0), 1),
             'pattern_uniformity': round(metrics.get('pattern_uniformity', 0), 1),
-            'feature_size': round(metrics.get('feature_size', 0), 1),
             'intensity_distribution': round(metrics.get('intensity_distribution', 0), 1),
             'edge_quality': round(metrics.get('edge_quality', 0), 1),
 

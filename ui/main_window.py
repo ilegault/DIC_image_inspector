@@ -195,6 +195,19 @@ class DICQualityInspector:
                                          bg='#2ecc71', fg='white', padx=10)
         self.quality_map_btn.pack(side='left', padx=2)
 
+        self.debug_btn = tk.Button(
+            btn_frame,  # Using the correct variable name
+            text="🐞 Debug ROI",
+            command=lambda: self.image_display.save_debug_visualizations(),
+            bg="#ffcc00",  # Yellow for debug
+            fg="black",
+            font=('Arial', 12, 'bold'),
+            padx=10,
+            pady=5,
+            state='disabled'  # Initially disabled until ROI is selected
+        )
+        self.debug_btn.pack(side='left', padx=5)
+
     def start_screenshot(self):
         """Start screenshot capture process"""
         from ctypes import windll
@@ -568,16 +581,42 @@ class DICQualityInspector:
         close_button.pack(pady=10)
 
     def _generate_recommendations(self, results):
-        """Generate recommendations based on analysis results with adaptive thresholds"""
+        """Generate recommendations based on analysis results with adaptive thresholds for specimens of all sizes"""
         recommendations = []
 
         # Get image resolution to adjust thresholds
         image_size = self.original_image.shape[:2]
         image_mpx = (image_size[0] * image_size[1]) / 1_000_000
 
-        # Adaptive speckle density thresholds based on resolution
-        min_density = 40 if image_mpx < 5 else 30
-        max_density = 150 if image_mpx < 5 else 120
+        # Get ROI size if available (for analyzing selected regions)
+        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords:
+            x1, y1, x2, y2 = self.roi_handler.roi_coords
+            roi_width, roi_height = x2 - x1, y2 - y1
+            roi_mpx = (roi_width * roi_height) / 1_000_000
+        else:
+            roi_mpx = image_mpx
+
+        # More granular adaptive thresholds based on region size
+        if roi_mpx < 0.1:  # Very small specimens (<0.1 MPx)
+            min_density = 20
+            max_density = 300
+            min_feature_size = 2
+            max_feature_size = 10
+        elif roi_mpx < 1:  # Small specimens (<1 MPx)
+            min_density = 30
+            max_density = 200
+            min_feature_size = 2
+            max_feature_size = 12
+        elif roi_mpx < 5:  # Medium specimens
+            min_density = 40
+            max_density = 150
+            min_feature_size = 3
+            max_feature_size = 15
+        else:  # Large specimens
+            min_density = 30
+            max_density = 120
+            min_feature_size = 3
+            max_feature_size = 15
 
         if results['contrast'] < 20:
             recommendations.append("Increase contrast - pattern is too uniform")
@@ -589,9 +628,9 @@ class DICQualityInspector:
         elif results['speckle_density'] > max_density:
             recommendations.append("Reduce speckle density - pattern may be too busy")
 
-        if results['feature_size'] < 3:
+        if results['feature_size'] < min_feature_size:
             recommendations.append("Increase feature size - speckles may be too small")
-        elif results['feature_size'] > 15:
+        elif results['feature_size'] > max_feature_size:
             recommendations.append("Reduce feature size - speckles may be too large")
 
         if results['pattern_uniformity'] < 70:

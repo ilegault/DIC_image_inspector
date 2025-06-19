@@ -1,12 +1,8 @@
 # ui.image_display.py
 
-import cv2
-import numpy as np
+
 from PIL import Image, ImageTk
 from tkinter import messagebox
-
-from analysis.quality_map.map_generator import generate_quality_map, visualize_quality_map
-from analysis.utils.image_processing import get_analysis_region
 
 
 class ImageDisplay:
@@ -41,6 +37,7 @@ class ImageDisplay:
         self.pan_start_x = 0
         self.pan_start_y = 0
         self.panning = False  # Add this flag to track panning state
+
 
     def display_image(self, pil_image, preserve_view=False):
         """Display image with option to preserve current view
@@ -111,6 +108,7 @@ class ImageDisplay:
             # Prevent recursion when showing quality map
             if not hasattr(self, '_updating_quality_map') or not self._updating_quality_map:
                 self.main_window.roi_handler.redraw_roi()
+
 
     def zoom(self, event):
         """Handle zoom with mouse wheel"""
@@ -195,6 +193,7 @@ class ImageDisplay:
 
         return "break"  # Prevent default behavior
 
+
     def apply_zoom(self, rel_x=0.5, rel_y=0.5, old_zoom=None):
         """Apply zoom at specified relative position without resetting view"""
         if not self.displayed_image:
@@ -258,6 +257,7 @@ class ImageDisplay:
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             self.main_window.roi_handler.redraw_roi()
 
+
     def reset_display(self):
         """Reset the display to original view and state"""
         if self.main_window is None or not hasattr(self.main_window, 'original_image'):
@@ -288,11 +288,13 @@ class ImageDisplay:
         # Update status
         self.main_window.status_var.set("Display reset to original view")
 
+
     def reset_cursor(self, event):
         """Reset cursor when Ctrl key is released."""
         if self.canvas:
             self.panning = False
             self.canvas.config(cursor="")
+
 
     def check_ctrl_release(self, event):
         """Check if Ctrl key is released and reset cursor if needed"""
@@ -301,15 +303,18 @@ class ImageDisplay:
             self.panning = False
             self.canvas.config(cursor="")
 
+
     def start_pan(self, event):
         """Start panning with Ctrl+click"""
         self.canvas.config(cursor="fleur")
         self.pan_start_x = event.x
         self.pan_start_y = event.y
 
+
     def end_pan(self, event):
         """End panning"""
         self.canvas.config(cursor="")
+
 
     def pan(self, event):
         """Pan the image with Ctrl+drag."""
@@ -341,6 +346,7 @@ class ImageDisplay:
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             self.main_window.roi_handler.redraw_roi()
 
+
     def show_original(self):
         """Display the original image"""
         if self.main_window.original_image is None:
@@ -361,34 +367,19 @@ class ImageDisplay:
         # Update status
         self.main_window.status_var.set("Showing original image")
 
+
     def show_edges(self):
         """Display edge detection visualization of the image"""
         if self.main_window.original_image is None:
             return
 
-        # Get the appropriate image region based on ROI
-        image = get_analysis_region(
+        from analysis.utils.image_processing import create_edge_visualization
+
+        # Create edge visualization
+        edge_visualization = create_edge_visualization(
             self.main_window.original_image,
             self.main_window.roi_handler.roi_coords
         )
-
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = image.copy()
-
-        # Apply Canny edge detection
-        edges = cv2.Canny(gray, 50, 150)
-
-        # Create a colored edge visualization
-        edge_visualization = np.zeros_like(self.main_window.original_image)
-        if len(self.main_window.original_image.shape) == 3:
-            # For color images, create colored edge overlay
-            edge_visualization[..., 2] = edges  # Set red channel to edges
-        else:
-            # For grayscale, create RGB visualization
-            edge_visualization = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
 
         # Update current image
         self.main_window.current_image = edge_visualization
@@ -403,42 +394,19 @@ class ImageDisplay:
         # Update status
         self.main_window.status_var.set("Showing edge detection visualization")
 
+
     def show_gradient(self):
         """Display gradient magnitude visualization of the image"""
         if self.main_window.original_image is None:
             return
 
-        # Get the appropriate image region based on ROI
-        image = get_analysis_region(
+        from analysis.utils.image_processing import create_gradient_visualization
+
+        # Create gradient visualization
+        gradient_vis_colored = create_gradient_visualization(
             self.main_window.original_image,
             self.main_window.roi_handler.roi_coords
         )
-
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = image.copy()
-
-        # Calculate gradients
-        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-
-        # Calculate gradient magnitude
-        magnitude = cv2.magnitude(grad_x, grad_y)
-
-        # Normalize for visualization
-        cv2.normalize(magnitude, magnitude, 0, 255, cv2.NORM_MINMAX)
-        gradient_vis = magnitude.astype(np.uint8)
-
-        # Apply colormap for better visualization
-        gradient_vis_colored = cv2.applyColorMap(gradient_vis, cv2.COLORMAP_JET)
-
-        # Convert to RGB if needed
-        if len(gradient_vis_colored.shape) == 2:
-            gradient_vis_colored = cv2.cvtColor(gradient_vis_colored, cv2.COLOR_GRAY2RGB)
-        elif gradient_vis_colored.shape[2] == 3:
-            gradient_vis_colored = cv2.cvtColor(gradient_vis_colored, cv2.COLOR_BGR2RGB)
 
         # Update current image
         self.main_window.current_image = gradient_vis_colored
@@ -453,112 +421,6 @@ class ImageDisplay:
         # Update status
         self.main_window.status_var.set("Showing gradient magnitude visualization")
 
-    def _display_array(self, array):
-        """Convert a numpy array to PIL image and display it on canvas
-
-        Args:
-            array: Numpy array (grayscale, RGB, or RGBA) to display
-        """
-        try:
-            # Convert to uint8 if not already
-            if array.dtype != np.uint8:
-                array = np.clip(array, 0, 255).astype(np.uint8)
-
-            # Convert to PIL Image based on shape
-            if len(array.shape) == 2:  # Grayscale
-                pil_image = Image.fromarray(array, 'L')
-            elif array.shape[2] == 3:  # RGB
-                pil_image = Image.fromarray(array, 'RGB')
-            elif array.shape[2] == 4:  # RGBA
-                pil_image = Image.fromarray(array, 'RGBA')
-            else:
-                raise ValueError(f"Unsupported array shape: {array.shape}")
-
-            # Display the PIL image
-            self.display_image(pil_image)
-
-        except Exception as e:
-            print(f"Error displaying array: {str(e)}")
-            messagebox.showerror("Display Error", f"Failed to display image: {str(e)}")
-
-    def debug_roi_coords(self):
-        """Print current ROI coordinates and scales for debugging"""
-        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
-            roi = self.main_window.roi_handler.roi_coords
-            print(f"ROI: {roi} | Display scale: {self.display_scale} | Zoom: {self.zoom_level}")
-
-    def show_quality_map(self):
-        """Display quality map as overlay on original image"""
-        if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
-            return
-
-        # Store current view state
-        current_zoom = self.zoom_level
-        visible_x = self.canvas.xview()
-        visible_y = self.canvas.yview()
-
-        # Get the original image as the base
-        original_image = self.main_window.original_image.copy()
-
-        # Get ROI coordinates
-        roi_coords = self.main_window.roi_handler.roi_coords
-
-        # Only overlay the quality map on the ROI region
-        if roi_coords:
-            x1, y1, x2, y2 = roi_coords
-
-            print(f"DEBUG: ROI coordinates: {roi_coords}")
-            print(f"DEBUG: Original image shape: {original_image.shape}")
-            print(f"DEBUG: Quality map shape: {self.quality_map_data.shape}")
-
-            # Create a colored version of the quality map
-            normalized_map = (self.quality_map_data * 255).astype(np.uint8)
-            colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
-            colored_map = cv2.applyColorMap(normalized_map, colormap_const)
-            colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
-
-            # Extract the ROI region from the original image
-            roi_height, roi_width = y2 - y1, x2 - x1
-
-            # Make sure quality map has the right dimensions for the ROI
-            if colored_map.shape[:2] != (roi_height, roi_width):
-                colored_map = cv2.resize(colored_map, (roi_width, roi_height))
-
-            # Create blended overlay just for the ROI region
-            roi_overlay = cv2.addWeighted(
-                original_image[y1:y2, x1:x2], 0.3,  # Keep 30% of original
-                colored_map, 0.7,  # Add 70% of quality map
-                0
-            )
-
-            # Apply the overlay only to the ROI region of the original image
-            original_image[y1:y2, x1:x2] = roi_overlay
-
-            print(f"DEBUG: Applied quality map overlay to ROI region only")
-        else:
-            # No ROI selected, apply to entire image (existing behavior)
-            overlay = visualize_quality_map(original_image, self.quality_map_data)
-            original_image = overlay
-
-        # Convert to PIL image for display
-        visualization_pil = Image.fromarray(original_image)
-
-        # Set a flag to prevent recursion during display
-        self._updating_quality_map = True
-
-        # Display the visualization with preserved view
-        self.display_image(visualization_pil, preserve_view=True)
-
-        # Clear the flag
-        self._updating_quality_map = False
-
-        # Restore view state exactly
-        self.zoom_level = current_zoom
-        self.canvas.xview_moveto(visible_x[0])
-        self.canvas.yview_moveto(visible_y[0])
-
-        # Update state
-        self.showing_quality_overlay = True
 
     def toggle_quality_map_overlay(self):
         """Toggle quality map overlay on/off"""
@@ -607,37 +469,48 @@ class ImageDisplay:
                 print("DEBUG: Changing button to inactive state")
                 self.main_window.quality_map_btn.config(bg='#2ecc71')  # Green when inactive
 
-    def overlay_quality_map(self, colormap_name='JET', alpha=0.7):
-        """
-        Overlay quality map on the base image
 
-        Args:
-            colormap_name: OpenCV colormap name (default: JET)
-            alpha: Alpha blending factor (0-1)
+    def show_quality_map(self):
+        """Display quality map as overlay on original image"""
+        if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
+            return
 
-        Returns:
-            Overlaid image with quality map visualization
-        """
-        from analysis.quality_map.map_generator import visualize_quality_map
+        from analysis.utils.image_processing import create_quality_map_visualization
 
-        if self.quality_map_data is None:
-            return None
+        # Store current view state
+        current_zoom = self.zoom_level
+        visible_x = self.canvas.xview()
+        visible_y = self.canvas.yview()
 
-        # Get base image
-        if self.main_window.original_image is None:
-            return None
-
-        # Get analysis region based on ROI
-        base_image = get_analysis_region(
-            self.main_window.original_image,
-            self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+        # Create visualization with quality map
+        roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+        visualization = create_quality_map_visualization(
+            self.main_window.original_image.copy(),
+            self.quality_map_data,
+            roi_coords
         )
 
-        # Generate visualization overlay using the existing function
-        overlay = visualize_quality_map(base_image, self.quality_map_data,
-                                        colormap_name=colormap_name, alpha=alpha)
+        # Convert to PIL image for display
+        from PIL import Image
+        visualization_pil = Image.fromarray(visualization)
 
-        return overlay
+        # Set a flag to prevent recursion during display
+        self._updating_quality_map = True
+
+        # Display with preserved view
+        self.display_image(visualization_pil, preserve_view=True)
+
+        # Clear the flag
+        self._updating_quality_map = False
+
+        # Restore view state exactly
+        self.zoom_level = current_zoom
+        self.canvas.xview_moveto(visible_x[0])
+        self.canvas.yview_moveto(visible_y[0])
+
+        # Update state
+        self.showing_quality_overlay = True
+
 
     def sync_view_state(self):
         """Store current view state for later restoration"""
@@ -654,6 +527,7 @@ class ImageDisplay:
         self.temp_y_view = visible_y
 
         return current_zoom, visible_x, visible_y
+
 
     def restore_view_state(self, zoom_level, x_view, y_view):
         """Restore a previously saved view state"""
@@ -674,3 +548,99 @@ class ImageDisplay:
         # Notify ROI handler to update if needed
         if hasattr(self.main_window, 'roi_handler'):
             self.main_window.roi_handler.redraw_roi()
+
+
+    def _display_array(self, array):
+        """Convert a numpy array to PIL image and display it"""
+        try:
+            from analysis.utils.image_processing import array_to_pil_image
+            import numpy as np
+            from PIL import Image as PILImage
+
+            pil_image = array_to_pil_image(array)
+
+            image_copy = PILImage.fromarray(np.array(pil_image))
+
+            self.display_image(image_copy)
+        except Exception as e:
+            print(f"Error displaying array: {str(e)}")
+            messagebox.showerror("Display Error", f"Failed to display image: {str(e)}")
+
+
+    def overlay_quality_map(self, colormap_name='JET', alpha=0.7):
+        """Get overlaid quality map on the base image"""
+        from analysis.utils.image_processing import overlay_quality_map, get_analysis_region
+
+        if self.quality_map_data is None or self.main_window.original_image is None:
+            return None
+
+        # Get analysis region based on ROI
+        base_image = get_analysis_region(
+            self.main_window.original_image,
+            self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+        )
+
+        return overlay_quality_map(base_image, self.quality_map_data, colormap_name, alpha)
+
+
+    def debug_roi_coords(self):
+        """Print current ROI coordinates and scales for debugging"""
+        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
+            roi = self.main_window.roi_handler.roi_coords
+            print(f"ROI: {roi} | Display scale: {self.display_scale} | Zoom: {self.zoom_level}")
+
+
+    def save_debug_visualizations(self):
+        """Generate and save debug visualizations for the current ROI"""
+        if self.main_window.original_image is None:
+            messagebox.showerror("Error", "No image loaded")
+            return
+
+        if not hasattr(self.main_window, 'roi_handler') or not self.main_window.roi_handler.roi_coords:
+            messagebox.showinfo("Info", "No ROI selected. Please select a region first.")
+            return
+
+        try:
+            # Import the function
+            from analysis.utils.image_processing import save_debug_visualizations
+
+            # Get current timestamp for unique output folder
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Generate debug outputs
+            debug_info = save_debug_visualizations(
+                self.main_window.original_image,
+                self.main_window.roi_handler.roi_coords,
+                output_dir="debug_output",
+                prefix=f"debug_{timestamp}",
+                save_intermediate_steps=True
+            )
+
+            # Show success message with path
+            output_dir = debug_info["output_directory"]
+            messagebox.showinfo("Debug Output",
+                                f"Debug visualizations saved to:\n{output_dir}\n\n"
+                                f"Total images saved: {len(debug_info['saved_images'])}")
+
+            # Open the composite visualization if available
+            if 'composite' in debug_info['saved_images']:
+                import os
+                import platform
+                import subprocess
+
+                composite_path = debug_info['saved_images']['composite']
+
+                # Open with default image viewer based on platform
+                if platform.system() == 'Windows':
+                    os.startfile(composite_path)
+                elif platform.system() == 'Darwin':  # macOS
+                    subprocess.call(('open', composite_path))
+                else:  # Linux
+                    subprocess.call(('xdg-open', composite_path))
+
+            # Update status
+            self.main_window.status_var.set(f"Debug visualizations saved to {output_dir}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save debug visualizations: {str(e)}")
