@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import logging
 from PIL import Image
+from tkinter import messagebox
 
 logger = logging.getLogger(__name__)
 
@@ -207,110 +208,3 @@ def create_gradient_visualization(image, roi_coords=None):
 
     return gradient_vis_colored
 
-
-def save_debug_visualizations(original_image, roi_coords, output_dir="debug_output", prefix="debug",
-                              save_intermediate_steps=True):
-    """Save visual representations of ROI processing steps for debugging
-
-    Args:
-        original_image: Input image as numpy array
-        roi_coords: Tuple of (x1, y1, x2, y2) coordinates
-        output_dir: Directory to save debug images
-        prefix: Prefix for saved image filenames
-        save_intermediate_steps: If True, save preprocessing and thresholding steps
-
-    Returns:
-        dict: Paths to saved debug images
-    """
-    import os
-    import datetime
-    from pathlib import Path
-
-    # Create unique timestamp for this debug session
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_dir = f"{prefix}_{timestamp}"
-    output_path = Path(output_dir) / session_dir
-
-    # Create directory if it doesn't exist
-    os.makedirs(output_path, exist_ok=True)
-
-    # Extract ROI from original image
-    roi_image = get_analysis_region(original_image, roi_coords)
-
-    # Save original ROI
-    original_path = output_path / "01_original_roi.png"
-    cv2.imwrite(str(original_path), cv2.cvtColor(roi_image, cv2.COLOR_RGB2BGR))
-
-    saved_paths = {"original": str(original_path)}
-
-    if save_intermediate_steps:
-        # Convert to grayscale for processing
-        if len(roi_image.shape) == 3:
-            gray = cv2.cvtColor(roi_image, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = roi_image.copy()
-
-        # Save grayscale
-        gray_path = output_path / "02_grayscale.png"
-        cv2.imwrite(str(gray_path), gray)
-        saved_paths["grayscale"] = str(gray_path)
-
-        # Save histogram equalized
-        equalized = cv2.equalizeHist(gray)
-        eq_path = output_path / "03_equalized.png"
-        cv2.imwrite(str(eq_path), equalized)
-        saved_paths["equalized"] = str(eq_path)
-
-        # Apply Gaussian blur
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        blur_path = output_path / "04_blurred.png"
-        cv2.imwrite(str(blur_path), blurred)
-        saved_paths["blurred"] = str(blur_path)
-
-        # Generate thresholded images with different methods
-        _, thresh_binary = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-        thresh_path = output_path / "05_threshold_binary.png"
-        cv2.imwrite(str(thresh_path), thresh_binary)
-        saved_paths["threshold_binary"] = str(thresh_path)
-
-        # Adaptive threshold
-        adaptive_thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                                cv2.THRESH_BINARY, 11, 2)
-        adaptive_path = output_path / "06_adaptive_threshold.png"
-        cv2.imwrite(str(adaptive_path), adaptive_thresh)
-        saved_paths["adaptive_threshold"] = str(adaptive_path)
-
-        # Otsu's thresholding
-        _, otsu_thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        otsu_path = output_path / "07_otsu_threshold.png"
-        cv2.imwrite(str(otsu_path), otsu_thresh)
-        saved_paths["otsu_threshold"] = str(otsu_path)
-
-        # Edge detection
-        edges = cv2.Canny(gray, 50, 150)
-        edge_path = output_path / "08_edge_detection.png"
-        cv2.imwrite(str(edge_path), edges)
-        saved_paths["edges"] = str(edge_path)
-
-        # Gradient visualization
-        gradient_vis = create_gradient_visualization(roi_image)
-        gradient_path = output_path / "09_gradient.png"
-        cv2.imwrite(str(gradient_path), cv2.cvtColor(gradient_vis, cv2.COLOR_RGB2BGR))
-        saved_paths["gradient"] = str(gradient_path)
-
-    # Create composite visualization with all steps
-    composite_path = output_path / "10_composite_visualization.png"
-
-    # Create a simple composite image showing original and key processing steps
-    try:
-        # Combine some of the key visualizations into a composite image
-        from analysis.utils.visualization import create_debug_composite
-        composite = create_debug_composite(saved_paths)
-        cv2.imwrite(str(composite_path), composite)
-        saved_paths["composite"] = str(composite_path)
-    except Exception as e:
-        logger.error(f"Failed to create composite visualization: {str(e)}")
-
-    logger.info(f"Saved {len(saved_paths)} debug visualizations to {output_path}")
-
-    return {"output_directory": str(output_path), "saved_images": saved_paths}

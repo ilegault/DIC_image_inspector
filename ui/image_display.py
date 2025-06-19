@@ -601,8 +601,8 @@ class ImageDisplay:
             return
 
         try:
-            # Import the function
-            from analysis.utils.image_processing import save_debug_visualizations
+            # Import the visualization function
+            from analysis.utils.visualization import save_debug_visualizations, open_image_with_default_viewer
 
             # Get current timestamp for unique output folder
             import datetime
@@ -625,19 +625,7 @@ class ImageDisplay:
 
             # Open the composite visualization if available
             if 'composite' in debug_info['saved_images']:
-                import os
-                import platform
-                import subprocess
-
-                composite_path = debug_info['saved_images']['composite']
-
-                # Open with default image viewer based on platform
-                if platform.system() == 'Windows':
-                    os.startfile(composite_path)
-                elif platform.system() == 'Darwin':  # macOS
-                    subprocess.call(('open', composite_path))
-                else:  # Linux
-                    subprocess.call(('xdg-open', composite_path))
+                open_image_with_default_viewer(debug_info['saved_images']['composite'])
 
             # Update status
             self.main_window.status_var.set(f"Debug visualizations saved to {output_dir}")
