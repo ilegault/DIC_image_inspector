@@ -7,32 +7,40 @@ from scipy.spatial import distance
 from scipy.ndimage import measurements
 
 
-def calculate_speckle_density(gray):
-    """Calculate speckle density in features per megapixel
+def calculate_speckle_density(binary_image):
+    """Calculate the density of speckle features in the image with improved filtering
 
     Args:
-        gray: Grayscale image to analyze
+        binary_image: Binary image with speckles (255) on background (0)
 
     Returns:
-        float: Speckle density (features per megapixel)
+        float: Speckle density in features per megapixel, adjusted for resolution
     """
-    # Apply adaptive thresholding to identify speckles
-    binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
+    # Get connected components (exclude background at index 0)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
 
-    # Count connected components (speckles)
-    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    # Calculate image resolution (pixels per area)
+    height, width = binary_image.shape
+    image_area_mpx = (height * width) / 1_000_000
 
-    # Filter out noise (very small components)
-    min_area = 4  # Minimum area to be considered a valid speckle
-    valid_speckles = np.sum((stats[1:, cv2.CC_STAT_AREA] >= min_area))
+    # Adaptive minimum area based on image resolution
+    # For higher resolution images, use larger minimum area
+    min_area = max(4, int(image_area_mpx * 2))
 
-    # Calculate density per megapixel
-    image_size_mpx = (gray.shape[0] * gray.shape[1]) / 1_000_000
-    if image_size_mpx > 0:
-        density = valid_speckles / image_size_mpx
+    # Maximum area to filter out large artifacts (relative to image size)
+    max_area = int(binary_image.size * 0.05)  # 5% of image size
+
+    # Count only valid speckles (exclude background, noise, and large artifacts)
+    valid_speckles = sum(1 for i in range(1, num_labels)
+                         if min_area <= stats[i, cv2.CC_STAT_AREA] <= max_area)
+
+    # Calculate density (features per megapixel)
+    if image_area_mpx > 0:
+        density = valid_speckles / image_area_mpx
+
+        # Apply normalization for very high resolution images
+        if image_area_mpx > 10:  # Over 10 megapixels
+            density = density * 0.85  # Reduce density slightly for high-res
     else:
         density = 0
 
@@ -248,23 +256,25 @@ def compute_feature_coverage(gray):
     }
 
 
-def calculate_feature_spacing(gray):
-    """Calculate spacing between features
+def calculate_feature_spacing(gray_image, binary_image=None):
+    """Calculates average spacing between features/speckles
 
     Args:
-        gray: Grayscale image to analyze
+        gray_image: Grayscale image with speckles
+        binary_image: Optional pre-computed binary image (if None, will generate from gray_image)
 
     Returns:
-        dict: Spacing metrics
+        dict: Spacing statistics
     """
-    # Apply adaptive thresholding
-    binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
+    # Generate binary image if not provided
+    if binary_image is None:
+        binary_image = cv2.adaptiveThreshold(
+            gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 11, 2
+        )
 
     # Find centroids of all connected components
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
 
     # Skip background (index 0)
     if num_labels < 3:  # Need at least 2 speckles plus background

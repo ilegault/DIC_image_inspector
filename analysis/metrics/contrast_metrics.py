@@ -1,26 +1,25 @@
-# analysis/metrics/contract_metrics.py
+# analysis/metrics/contrast_metrics.py
 
 import cv2
 import numpy as np
-
+from scipy.stats import entropy
 
 def calculate_contrast(gray):
     """Calculate contrast score for DIC quality analysis"""
-    # Calculate multiple contrast metrics and combine them
-
     # Method 1: Simple contrast ratio (max-min)/max
     min_val = np.min(gray)
     max_val = np.max(gray)
-    if max_val == min_val:
+    if max_val == 0 or max_val == min_val:
         simple_contrast = 0
     else:
         simple_contrast = (max_val - min_val) / max_val * 100
 
     # Method 2: RMS contrast
     mean_intensity = np.mean(gray)
-    rms_contrast = np.sqrt(np.mean((gray - mean_intensity) ** 2)) / mean_intensity * 100 if mean_intensity > 0 else 0
+    epsilon = 1e-6  # Small value to avoid division instability
+    rms_contrast = np.sqrt(np.mean((gray - mean_intensity) ** 2)) / (mean_intensity + epsilon) * 100
 
-    # Method 3: Local contrast using standard deviation within windows
+    # Method 3: Local contrast
     local_contrast = calculate_local_contrast(gray)
 
     # Method 4: Histogram spread analysis
@@ -28,10 +27,10 @@ def calculate_contrast(gray):
 
     # Combine metrics with weights
     contrast_score = (
-            simple_contrast * 0.2 +
-            rms_contrast * 0.3 +
-            local_contrast * 0.3 +
-            hist_contrast * 0.2
+        simple_contrast * 0.2 +
+        rms_contrast * 0.3 +
+        local_contrast * 0.3 +
+        hist_contrast * 0.2
     )
 
     # Normalize to 0-100 range
@@ -43,10 +42,7 @@ def calculate_contrast(gray):
 def calculate_local_contrast(gray):
     """Calculate contrast in local windows across the image"""
     h, w = gray.shape
-    window_size = min(32, min(h, w) // 4)
-    if window_size < 8:
-        window_size = 8
-
+    window_size = max(8, min(32, min(h, w) // 4))  # Ensure window size is reasonable
     step = window_size // 2
     local_contrasts = []
 
@@ -59,9 +55,7 @@ def calculate_local_contrast(gray):
                 if max_val > min_val:
                     local_contrasts.append((max_val - min_val) / max_val * 100)
 
-    if local_contrasts:
-        return np.mean(local_contrasts)
-    return 0
+    return np.mean(local_contrasts) if local_contrasts else 0
 
 
 def analyze_histogram_contrast(gray):
@@ -86,16 +80,17 @@ def analyze_intensity_distribution(gray):
     hist = hist / np.sum(hist)  # Normalize
 
     # Calculate entropy of distribution
-    entropy = -np.sum(hist[hist > 0] * np.log2(hist[hist > 0]))
+    raw_entropy = -np.sum(hist[hist > 0] * np.log2(hist[hist > 0]))
 
     # Maximum entropy for 256 bins is 8 bits (uniform distribution)
-    normalized_entropy = min(100, (entropy / 8) * 100)
+    normalized_entropy = min(100, (raw_entropy / 8) * 100)
 
     # Check for bimodal distribution which is often good for DIC
     bimodality = measure_bimodality(hist)
 
-    # Check for coverage of intensity range
-    coverage = measure_intensity_coverage(hist)
+    # Check for coverage of intensity range - extract the appropriate value from the dictionary
+    contrast_metrics = measure_intensity_contrast(gray)
+    coverage = contrast_metrics['dynamic_range']  # Use dynamic_range as the coverage metric
 
     # Combined score
     distribution_score = (
@@ -143,22 +138,57 @@ def measure_bimodality(hist):
     return 0
 
 
-def measure_intensity_coverage(hist):
-    """Measure how well the histogram covers the intensity range"""
-    # Calculate percentiles
-    cumsum = np.cumsum(hist)
-    p1 = np.searchsorted(cumsum, 0.01)
-    p99 = np.searchsorted(cumsum, 0.99)
+def measure_intensity_contrast(gray):
+    """Measure contrast metrics for the grayscale image
 
-    # Effective range coverage (as percentage of full range)
-    coverage = (p99 - p1) / 255
+    Args:
+        gray: Grayscale image to analyze
 
-    # Check for overexposure or underexposure
-    over_exposed = np.sum(hist[-5:]) > 0.1  # More than 10% in top 5 bins
-    under_exposed = np.sum(hist[:5]) > 0.1  # More than 10% in bottom 5 bins
+    Returns:
+        dict: Contrast metrics
+    """
+    # Calculate basic statistics
+    mean_val = np.mean(gray)
+    std_val = np.std(gray)
+    min_val = np.min(gray)
+    max_val = np.max(gray)
 
-    # Penalize if overexposed or underexposed
-    if over_exposed or under_exposed:
-        coverage *= 0.7
+    # Calculate Michelson contrast (enhanced for more meaningful values)
+    if max_val != min_val:
+        michelson_contrast = (max_val - min_val) / (max_val + min_val)
+        # Scale to better utilize the range for typical images
+        enhanced_michelson = min(1.0, michelson_contrast * 3)
+    else:
+        michelson_contrast = 0
+        enhanced_michelson = 0
 
-    return coverage * 100
+    # Calculate RMS contrast (more consistent for natural images)
+    rms_contrast = std_val / 128  # Normalized to typical 8-bit image midpoint
+
+    # True Weber contrast (using brightest vs. average as background)
+    weber_contrast = (max_val - mean_val) / mean_val if mean_val > 0 else 0
+
+    # Calculate histogram metrics
+    hist, bins = np.histogram(gray, bins=256, range=(0, 256), density=True)
+    hist_entropy = entropy(hist[hist > 0]) if np.any(hist > 0) else 0
+
+    # Dynamic range utilization (percentage of all possible 256 gray levels used)
+    used_bins = np.sum(hist > 0)
+    dynamic_range = (used_bins / 256) * 100
+
+    # Perceptual contrast (combining metrics for better human-aligned score)
+    perceptual_contrast = (
+        enhanced_michelson * 0.4 +
+        min(1.0, rms_contrast * 2) * 0.4 +
+        min(1.0, weber_contrast * 0.5) * 0.2
+    ) * 100
+
+    return {
+        'michelson_contrast': michelson_contrast * 100,  # Original as percentage
+        'enhanced_contrast': perceptual_contrast,  # Better scaled for typical images
+        'rms_contrast': rms_contrast * 100,  # As percentage
+        'weber_contrast': weber_contrast * 100,  # As percentage
+        'std_deviation': std_val,
+        'dynamic_range': dynamic_range,
+        'histogram_entropy': hist_entropy
+    }

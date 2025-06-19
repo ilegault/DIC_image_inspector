@@ -376,7 +376,7 @@ class DICQualityInspector:
         metrics = [
             ("Contrast", results['contrast'], "%", "Optimal: 20-80%"),
             ("Speckle Density", results['speckle_density'], " features/Mpx", "Good: 50-200"),
-            ("Gradient Strength", results['gradient_magnitude'], "", "Higher is better"),
+            ("Gradient Strength", results['gradient_magnitude'], "", "Good: >30, Excellent: >50"),
             ("Noise Level (SNR)", results['noise_level'], " dB", "Good: >20 dB"),
             ("Pattern Uniformity", results['pattern_uniformity'], "%", "Good: >70%"),
             ("Feature Size", results['feature_size'], " pixels", "Optimal: 3-15 px"),
@@ -568,17 +568,25 @@ class DICQualityInspector:
         close_button.pack(pady=10)
 
     def _generate_recommendations(self, results):
-        """Generate recommendations based on analysis results"""
+        """Generate recommendations based on analysis results with adaptive thresholds"""
         recommendations = []
+
+        # Get image resolution to adjust thresholds
+        image_size = self.original_image.shape[:2]
+        image_mpx = (image_size[0] * image_size[1]) / 1_000_000
+
+        # Adaptive speckle density thresholds based on resolution
+        min_density = 40 if image_mpx < 5 else 30
+        max_density = 150 if image_mpx < 5 else 120
 
         if results['contrast'] < 20:
             recommendations.append("Increase contrast - pattern is too uniform")
         elif results['contrast'] > 80:
             recommendations.append("Reduce contrast - pattern may be overexposed")
 
-        if results['speckle_density'] < 50:
+        if results['speckle_density'] < min_density:
             recommendations.append("Increase speckle density - add more features")
-        elif results['speckle_density'] > 200:
+        elif results['speckle_density'] > max_density:
             recommendations.append("Reduce speckle density - pattern may be too busy")
 
         if results['feature_size'] < 3:

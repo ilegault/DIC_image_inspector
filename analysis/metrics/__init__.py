@@ -7,7 +7,7 @@ from .contrast_metrics import (
     analyze_histogram_contrast,
     analyze_intensity_distribution,
     measure_bimodality,
-    measure_intensity_coverage
+    measure_intensity_contrast
 )
 
 # Import feature/speckle metrics
@@ -16,8 +16,8 @@ from .feature_metrics import (
     analyze_feature_size,
     evaluate_gradient_quality,
     measure_intensity_contrast,
-    compute_feature_coverage,
     calculate_feature_spacing,
+    compute_feature_coverage,
     assess_feature_quality
 )
 
@@ -67,7 +67,7 @@ __all__ = [
     'analyze_histogram_contrast',
     'analyze_intensity_distribution',
     'measure_bimodality',
-    'measure_intensity_coverage',
+    'measure_intensity_contrast',
 
     # Feature metrics
     'calculate_speckle_density',

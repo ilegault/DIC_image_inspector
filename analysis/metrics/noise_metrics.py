@@ -1,195 +1,229 @@
+# analysis/metrics/noise_metrics.py
+
 import cv2
 import numpy as np
 from scipy import ndimage
+from skimage.restoration import estimate_sigma
 
 
-def estimate_image_noise(gray_image):
-    """Estimates noise level in the image using multiple methods
+def estimate_image_noise(image):
+    """Estimate overall noise level in the image
 
     Args:
-        gray_image: Grayscale image to analyze
+        image: Grayscale image array
 
     Returns:
-        dict: Noise statistics
+        float: Estimated noise standard deviation
     """
-    # Method 1: Laplacian variance method
-    laplacian = cv2.Laplacian(gray_image, cv2.CV_64F)
-    laplacian_var = laplacian.var()
+    # Wavelet-based noise estimation
+    noise_sigma = estimate_sigma(image, average_sigmas=True)
 
-    # Method 2: Median filter difference method
-    median_filtered = cv2.medianBlur(gray_image, 3)
-    noise_diff = gray_image.astype(np.float32) - median_filtered.astype(np.float32)
+    # Alternative method using difference between image and smoothed version
+    smoothed = cv2.GaussianBlur(image, (5, 5), 0)
+    noise_diff = image.astype(float) - smoothed.astype(float)
     noise_std = np.std(noise_diff)
-    noise_rms = np.sqrt(np.mean(noise_diff ** 2))
 
-    # Signal-to-noise ratio
-    signal_mean = np.mean(gray_image)
-    snr = 20 * np.log10(signal_mean / noise_std) if noise_std > 0 and signal_mean > 0 else 0
+    # Combine estimates (weighted)
+    combined_noise = (0.7 * noise_sigma + 0.3 * noise_std)
 
-    # Normalized measures
-    dynamic_range = np.max(gray_image) - np.min(gray_image)
-    noise_ratio = noise_std / dynamic_range if dynamic_range > 0 else 1
+    return combined_noise
+
+
+def analyze_local_noise(image, block_size=32):
+    """Analyze noise characteristics in local image regions
+
+    Args:
+        image: Grayscale image array
+        block_size: Size of local blocks to analyze
+
+    Returns:
+        dict: Local noise characteristics
+    """
+    h, w = image.shape
+    noise_map = np.zeros((h // block_size, w // block_size), dtype=float)
+    local_snr_map = np.zeros_like(noise_map)
+
+    for i in range(0, h - block_size, block_size):
+        for j in range(0, w - block_size, block_size):
+            block = image[i:i + block_size, j:j + block_size]
+
+            # Local noise measurement
+            smoothed = cv2.GaussianBlur(block.astype(float), (5, 5), 0)
+            noise = block.astype(float) - smoothed
+            noise_level = np.std(noise)
+
+            # Local SNR calculation
+            signal_level = np.std(smoothed)
+            snr = signal_level / (noise_level + 1e-6)  # Avoid division by zero
+
+            # Store measurements
+            map_i, map_j = i // block_size, j // block_size
+            if map_i < noise_map.shape[0] and map_j < noise_map.shape[1]:
+                noise_map[map_i, map_j] = noise_level
+                local_snr_map[map_i, map_j] = snr
+
+    # Calculate statistical metrics
+    avg_noise = np.mean(noise_map)
+    max_noise = np.max(noise_map)
+    avg_snr = np.mean(local_snr_map)
+    snr_uniformity = 1.0 - np.std(local_snr_map) / (np.mean(local_snr_map) + 1e-6)
+
+    return {
+        'avg_noise': avg_noise,
+        'max_noise': max_noise,
+        'noise_map': noise_map,
+        'avg_snr': avg_snr,
+        'snr_map': local_snr_map,
+        'snr_uniformity': snr_uniformity
+    }
+
+
+def estimate_noise_frequency(image):
+    """Estimate noise frequency characteristics using FFT
+
+    Args:
+        image: Grayscale image array
+
+    Returns:
+        dict: Frequency domain noise characteristics
+    """
+    # Apply FFT to get frequency domain representation
+    f_transform = np.fft.fft2(image.astype(float))
+    f_shift = np.fft.fftshift(f_transform)
+    magnitude = np.log(np.abs(f_shift) + 1)
+
+    # Get dimensions
+    h, w = image.shape
+    cy, cx = h // 2, w // 2
+
+    # Create masks for different frequency bands
+    y, x = np.ogrid[-cy:h - cy, -cx:w - cx]
+    low_radius = min(h, w) // 8
+    mid_radius = min(h, w) // 4
+
+    # Define frequency regions
+    low_freq_mask = x ** 2 + y ** 2 <= low_radius ** 2
+    mid_freq_mask = (x ** 2 + y ** 2 > low_radius ** 2) & (x ** 2 + y ** 2 <= mid_radius ** 2)
+    high_freq_mask = x ** 2 + y ** 2 > mid_radius ** 2
+
+    # Calculate energy in each frequency band
+    low_freq_energy = np.sum(magnitude[low_freq_mask])
+    mid_freq_energy = np.sum(magnitude[mid_freq_mask])
+    high_freq_energy = np.sum(magnitude[high_freq_mask])
+    total_energy = low_freq_energy + mid_freq_energy + high_freq_energy
+
+    # Calculate percentage of energy in each band
+    if total_energy > 0:
+        low_freq_percent = (low_freq_energy / total_energy) * 100
+        mid_freq_percent = (mid_freq_energy / total_energy) * 100
+        high_freq_percent = (high_freq_energy / total_energy) * 100
+    else:
+        low_freq_percent = mid_freq_percent = high_freq_percent = 0
+
+    # Higher high-frequency content typically indicates more noise
+    noise_frequency_score = high_freq_percent
+
+    return {
+        'low_freq_percent': low_freq_percent,
+        'mid_freq_percent': mid_freq_percent,
+        'high_freq_percent': high_freq_percent,
+        'noise_frequency_score': noise_frequency_score
+    }
+
+
+def compute_signal_to_noise_ratio(image):
+    """Compute signal-to-noise ratio using different methods
+
+    Args:
+        image: Grayscale image array
+
+    Returns:
+        float: Signal-to-noise ratio in dB
+    """
+    # Method 1: Using global statistics
+    smoothed = cv2.GaussianBlur(image.astype(float), (5, 5), 0)
+    noise = image.astype(float) - smoothed
+
+    signal_power = np.var(smoothed)
+    noise_power = np.var(noise)
+
+    if noise_power == 0:
+        snr_global = 100.0  # High value for very low noise
+    else:
+        snr_global = 10 * np.log10(signal_power / noise_power)
+
+    # Method 2: Using gradient-based approach
+    grad_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+
+    threshold = np.mean(gradient_magnitude) + 0.5 * np.std(gradient_magnitude)
+    edge_mask = gradient_magnitude > threshold
+    non_edge_mask = ~edge_mask
+
+    if np.sum(edge_mask) > 0 and np.sum(non_edge_mask) > 0:
+        edge_std = np.std(image[edge_mask])
+        non_edge_std = np.std(image[non_edge_mask])
+
+        if non_edge_std == 0:
+            snr_edge = 100.0
+        else:
+            snr_edge = 20 * np.log10(edge_std / non_edge_std)
+    else:
+        snr_edge = 0
+
+    # Combine SNR estimates
+    snr_combined = 0.5 * snr_global + 0.5 * snr_edge
+
+    return max(0, snr_combined)  # Ensure non-negative
+
+
+def compute_noise_metrics(image):
+    """Compute comprehensive noise metrics for an image
+
+    Args:
+        image: Grayscale image to analyze
+
+    Returns:
+        dict: Dictionary of noise metrics including SNR
+    """
+    # Make sure image is grayscale
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = image.copy()
+
+    # Get noise estimate
+    noise_std = estimate_image_noise(gray)
+
+    # Calculate signal properties
+    mean_signal = np.mean(gray)
+    signal_std = np.std(gray)
+
+    # Calculate SNR (Signal-to-Noise Ratio)
+    snr = signal_std / noise_std if noise_std > 0 else float('inf')
+
+    # SNR in decibels (dB) = 20 * log10(signal / noise)
+    snr_db = 20 * np.log10(snr) if snr > 0 else float('-inf')
+
+    # Normalize SNR for quality score (0-100)
+    # Good SNR is typically >20dB, excellent >30dB
+    normalized_snr = min(100, max(0, snr_db * 2.5)) if snr_db > 0 else 0
+
+    # Get local noise variation
+    local_noise = analyze_local_noise(gray)
+
+    # Get frequency-based noise metrics
+    freq_metrics = estimate_noise_frequency(gray)
 
     return {
         'noise_std': noise_std,
-        'noise_rms': noise_rms,
-        'laplacian_var': laplacian_var,
-        'snr_db': snr,
-        'noise_ratio': noise_ratio,
-        'noise_level': min(100, max(0, 100 * (1 - noise_ratio ** 0.5)))
+        'mean_signal': mean_signal,
+        'signal_std': signal_std,
+        'snr': snr,
+        'snr_db': snr_db,
+        'local_variation': local_noise,
+        'frequency_metrics': freq_metrics,
+        # Use normalized SNR as the final noise quality metric
+        'noise_level': normalized_snr  # This is used in the overall score
     }
-
-
-def analyze_local_noise(gray_image, block_size=16):
-    """Analyzes spatial variation in noise levels across the image
-
-    Args:
-        gray_image: Grayscale image to analyze
-        block_size: Size of blocks for local noise analysis
-
-    Returns:
-        dict: Local noise statistics and noise map
-    """
-    h, w = gray_image.shape
-    noise_map = np.zeros((h // block_size, w // block_size), dtype=np.float32)
-    local_snr_values = []
-
-    # Analyze local blocks
-    for i in range(0, h - block_size, block_size):
-        for j in range(0, w - block_size, block_size):
-            block = gray_image[i:i + block_size, j:j + block_size]
-
-            # Calculate local noise
-            median_filtered = cv2.medianBlur(block, 3)
-            noise_diff = block.astype(float) - median_filtered.astype(float)
-            local_noise = np.std(noise_diff)
-
-            # Local signal strength
-            local_signal = np.mean(block)
-
-            # Local SNR
-            local_snr = 20 * np.log10(local_signal / local_noise) if local_noise > 0 and local_signal > 0 else 0
-            local_snr_values.append(local_snr)
-
-            # Store in map
-            map_i, map_j = i // block_size, j // block_size
-            noise_map[map_i, map_j] = local_noise
-
-    # Calculate metrics for the noise map
-    noise_uniformity = 100 * (1 - np.std(noise_map) / np.mean(noise_map)) if np.mean(noise_map) > 0 else 0
-    noise_uniformity = max(0, min(100, noise_uniformity))
-
-    # Average SNR and its consistency
-    mean_snr = np.mean(local_snr_values) if local_snr_values else 0
-    snr_std = np.std(local_snr_values) if local_snr_values else 0
-    snr_consistency = 100 * (1 - snr_std / mean_snr) if mean_snr > 0 else 0
-    snr_consistency = max(0, min(100, snr_consistency))
-
-    return {
-        'local_noise_map': noise_map,
-        'noise_uniformity': noise_uniformity,
-        'mean_snr': mean_snr,
-        'snr_consistency': snr_consistency
-    }
-
-
-def estimate_noise_frequency(gray_image):
-    """Analyzes noise frequency characteristics using FFT
-
-    Args:
-        gray_image: Grayscale image to analyze
-
-    Returns:
-        dict: Frequency-domain noise statistics
-    """
-    # Apply FFT
-    f_transform = np.fft.fft2(gray_image.astype(float))
-    f_shift = np.fft.fftshift(f_transform)
-    magnitude_spectrum = 20 * np.log(np.abs(f_shift) + 1)
-
-    # Get image dimensions
-    h, w = gray_image.shape
-    center_y, center_x = h // 2, w // 2
-
-    # Analyze frequency bands (low, mid, high)
-    radius_low = min(h, w) // 8
-    radius_mid = min(h, w) // 4
-
-    # Create masks for different frequency bands
-    y_grid, x_grid = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((x_grid - center_x) ** 2 + (y_grid - center_y) ** 2)
-
-    low_mask = dist_from_center <= radius_low
-    mid_mask = (dist_from_center > radius_low) & (dist_from_center <= radius_mid)
-    high_mask = dist_from_center > radius_mid
-
-    # Calculate energy in each band
-    total_energy = np.sum(magnitude_spectrum)
-    low_energy = np.sum(magnitude_spectrum * low_mask) / total_energy if total_energy > 0 else 0
-    mid_energy = np.sum(magnitude_spectrum * mid_mask) / total_energy if total_energy > 0 else 0
-    high_energy = np.sum(magnitude_spectrum * high_mask) / total_energy if total_energy > 0 else 0
-
-    # High frequency ratio (indicator of noise)
-    high_freq_ratio = high_energy / (low_energy + 1e-10)
-
-    # Score based on desired frequency profile for DIC (balanced with some high frequency content)
-    freq_balance_score = 100 * (0.6 * low_energy + 0.3 * mid_energy + 0.1 * high_energy)
-    freq_balance_score = min(100, max(0, freq_balance_score))
-
-    return {
-        'low_freq_energy': low_energy * 100,  # as percentage
-        'mid_freq_energy': mid_energy * 100,
-        'high_freq_energy': high_energy * 100,
-        'high_freq_ratio': high_freq_ratio,
-        'frequency_balance': freq_balance_score
-    }
-
-
-def compute_noise_metrics(gray_image):
-    """Comprehensive noise analysis for DIC quality assessment
-
-    Args:
-        gray_image: Grayscale image to analyze
-
-    Returns:
-        dict: Complete noise metrics
-    """
-    # Get basic noise estimates
-    noise_stats = estimate_image_noise(gray_image)
-
-    # Get local noise variation
-    local_noise = analyze_local_noise(gray_image)
-
-    # Get frequency characteristics
-    freq_stats = estimate_noise_frequency(gray_image)
-
-    # Combine results
-    combined_metrics = {
-        'noise_level': noise_stats['noise_level'],
-        'snr_db': noise_stats['snr_db'],
-        'noise_uniformity': local_noise['noise_uniformity'],
-        'frequency_balance': freq_stats['frequency_balance'],
-        'high_freq_noise': freq_stats['high_freq_energy'],
-        'noise_map': local_noise['local_noise_map']
-    }
-
-    # Calculate overall noise quality score for DIC (higher is better)
-    # SNR contribution (40%) - higher SNR is better
-    snr_score = min(100, max(0, noise_stats['snr_db'] * 2.5)) if noise_stats['snr_db'] < 40 else 100
-
-    # Noise uniformity contribution (30%) - more uniform noise is better
-    uniformity_score = local_noise['noise_uniformity']
-
-    # Frequency balance contribution (30%) - balanced frequency content is better
-    freq_score = freq_stats['frequency_balance']
-
-    # Weighted score
-    noise_quality_score = (
-            snr_score * 0.4 +
-            uniformity_score * 0.3 +
-            freq_score * 0.3
-    )
-
-    combined_metrics['noise_quality_score'] = min(100, noise_quality_score)
-
-    return combined_metrics

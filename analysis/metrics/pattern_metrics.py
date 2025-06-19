@@ -1,3 +1,5 @@
+# analysis/metrics/pattern_metrics.py
+
 import cv2
 import numpy as np
 from scipy import ndimage

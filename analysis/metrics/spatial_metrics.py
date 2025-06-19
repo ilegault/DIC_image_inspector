@@ -5,49 +5,28 @@ from scipy.spatial import Delaunay
 
 
 def calculate_pattern_uniformity(binary_image):
-    """Calculates how uniform the pattern is distributed across the image
+    # Analysis of pattern distribution across image
+    grid_size = 8  # Divide image into 8x8 grid
+    h, w = binary_image.shape[:2]
 
-    Args:
-        binary_image: Binary image with features
+    # Create grid cells and calculate coverage in each cell
+    coverage_per_cell = []
+    cell_h, cell_w = h // grid_size, w // grid_size
 
-    Returns:
-        float: Uniformity score (0-100)
-    """
-    # Find all feature centroids
-    num_labels, _, stats, centroids = cv2.connectedComponentsWithStats(binary_image, connectivity=8)
+    for y in range(grid_size):
+        for x in range(grid_size):
+            # Extract cell
+            cell = binary_image[y * cell_h:(y + 1) * cell_h, x * cell_w:(x + 1) * cell_w]
+            coverage = np.sum(cell > 0) / cell.size
+            coverage_per_cell.append(coverage)
 
-    if num_labels <= 2:  # Only background or one feature
-        return 0
+    # Calculate standard deviation of coverage (lower = more uniform)
+    coverage_std = np.std(coverage_per_cell) if coverage_per_cell else 1.0
 
-    # Skip background (label 0)
-    centroids = centroids[1:]
+    # Convert to uniformity score (0-100%)
+    uniformity = max(0.0, min(100.0, 100.0 * (1.0 - coverage_std)))
 
-    # Divide image into grid
-    h, w = binary_image.shape
-    grid_size = max(10, min(h, w) // 10)  # Adaptive grid size
-    n_cells_x = w // grid_size
-    n_cells_y = h // grid_size
-
-    # Count features in each grid cell
-    grid_counts = np.zeros((n_cells_y, n_cells_x), dtype=int)
-
-    for x, y in centroids:
-        cell_x = min(int(x) // grid_size, n_cells_x - 1)
-        cell_y = min(int(y) // grid_size, n_cells_y - 1)
-        grid_counts[cell_y, cell_x] += 1
-
-    # Calculate coefficient of variation
-    mean_count = np.mean(grid_counts)
-    if mean_count == 0:
-        return 0
-
-    std_count = np.std(grid_counts)
-    cv = std_count / mean_count
-
-    # Convert to uniformity score (lower CV means higher uniformity)
-    uniformity = 100 * (1 - min(cv, 1))
-
-    return round(uniformity, 1)
+    return uniformity
 
 
 def calculate_uniformity(gray_image):

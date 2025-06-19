@@ -41,7 +41,7 @@ class DICAnalyzer:
         self.subset_size = metrics_manager.subset_size
 
         # Run all metrics calculations
-        metrics = metrics_manager.calculate_all_metrics()
+        metrics = metrics_manager.compute_all_metrics(image)
 
         # Generate the quality map visualization
         quality_map, visualization = generate_quality_map(image)
@@ -69,7 +69,7 @@ class DICAnalyzer:
             'overall_score': metrics.get('overall_score', 0),
 
             # Main metrics with appropriate scaling and units
-            'contrast': round(metrics.get('contrast', 0) * 100, 1),
+            'contrast': round(metrics.get('contrast', 0), 1),
             'speckle_density': round(metrics.get('speckle_density', 0), 1),
             'gradient_magnitude': round(metrics.get('gradient_magnitude', 0), 1),
             'noise_level': round(metrics.get('noise_level', 0), 1),
