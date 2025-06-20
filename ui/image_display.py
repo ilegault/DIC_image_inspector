@@ -1,5 +1,5 @@
 # ui.image_display.py
-import tkinter
+
 
 from PIL import Image, ImageTk
 from tkinter import messagebox
@@ -37,15 +37,8 @@ class ImageDisplay:
         self.pan_start_x = 0
         self.pan_start_y = 0
         self.panning = False  # Add this flag to track panning state
-        self.rotation_slider = tkinter.Scale(
-            self.canvas.master,
-            from_=0,
-            to=360,
-            orient=tkinter.HORIZONTAL,
-            label="Rotate Image",
-            command=lambda angle: self.rotate_image(int(angle))
-        )
-        self.rotation_slider.grid(row=1, column=0, sticky='ew', padx=0, pady=0)
+
+
     def display_image(self, pil_image, preserve_view=False):
         """Display image with option to preserve current view
 
@@ -71,7 +64,7 @@ class ImageDisplay:
         if max(display_image.size) > max_size:
             ratio = max_size / max(display_image.size)
             new_size = (int(display_image.size[0] * ratio), int(display_image.size[1] * ratio))
-            display_image = display_image.resize(new_size, Image.Resampling.NEAREST)
+            display_image = display_image.resize(new_size, Image.Resampling.LANCZOS)
             self.display_scale = ratio
         else:
             self.display_scale = 1.0
@@ -84,7 +77,7 @@ class ImageDisplay:
         if self.zoom_level != 1.0:
             new_width = int(display_image.width * self.zoom_level)
             new_height = int(display_image.height * self.zoom_level)
-            display_image = display_image.resize((new_width, new_height), Image.Resampling.NEAREST)
+            display_image = display_image.resize((new_width, new_height), resample = Image.Resampling.NEAREST)
 
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(display_image)
@@ -116,8 +109,6 @@ class ImageDisplay:
             if not hasattr(self, '_updating_quality_map') or not self._updating_quality_map:
                 self.main_window.roi_handler.redraw_roi()
 
-        self.displayed_image = display_image  # Store the displayed image for future reference
-        self.original_displayed_image = display_image.copy()  # Store the original image for reset
 
     def zoom(self, event):
         """Handle zoom with mouse wheel"""
@@ -642,30 +633,38 @@ class ImageDisplay:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save debug visualizations: {str(e)}")
 
-    def rotate_image(self, angle) -> None:
-        """Rotate the displayed image by a given angle"""
-        if not hasattr(self, 'original_displayed_image') or self.original_displayed_image is None:
+
+    def debug_speckle_pattern(self):
+        """Debug speckle pattern in the selected ROI"""
+        if not hasattr(self.main_window, 'original_image') or self.main_window.original_image is None:
+            messagebox.showerror("Error", "No image loaded")
             return
 
-        # Rotate the image using PIL
-        rotated_image = self.original_displayed_image.rotate(angle, expand=False)
+        if not hasattr(self.main_window, 'roi_handler') or not self.main_window.roi_handler.roi_coords:
+            messagebox.showinfo("Info", "No ROI selected. Please select a region first.")
+            return
 
-        # Update the photo image
-        self.photo = ImageTk.PhotoImage(rotated_image)
+        try:
+            # Import functionality from pattern_analyzer instead of roi_speckle_fix
+            from analysis.core.pattern_analyzer import analyze_roi_speckles
 
-        # Update canvas with the rotated image
-        self.canvas.delete(self.image_item)
-        self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+            # Get ROI from the image
+            roi_coords = self.main_window.roi_handler.roi_coords
+            image = self.main_window.original_image
 
-        # Update scroll region to match the new image dimensions
-        self.canvas.configure(scrollregion=(0, 0, rotated_image.width, rotated_image.height))
+            # Extract ROI
+            x1, y1, x2, y2 = roi_coords
+            roi_image = image[y1:y2, x1:x2]
 
-        # Store the rotated image
-        self.displayed_image = rotated_image
+            # Run analysis
+            analysis_result = analyze_roi_speckles(roi_image)
 
-        # Redraw ROI if it exists
-        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
-            self.main_window.roi_handler.redraw_roi()
+            # Show results
+            messagebox.showinfo("Speckle Analysis",
+                                f"Speckle count: {analysis_result['count']}\n"
+                                f"Average size: {analysis_result['avg_size']:.1f} pixels\n"
+                                f"Coverage: {analysis_result['coverage']:.1f}%\n"
+                                f"Quality score: {analysis_result['quality']:.1f}/100")
 
-
-
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to analyze speckles: {str(e)}")

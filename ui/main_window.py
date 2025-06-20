@@ -10,7 +10,10 @@ from ui.roi_handler import ROIHandler
 from ui.file_operations import FileOperations
 from analysis.utils.image_processing import get_analysis_region
 from analysis.quality_map.map_generator import generate_quality_map
-from analysis.analyzer import DICAnalyzer  # Ensure this import is correct
+from analysis.analyzer import DICAnalyzer
+from debug_output.comprehensive_speckle_analyzer import integrate_comprehensive_analyzer
+from debug_output.enhanced_debug_integration import integrate_enhanced_debug
+
 
 class DICQualityInspector:
     def __init__(self, root):
@@ -31,6 +34,8 @@ class DICQualityInspector:
         # Create GUI
         self.create_gui()
 
+        integrate_comprehensive_analyzer(self)
+
         # Create managers
         self.image_display = ImageDisplay(self.image_canvas, self)
         self.file_operations = FileOperations(self)
@@ -48,6 +53,13 @@ class DICQualityInspector:
         self.image_canvas.bind('<ButtonPress-1>', self.roi_handler.start_roi_selection)
         self.image_canvas.bind('<B1-Motion>', self.roi_handler.update_roi_selection)
         self.image_canvas.bind('<ButtonRelease-1>', self.roi_handler.end_roi_selection)
+
+        from debug_output.integrated_debug_manager import add_enhanced_debug_to_main_window
+        add_enhanced_debug_to_main_window(self)
+
+        integrate_enhanced_debug(self)
+
+
 
     def create_gui(self):
         # Main title
@@ -207,6 +219,7 @@ class DICQualityInspector:
             state='disabled'  # Initially disabled until ROI is selected
         )
         self.debug_btn.pack(side='left', padx=5)
+
 
     def start_screenshot(self):
         """Start screenshot capture process"""
