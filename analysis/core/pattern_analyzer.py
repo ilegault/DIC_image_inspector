@@ -231,7 +231,6 @@ def analyze_roi_speckles(roi_image, roi_coords=None):
 
     try:
         from analysis.metrics.pattern_metrics import evaluate_pattern_quality
-        from debug_output.roi_speckle_fix import analyze_roi_speckles_improved
 
         # Convert to grayscale if needed
         if len(roi_image.shape) == 3:

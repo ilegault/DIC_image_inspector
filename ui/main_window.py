@@ -54,9 +54,6 @@ class DICQualityInspector:
         self.image_canvas.bind('<B1-Motion>', self.roi_handler.update_roi_selection)
         self.image_canvas.bind('<ButtonRelease-1>', self.roi_handler.end_roi_selection)
 
-        from debug_output.integrated_debug_manager import add_enhanced_debug_to_main_window
-        add_enhanced_debug_to_main_window(self)
-
         integrate_enhanced_debug(self)
 
 
