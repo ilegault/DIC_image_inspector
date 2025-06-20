@@ -2,8 +2,6 @@
 
 import cv2
 import numpy as np
-from scipy import ndimage
-from skimage import measure
 
 
 def analyze_speckle_histogram(binary_image):
@@ -226,40 +224,37 @@ def analyze_pattern_quality(gray_image):
     }
 
 
-def segment_speckle_pattern(gray_image):
-    """Segments speckles using multiple techniques for robust detection
+def analyze_roi_speckles(roi_image, roi_coords=None):
+    """Perform detailed analysis of speckle pattern in the selected ROI"""
+    if roi_image is None:
+        return {"error": "No image provided"}
 
-    Args:
-        gray_image: Grayscale image containing speckle pattern
+    try:
+        from analysis.metrics.pattern_metrics import evaluate_pattern_quality
+        from debug_output.roi_speckle_fix import analyze_roi_speckles_improved
 
-    Returns:
-        dict: Segmentation results with different methods
-    """
-    # Method 1: Adaptive thresholding 
-    binary_adaptive = cv2.adaptiveThreshold(
-        gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
+        # Convert to grayscale if needed
+        if len(roi_image.shape) == 3:
+            roi_gray = cv2.cvtColor(roi_image, cv2.COLOR_RGB2GRAY)
+        else:
+            roi_gray = roi_image.copy()
 
-    # Method 2: Otsu thresholding
-    _, binary_otsu = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Run comprehensive analysis
+        pattern_results = analyze_pattern_quality(roi_gray)
+        segmentation_results = analyze_roi_speckles_improved(roi_gray)
 
-    # Method 3: Edge-based segmentation
-    edges = cv2.Canny(gray_image, 50, 150)
-    kernel = np.ones((3, 3), np.uint8)
-    binary_edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+        # Create the results dictionary
+        results = {
+            'speckle_count': segmentation_results['speckle_count'],
+            'pattern_quality': pattern_results['quality_score'],
+            'size_stats': pattern_results.get('size_stats', {}),
+            'coverage': segmentation_results.get('confidence', 0) * 100
+        }
 
-    # Combine methods (logical OR)
-    binary_combined = cv2.bitwise_or(binary_adaptive, binary_otsu)
+        return results
 
-    # Clean up with morphological operations
-    kernel_clean = np.ones((2, 2), np.uint8)
-    binary_final = cv2.morphologyEx(binary_combined, cv2.MORPH_OPEN, kernel_clean)
-
-    return {
-        'adaptive': binary_adaptive,
-        'otsu': binary_otsu,
-        'edges': binary_edges,
-        'combined': binary_combined,
-        'final': binary_final
-    }
+    except Exception as e:
+        import traceback
+        print(f"Error in ROI speckle analysis: {str(e)}")
+        print(traceback.format_exc())
+        return {"error": str(e)}
