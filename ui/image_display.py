@@ -1,4 +1,5 @@
 # ui.image_display.py
+import tkinter
 
 
 from PIL import Image, ImageTk
@@ -37,7 +38,15 @@ class ImageDisplay:
         self.pan_start_x = 0
         self.pan_start_y = 0
         self.panning = False  # Add this flag to track panning state
-
+        self.rotation_slider = tkinter.Scale(
+            self.canvas.master,
+            from_=0,
+            to=360,
+            orient=tkinter.HORIZONTAL,
+            label="Rotate Image",
+            command=lambda angle: self.rotate_image(int(angle))
+        )
+        self.rotation_slider.grid(row=1, column=0, sticky='ew', padx=0, pady=0)
 
     def display_image(self, pil_image, preserve_view=False):
         """Display image with option to preserve current view
@@ -109,6 +118,8 @@ class ImageDisplay:
             if not hasattr(self, '_updating_quality_map') or not self._updating_quality_map:
                 self.main_window.roi_handler.redraw_roi()
 
+        self.displayed_image = display_image  # Store the displayed image for future reference
+        self.original_displayed_image = display_image.copy()
 
     def zoom(self, event):
         """Handle zoom with mouse wheel"""
@@ -668,3 +679,31 @@ class ImageDisplay:
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to analyze speckles: {str(e)}")
+
+    def rotate_image(self, angle) -> None:
+        """Rotate the displayed image by a given angle"""
+        if not hasattr(self, 'original_displayed_image') or self.original_displayed_image is None:
+            return
+
+        # Rotate the image using PIL
+        rotated_image = self.original_displayed_image.rotate(angle, expand=False)
+
+        # Update the photo image
+        self.photo = ImageTk.PhotoImage(rotated_image)
+
+        # Update canvas with the rotated image
+        self.canvas.delete(self.image_item)
+        self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+
+        # Update scroll region to match the new image dimensions
+        self.canvas.configure(scrollregion=(0, 0, rotated_image.width, rotated_image.height))
+
+        # Store the rotated image
+        self.displayed_image = rotated_image
+
+        # Redraw ROI if it exists
+        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
+            self.main_window.roi_handler.redraw_roi()
+
+
+
