@@ -481,6 +481,8 @@ class ResolutionAdaptiveSpeckleAnalyzer:
                                         cv2.THRESH_BINARY_INV, method['block_size'], method['c_value'])
         candidates.append((binary5, "Adaptive Fallback", f"Adaptive fallback (block={method['block_size']})"))
 
+        return self.test_candidates_and_choose_best(candidates, analysis)
+
     def apply_hybrid_adaptive_bias_strategy(self, gray, method, analysis):
         """Hybrid strategy that prefers adaptive when results are close"""
 
