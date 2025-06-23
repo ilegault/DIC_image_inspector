@@ -19,6 +19,7 @@ class DICAnalyzer:
         self.subset_size = None
         self.overlap = 0.5
 
+
     def analyze(self, image):
         """Analyze an image for DIC quality metrics
 
@@ -52,6 +53,8 @@ class DICAnalyzer:
 
         # Format results for display in the UI
         formatted_results = self._format_results(metrics)
+
+
 
         return formatted_results
 

@@ -26,7 +26,7 @@ class DICQualityInspector:
         self.current_image = None
         self.original_image = None
         self.analysis_results = {}
-        self.roi_coords = None  # (x1, y1, x2, y2)
+        self.roi_coords = None  # (x1, y1, x2, y2) -- now handled as polygon in roi_handler
         self.roi_selection_mode = False
         self.roi_start = None
         self.roi_rect = None
@@ -48,11 +48,6 @@ class DICQualityInspector:
         self.analyze_btn.config(command=self.analyze_image)
         self.quality_map_btn.config(command=self.image_display.toggle_quality_map_overlay)
         self.quality_map_btn.config(state='disabled')
-
-        # Connect ROI events
-        self.image_canvas.bind('<ButtonPress-1>', self.roi_handler.start_roi_selection)
-        self.image_canvas.bind('<B1-Motion>', self.roi_handler.update_roi_selection)
-        self.image_canvas.bind('<ButtonRelease-1>', self.roi_handler.end_roi_selection)
 
         integrate_enhanced_debug(self)
 
@@ -290,7 +285,7 @@ class DICQualityInspector:
                     self.current_image = self.original_image.copy()
 
                     # Clear previous ROI
-                    self.roi_coords = None
+                    # self.roi_coords = None  # No longer needed, handled by roi_handler
                     self.roi_handler.update_roi_info()
 
                     # Use same approach as load_image_from_path
@@ -340,14 +335,17 @@ class DICQualityInspector:
         if self.original_image is None:
             return
 
-        if self.roi_coords:
+        if self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
             self.status_var.set("Analyzing ROI for DIC quality...")
         else:
             self.status_var.set("Analyzing full image for DIC quality...")
 
         self.analyze_btn.config(state='disabled')
 
-        # Run analysis in separate thread to prevent GUI freezing
+        # Remove rectangle ROI deletion (polygon ROI is handled in roi_handler)
+        # self.roi_handler.canvas.delete(self.roi_rect)
+        # self.roi_rect = None
+
         threading.Thread(target=self._analyze_worker, daemon=True).start()
 
     def _update_results_display(self):
@@ -437,7 +435,7 @@ class DICQualityInspector:
         self.save_btn.config(state='normal')
 
         # Update status
-        roi_text = "ROI" if self.roi_coords else "full image"
+        roi_text = "ROI" if (self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3) else "full image"
         self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
 
     def _update_results_display_and_show_map(self, results=None, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
@@ -599,9 +597,11 @@ class DICQualityInspector:
         image_mpx = (image_size[0] * image_size[1]) / 1_000_000
 
         # Get ROI size if available (for analyzing selected regions)
-        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords:
-            x1, y1, x2, y2 = self.roi_handler.roi_coords
-            roi_width, roi_height = x2 - x1, y2 - y1
+        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
+            # Estimate bounding box for polygon for adaptive thresholds
+            xs = [pt[0] for pt in self.roi_handler.roi_coords]
+            ys = [pt[1] for pt in self.roi_handler.roi_coords]
+            roi_width, roi_height = max(xs) - min(xs), max(ys) - min(ys)
             roi_mpx = (roi_width * roi_height) / 1_000_000
         else:
             roi_mpx = image_mpx
@@ -655,3 +655,4 @@ class DICQualityInspector:
             recommendations.append("Consider recreating the speckle pattern")
 
         return recommendations
+
