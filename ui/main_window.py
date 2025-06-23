@@ -452,16 +452,19 @@ class DICQualityInspector:
         # Update the results panel
         self._update_results_display()
 
-        # Get the image to analyze
-        analysis_region = get_analysis_region(
-            self.original_image,
-            self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
-        )
+        # Do NOT crop/mask the image for analysis or quality map generation!
+        # analysis_region = get_analysis_region(
+        #     self.original_image,
+        #     self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
+        # )
 
-        # Generate and show quality map
-        quality_map, visualization = generate_quality_map(analysis_region)
+        # Generate and show quality map on the full image
+        from analysis.quality_map.map_generator import generate_quality_map
+        quality_map, visualization = generate_quality_map(self.original_image)
 
-        # Display the quality map
+        # Display the quality map (the overlay function will use ROI for masking)
+        self.image_display.quality_map_data = quality_map
+        self.image_display.quality_visualization = visualization
         self.image_display.show_quality_map()
 
     def _analyze_worker(self):
@@ -472,23 +475,23 @@ class DICQualityInspector:
             visible_x = self.image_canvas.xview()
             visible_y = self.image_canvas.yview()
 
-            # Get the analysis region (ROI or full image)
-            analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
+            # Do NOT crop/mask the image for analysis or quality map generation!
+            # analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
 
-            # Print original and analysis region dimensions for debugging
+            # Print original image dimensions for debugging
             print(f"DEBUG: Original image shape: {self.original_image.shape}")
-            print(f"DEBUG: Analysis region shape: {analysis_region.shape}")
 
-            # Generate quality map based on analysis region
-            quality_map, visualization = generate_quality_map(analysis_region)
+            # Generate quality map based on the full image
+            from analysis.quality_map.map_generator import generate_quality_map
+            quality_map, visualization = generate_quality_map(self.original_image)
 
             # Store quality map data for later use
             self.image_display.quality_map_data = quality_map
             self.image_display.quality_visualization = visualization
 
-            # Use the DICAnalyzer class for analysis
+            # Use the DICAnalyzer class for analysis on the full image
             analyzer = DICAnalyzer()
-            results = analyzer.analyze(analysis_region)
+            results = analyzer.analyze(self.original_image)
 
             # Store results
             self.analysis_results = results
@@ -501,6 +504,13 @@ class DICQualityInspector:
 
             # Show quality map after updating results
             self.root.after(100, lambda: self.image_display.show_quality_map())
+
+            # Update quality map data for overlay
+            if hasattr(self, 'image_display'):
+                self.image_display.update_quality_map(
+                    results.get('quality_map'),
+                    results.get('quality_visualization')
+                )
 
         except Exception as e:
             import traceback
@@ -652,4 +662,3 @@ class DICQualityInspector:
             recommendations.append("Consider recreating the speckle pattern")
 
         return recommendations
-

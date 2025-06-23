@@ -62,6 +62,9 @@ class ROIHandler:
         self.canvas.config(cursor="")
         if hasattr(self.main_window, 'debug_btn'):
             self.main_window.debug_btn.config(state='normal')
+        # Enable the analyze button after ROI is finished
+        if hasattr(self.main_window, 'analyze_btn'):
+            self.main_window.analyze_btn.config(state='normal')
         self.update_roi_info()
         self.main_window.status_var.set("Polygon ROI selected")
 

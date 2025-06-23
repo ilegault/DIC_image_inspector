@@ -487,12 +487,14 @@ class ImageDisplay:
         visible_x = self.canvas.xview()
         visible_y = self.canvas.yview()
 
-        # Create visualization with quality map
+        # Always use the full original image for visualization
         roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
         visualization = create_quality_map_visualization(
             self.main_window.original_image.copy(),
             self.quality_map_data,
-            roi_coords
+            roi_coords,
+            display_scale
         )
 
         # Convert to PIL image for display
@@ -673,3 +675,12 @@ class ImageDisplay:
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to analyze speckles: {str(e)}")
+
+
+    def update_quality_map(self, quality_map_data, quality_visualization=None):
+        """Update the quality map data and optionally show the overlay."""
+        self.quality_map_data = quality_map_data
+        self.quality_visualization = quality_visualization
+        # If overlay is toggled on, show it
+        if hasattr(self, 'showing_quality_overlay') and self.showing_quality_overlay:
+            self.show_quality_map()

@@ -12,12 +12,9 @@ logger = logging.getLogger(__name__)
 def get_analysis_region(image, roi_coords=None):
     """Extract region of interest from image
 
-    Args:
-        image: Input image as numpy array
-        roi_coords: Optional ROI, can be (x1, y1, x2, y2) or list of (x, y) tuples
-
-    Returns:
-        numpy.ndarray: Cropped image region or original image if no ROI
+    NOTE: Do NOT use this to crop/mask the image before passing to the analyzer or quality map generator.
+    Always analyze the full image for correct overlay and alignment.
+    Only use this for extracting statistics or for edge/gradient visualizations.
     """
     if roi_coords is None or image is None:
         return image
@@ -31,9 +28,7 @@ def get_analysis_region(image, roi_coords=None):
             masked = cv2.bitwise_and(image, image, mask=mask)
         else:
             masked = cv2.bitwise_and(image, image, mask=mask)
-        # Optionally crop to bounding box for efficiency
-        x, y, w, h = cv2.boundingRect(pts)
-        return masked[y:y+h, x:x+w]
+        return masked  # Only for visualization/statistics, not for analysis!
     elif isinstance(roi_coords, (list, tuple)) and len(roi_coords) == 4:
         # Rectangle ROI
         x1, y1, x2, y2 = roi_coords
@@ -94,13 +89,21 @@ def overlay_quality_map(base_image, quality_map_data, colormap_name='JET', alpha
     return overlay
 
 
-def create_quality_map_visualization(original_image, quality_map_data, roi_coords=None):
+def convert_roi_coords_to_image_space(roi_coords, display_scale):
+    """Convert ROI coordinates from canvas/display space to image (array) space."""
+    if not roi_coords or display_scale is None or display_scale == 0:
+        return roi_coords
+    return [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
+
+
+def create_quality_map_visualization(original_image, quality_map_data, roi_coords=None, display_scale=1.0):
     """Create quality map visualization for the image
 
     Args:
         original_image: Original image as numpy array
-        quality_map_data: Quality map data as numpy array
-        roi_coords: Optional ROI coordinates (rectangle or polygon)
+        quality_map_data: Quality map data as numpy array (should match original_image size)
+        roi_coords: Optional ROI coordinates (rectangle or polygon, in canvas/display space)
+        display_scale: The scale factor from image to canvas/display
 
     Returns:
         numpy.ndarray: Image with quality map visualization
@@ -110,50 +113,30 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
 
     result = original_image.copy()
 
-    if roi_coords:
-        if isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0], (list, tuple)):
-            # Polygon ROI
-            mask = np.zeros(result.shape[:2], dtype=np.uint8)
-            pts = np.array(roi_coords, dtype=np.int32)
-            cv2.fillPoly(mask, [pts], 255)
-            x, y, w, h = cv2.boundingRect(pts)
-            # Prepare quality map for the bounding box
-            normalized_map = (quality_map_data * 255).astype(np.uint8)
-            colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
-            colored_map = cv2.applyColorMap(normalized_map, colormap_const)
-            colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
-            if colored_map.shape[:2] != (h, w):
-                colored_map = cv2.resize(colored_map, (w, h))
-            roi_overlay = cv2.addWeighted(
-                result[y:y+h, x:x+w], 0.3,
-                colored_map, 0.7,
-                0
-            )
-            # Only blend inside the polygon
-            roi_mask = mask[y:y+h, x:x+w]
-            blended = result[y:y+h, x:x+w].copy()
-            blended[roi_mask > 0] = roi_overlay[roi_mask > 0]
-            result[y:y+h, x:x+w] = blended
-        elif isinstance(roi_coords, (list, tuple)) and len(roi_coords) == 4:
-            # Rectangle ROI
-            x1, y1, x2, y2 = roi_coords
-            normalized_map = (quality_map_data * 255).astype(np.uint8)
-            colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
-            colored_map = cv2.applyColorMap(normalized_map, colormap_const)
-            colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
-            roi_height, roi_width = y2 - y1, x2 - x1
-            if colored_map.shape[:2] != (roi_height, roi_width):
-                colored_map = cv2.resize(colored_map, (roi_width, roi_height))
-            roi_overlay = cv2.addWeighted(
-                result[y1:y2, x1:x2], 0.3,
-                colored_map, 0.7,
-                0
-            )
-            result[y1:y2, x1:x2] = roi_overlay
+    # Convert ROI coordinates to image space if needed
+    if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0], (tuple, list)):
+        # If display_scale is provided, convert to image coordinates
+        if display_scale is not None and display_scale != 1.0:
+            roi_coords_img = convert_roi_coords_to_image_space(roi_coords, display_scale)
         else:
-            # Fallback: treat as no ROI
-            from analysis.quality_map.map_generator import visualize_quality_map
-            result = visualize_quality_map(result, quality_map_data)
+            roi_coords_img = [(int(round(x)), int(round(y))) for (x, y) in roi_coords]
+        mask = np.zeros(result.shape[:2], dtype=np.uint8)
+        pts = np.array(roi_coords_img, dtype=np.int32)
+        cv2.fillPoly(mask, [pts], 255)
+        min_val, max_val = np.min(quality_map_data), np.max(quality_map_data)
+        if max_val > min_val:
+            normalized_map = ((quality_map_data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+        else:
+            normalized_map = np.zeros_like(quality_map_data, dtype=np.uint8)
+        colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
+        colored_map = cv2.applyColorMap(normalized_map, colormap_const)
+        colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
+        blended = result.copy()
+        mask_bool = mask > 0
+        blended[mask_bool] = cv2.addWeighted(
+            result[mask_bool], 0.3, colored_map[mask_bool], 0.7, 0
+        )
+        result = blended
     else:
         from analysis.quality_map.map_generator import visualize_quality_map
         result = visualize_quality_map(result, quality_map_data)
@@ -211,4 +194,3 @@ def create_gradient_visualization(image, roi_coords=None):
     elif gradient_vis_colored.shape[2] == 3:
         gradient_vis_colored = cv2.cvtColor(gradient_vis_colored, cv2.COLOR_BGR2RGB)
     return gradient_vis_colored
-
