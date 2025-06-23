@@ -699,57 +699,6 @@ class ComprehensiveSpeckleAnalyzer:
             print(f"Error creating size category visualization: {e}")
 
 
-# Simple fallback analyzer for debugging
-class SimpleSpeckleAnalyzer:
-    """Simplified analyzer for debugging purposes"""
-
-    def __init__(self, debug_dir: str = "simple_debug"):
-        self.debug_dir = Path(debug_dir)
-        self.debug_dir.mkdir(exist_ok=True)
-
-    def analyze_simple(self, roi_image: np.ndarray) -> Dict[str, Any]:
-        """Simple analysis without complex operations"""
-        try:
-            print("DEBUG: Starting simple analysis...")
-
-            # Convert to grayscale
-            if len(roi_image.shape) == 3:
-                gray = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = roi_image.copy()
-
-            print(f"DEBUG: Image shape: {gray.shape}")
-
-            # Simple thresholding
-            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            print("DEBUG: Thresholding completed")
-
-            # Connected components
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
-            print(f"DEBUG: Found {num_labels - 1} components")
-
-            # Simple counting (avoid complex operations)
-            total_speckles = num_labels - 1  # Exclude background
-
-            # Save debug image
-            cv2.imwrite(str(self.debug_dir / "simple_binary.png"), binary)
-
-            results = {
-                'total_speckles': total_speckles,
-                'image_shape': gray.shape,
-                'binary_saved': str(self.debug_dir / "simple_binary.png")
-            }
-
-            print(f"DEBUG: Simple analysis completed. Found {total_speckles} speckles")
-            return results
-
-        except Exception as e:
-            print(f"DEBUG: Error in simple analysis: {e}")
-            import traceback
-            traceback.print_exc()
-            return {'total_speckles': 0, 'error': str(e)}
-
-
 # Modified integration function with fallback
 def integrate_comprehensive_analyzer(main_window):
     """
@@ -757,7 +706,6 @@ def integrate_comprehensive_analyzer(main_window):
     """
     # Add both analyzers to main window
     main_window.comprehensive_analyzer = ComprehensiveSpeckleAnalyzer("comprehensive_analysis")
-    main_window.simple_analyzer = SimpleSpeckleAnalyzer("simple_debug")
 
     def comprehensive_analysis_callback():
         """Callback with debugging and fallback"""
