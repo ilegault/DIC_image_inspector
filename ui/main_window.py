@@ -11,7 +11,6 @@ from ui.file_operations import FileOperations
 from analysis.utils.image_processing import get_analysis_region
 from analysis.quality_map.map_generator import generate_quality_map
 from analysis.analyzer import DICAnalyzer
-from debug_output.comprehensive_speckle_analyzer import integrate_comprehensive_analyzer
 from debug_output.enhanced_debug_integration import integrate_enhanced_debug
 
 
@@ -33,8 +32,6 @@ class DICQualityInspector:
 
         # Create GUI
         self.create_gui()
-
-        integrate_comprehensive_analyzer(self)
 
         # Create managers
         self.image_display = ImageDisplay(self.image_canvas, self)

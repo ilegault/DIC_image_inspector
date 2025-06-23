@@ -1,5 +1,7 @@
 # ui.image_display.py
 import tkinter
+import numpy as np
+
 
 from PIL import Image, ImageTk
 from tkinter import messagebox
@@ -111,6 +113,7 @@ class ImageDisplay:
 
         self.displayed_image = display_image  # Store the displayed image for future reference
         self.original_displayed_image = display_image.copy()
+
 
     def zoom(self, event):
         """Handle zoom with mouse wheel"""

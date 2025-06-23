@@ -150,7 +150,7 @@ def save_debug_visualizations(image, roi_coords, output_dir="debug_output", pref
 
     # Create output directory with timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(output_dir, f"{prefix}_{timestamp}")
+    output_path = os.path.join(output_dir, prefix)
     os.makedirs(output_path, exist_ok=True)
 
     # Dictionary to store information about saved images
