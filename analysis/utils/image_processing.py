@@ -91,8 +91,9 @@ def overlay_quality_map(base_image, quality_map_data, colormap_name='JET', alpha
 
 def convert_roi_coords_to_image_space(roi_coords, display_scale):
     """Convert ROI coordinates from canvas/display space to image (array) space."""
-    if not roi_coords or display_scale is None or display_scale == 0:
-        return roi_coords
+    # Fix: Default display_scale to 1.0 if None or zero
+    if not roi_coords or not display_scale:
+        display_scale = 1.0
     return [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
 
 
@@ -102,8 +103,8 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
     Args:
         original_image: Original image as numpy array
         quality_map_data: Quality map data as numpy array (should match original_image size)
-        roi_coords: Optional ROI coordinates (rectangle or polygon, in canvas/display space)
-        display_scale: The scale factor from image to canvas/display
+        roi_coords: Optional ROI coordinates (rectangle or polygon, in image coordinates)
+        display_scale: The scale factor from image to canvas/display (should be 1.0 for image space)
 
     Returns:
         numpy.ndarray: Image with quality map visualization
@@ -113,13 +114,22 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
 
     result = original_image.copy()
 
-    # Convert ROI coordinates to image space if needed
+    # ROI coords must be in image coordinates!
     if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0], (tuple, list)):
-        # If display_scale is provided, convert to image coordinates
-        if display_scale is not None and display_scale != 1.0:
-            roi_coords_img = convert_roi_coords_to_image_space(roi_coords, display_scale)
+        # Ensure ROI coords are in image space (not canvas space)
+        # If any coordinate is > image size, assume it's in canvas space and convert
+        h, w = result.shape[:2]
+        max_x = max(pt[0] for pt in roi_coords)
+        max_y = max(pt[1] for pt in roi_coords)
+        # If any point is outside image, convert from canvas to image space
+        if max_x > w or max_y > h:
+            # Defensive: fallback to scaling if needed
+            if display_scale is None or display_scale == 0:
+                display_scale = 1.0
+            roi_coords_img = [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
         else:
             roi_coords_img = [(int(round(x)), int(round(y))) for (x, y) in roi_coords]
+
         mask = np.zeros(result.shape[:2], dtype=np.uint8)
         pts = np.array(roi_coords_img, dtype=np.int32)
         cv2.fillPoly(mask, [pts], 255)

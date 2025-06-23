@@ -45,10 +45,13 @@ class ROIHandler:
         """Add a point to the polygon ROI on left click"""
         if not self.roi_selection_mode:
             return
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
-        self.roi_coords.append((canvas_x, canvas_y))
-        # Always trigger preview after click, so the preview line is shown after first click
+        # Store ROI points in image coordinates (always!)
+        image_x = canvas_x / display_scale
+        image_y = canvas_y / display_scale
+        self.roi_coords.append((image_x, image_y))
         self.redraw_polygon_roi(preview_point=None)
 
     def on_canvas_right_click(self, event):
@@ -72,9 +75,13 @@ class ROIHandler:
         """Show preview line from last point to mouse"""
         if not self.roi_selection_mode or not self.roi_coords:
             return
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
-        self.redraw_polygon_roi(preview_point=(canvas_x, canvas_y))
+        # Convert preview point to image coordinates for consistency
+        image_x = canvas_x / display_scale
+        image_y = canvas_y / display_scale
+        self.redraw_polygon_roi(preview_point=(image_x, image_y))
 
     def redraw_polygon_roi(self, preview_point=None, finalize=False):
         """Draw the polygon ROI and preview line"""
@@ -86,10 +93,17 @@ class ROIHandler:
             self.canvas.delete(self.preview_line)
             self.preview_line = None
 
-        if len(self.roi_coords) >= 2:
-            points = [coord for pt in self.roi_coords for coord in pt]
+        # Prevent ROI perimeter from being redrawn after analyze/overlay
+        if hasattr(self.main_window, 'image_display') and getattr(self.main_window.image_display, 'showing_quality_overlay', False):
+            return  # Do not redraw ROI perimeter when quality map is shown
+
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
+        # Convert stored image coordinates to canvas coordinates for drawing
+        scaled_coords = [(x * display_scale, y * display_scale) for (x, y) in self.roi_coords]
+
+        if len(scaled_coords) >= 2:
+            points = [coord for pt in scaled_coords for coord in pt]
             if finalize:
-                # Draw closed polygon
                 self.roi_polygon = self.canvas.create_polygon(
                     *points,
                     outline=self.roi_overlay_color,
@@ -97,28 +111,28 @@ class ROIHandler:
                     width=2
                 )
             else:
-                # Draw open polygon (lines between points)
                 self.roi_polygon = self.canvas.create_line(
                     *points,
                     fill=self.selection_active_color,
                     width=2
                 )
-                # Draw preview line to mouse
                 if preview_point:
-                    last_x, last_y = self.roi_coords[-1]
+                    last_x, last_y = scaled_coords[-1]
                     px, py = preview_point
+                    # Convert preview_point from image to canvas coordinates
+                    px_canvas, py_canvas = px * display_scale, py * display_scale
                     self.preview_line = self.canvas.create_line(
-                        last_x, last_y, px, py,
+                        last_x, last_y, px_canvas, py_canvas,
                         fill=self.selection_active_color,
                         dash=(5, 5),
                         width=2
                     )
-        elif len(self.roi_coords) == 1 and preview_point:
-            # Draw preview line from the first point to the cursor
-            x0, y0 = self.roi_coords[0]
+        elif len(scaled_coords) == 1 and preview_point:
+            x0, y0 = scaled_coords[0]
             px, py = preview_point
+            px_canvas, py_canvas = px * display_scale, py * display_scale
             self.preview_line = self.canvas.create_line(
-                x0, y0, px, py,
+                x0, y0, px_canvas, py_canvas,
                 fill=self.selection_active_color,
                 dash=(5, 5),
                 width=2
@@ -172,7 +186,10 @@ class ROIHandler:
         """Redraw the ROI polygon after zoom or pan operations"""
         if not self.roi_coords or not hasattr(self.main_window, 'image_display'):
             return
-        display_scale = self.canvas.display_scale if hasattr(self.canvas, 'display_scale') else 1.0
+        # Prevent ROI perimeter from being redrawn after analyze/overlay
+        if getattr(self.main_window.image_display, 'showing_quality_overlay', False):
+            return
+        display_scale = getattr(self.canvas, 'display_scale', 1.0)
         scaled_coords = [(x * display_scale, y * display_scale) for (x, y) in self.roi_coords]
         if self.roi_polygon:
             self.canvas.delete(self.roi_polygon)

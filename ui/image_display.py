@@ -489,12 +489,12 @@ class ImageDisplay:
 
         # Always use the full original image for visualization
         roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
-        display_scale = getattr(self.canvas, 'display_scale', 1.0)
+        # Pass display_scale=1.0 because roi_coords are in image coordinates
         visualization = create_quality_map_visualization(
             self.main_window.original_image.copy(),
             self.quality_map_data,
             roi_coords,
-            display_scale
+            1.0
         )
 
         # Convert to PIL image for display
