@@ -11,7 +11,7 @@ from ui.file_operations import FileOperations
 from analysis.utils.image_processing import get_analysis_region
 from analysis.quality_map.map_generator import generate_quality_map
 from analysis.analyzer import DICAnalyzer
-from debug_output.enhanced_debug_integration import integrate_enhanced_debug
+from debug_output.enhanced_debug_integration import integrate_blur_awareness_into_existing_analyzer
 
 
 class DICQualityInspector:
@@ -25,13 +25,15 @@ class DICQualityInspector:
         self.current_image = None
         self.original_image = None
         self.analysis_results = {}
-        self.roi_coords = None  # (x1, y1, x2, y2) -- now handled as polygon in roi_handler
+        self.roi_coords = None  # (x1, y1, x2, y2)
         self.roi_selection_mode = False
         self.roi_start = None
         self.roi_rect = None
 
         # Create GUI
         self.create_gui()
+
+        integrate_comprehensive_analyzer(self)
 
         # Create managers
         self.image_display = ImageDisplay(self.image_canvas, self)
@@ -46,7 +48,7 @@ class DICQualityInspector:
         self.quality_map_btn.config(command=self.image_display.toggle_quality_map_overlay)
         self.quality_map_btn.config(state='disabled')
 
-        integrate_enhanced_debug(self)
+        integrate_blur_awareness_into_existing_analyzer(self)
 
 
 
@@ -181,7 +183,6 @@ class DICQualityInspector:
 
         canvas_results.create_window((0, 0), window=self.results_frame, anchor='nw')
 
-
         def configure_scroll_region(event):
             canvas_results.configure(scrollregion=canvas_results.bbox('all'))
 
@@ -210,7 +211,6 @@ class DICQualityInspector:
         )
         self.debug_btn.pack(side='left', padx=5)
 
-        self.quality_map_btn.config(state='disabled')
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -266,6 +266,7 @@ class DICQualityInspector:
             # Store selection coordinates
             x1, y1 = min(self.start_x, event.x), min(self.start_y, event.y)
             x2, y2 = max(self.start_x, event.x), max(self.start_y, event.y)
+
             # Close screenshot window
             screenshot_window.destroy()
 
@@ -283,7 +284,7 @@ class DICQualityInspector:
                     self.current_image = self.original_image.copy()
 
                     # Clear previous ROI
-                    # self.roi_coords = None  # No longer needed, handled by roi_handler
+                    self.roi_coords = None
                     self.roi_handler.update_roi_info()
 
                     # Use same approach as load_image_from_path
@@ -297,8 +298,6 @@ class DICQualityInspector:
                     self.roi_btn.config(state='normal')
                     self.analyze_btn.config(state='normal')
                     self.status_var.set(f"Screenshot captured: {screenshot.width}x{screenshot.height} pixels")
-                    self.quality_map_btn.config(state='normal')
-
 
                 except Exception as e:
                     self.root.deiconify()
@@ -335,18 +334,14 @@ class DICQualityInspector:
         if self.original_image is None:
             return
 
-        if self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
+        if self.roi_coords:
             self.status_var.set("Analyzing ROI for DIC quality...")
-            self.roi_btn.config(state='disabled')
         else:
             self.status_var.set("Analyzing full image for DIC quality...")
-            self.roi_btn.config(state='disabled')
+
         self.analyze_btn.config(state='disabled')
 
-        # Remove rectangle ROI deletion (polygon ROI is handled in roi_handler)
-        # self.roi_handler.canvas.delete(self.roi_rect)
-        # self.roi_rect = None
-
+        # Run analysis in separate thread to prevent GUI freezing
         threading.Thread(target=self._analyze_worker, daemon=True).start()
 
     def _update_results_display(self):
@@ -436,7 +431,7 @@ class DICQualityInspector:
         self.save_btn.config(state='normal')
 
         # Update status
-        roi_text = "ROI" if (self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3) else "full image"
+        roi_text = "ROI" if self.roi_coords else "full image"
         self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
 
     def _update_results_display_and_show_map(self, results=None, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
@@ -456,19 +451,16 @@ class DICQualityInspector:
         # Update the results panel
         self._update_results_display()
 
-        # Do NOT crop/mask the image for analysis or quality map generation!
-        # analysis_region = get_analysis_region(
-        #     self.original_image,
-        #     self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
-        # )
+        # Get the image to analyze
+        analysis_region = get_analysis_region(
+            self.original_image,
+            self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
+        )
 
-        # Generate and show quality map on the full image
-        from analysis.quality_map.map_generator import generate_quality_map
-        quality_map, visualization = generate_quality_map(self.original_image)
+        # Generate and show quality map
+        quality_map, visualization = generate_quality_map(analysis_region)
 
-        # Display the quality map (the overlay function will use ROI for masking)
-        self.image_display.quality_map_data = quality_map
-        self.image_display.quality_visualization = visualization
+        # Display the quality map
         self.image_display.show_quality_map()
 
     def _analyze_worker(self):
@@ -479,23 +471,23 @@ class DICQualityInspector:
             visible_x = self.image_canvas.xview()
             visible_y = self.image_canvas.yview()
 
-            # Do NOT crop/mask the image for analysis or quality map generation!
-            # analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
+            # Get the analysis region (ROI or full image)
+            analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
 
-            # Print original image dimensions for debugging
+            # Print original and analysis region dimensions for debugging
             print(f"DEBUG: Original image shape: {self.original_image.shape}")
+            print(f"DEBUG: Analysis region shape: {analysis_region.shape}")
 
-            # Generate quality map based on the full image
-            from analysis.quality_map.map_generator import generate_quality_map
-            quality_map, visualization = generate_quality_map(self.original_image)
+            # Generate quality map based on analysis region
+            quality_map, visualization = generate_quality_map(analysis_region)
 
             # Store quality map data for later use
             self.image_display.quality_map_data = quality_map
             self.image_display.quality_visualization = visualization
 
-            # Use the DICAnalyzer class for analysis on the full image
+            # Use the DICAnalyzer class for analysis
             analyzer = DICAnalyzer()
-            results = analyzer.analyze(self.original_image)
+            results = analyzer.analyze(analysis_region)
 
             # Store results
             self.analysis_results = results
@@ -508,13 +500,6 @@ class DICQualityInspector:
 
             # Show quality map after updating results
             self.root.after(100, lambda: self.image_display.show_quality_map())
-
-            # Update quality map data for overlay
-            if hasattr(self, 'image_display'):
-                self.image_display.update_quality_map(
-                    results.get('quality_map'),
-                    results.get('quality_visualization')
-                )
 
         except Exception as e:
             import traceback
@@ -608,11 +593,9 @@ class DICQualityInspector:
         image_mpx = (image_size[0] * image_size[1]) / 1_000_000
 
         # Get ROI size if available (for analyzing selected regions)
-        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
-            # Estimate bounding box for polygon for adaptive thresholds
-            xs = [pt[0] for pt in self.roi_handler.roi_coords]
-            ys = [pt[1] for pt in self.roi_handler.roi_coords]
-            roi_width, roi_height = max(xs) - min(xs), max(ys) - min(ys)
+        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords:
+            x1, y1, x2, y2 = self.roi_handler.roi_coords
+            roi_width, roi_height = x2 - x1, y2 - y1
             roi_mpx = (roi_width * roi_height) / 1_000_000
         else:
             roi_mpx = image_mpx
