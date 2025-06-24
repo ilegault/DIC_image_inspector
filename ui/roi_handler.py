@@ -1,4 +1,5 @@
 # ui/roi_handler.py
+
 class ROIHandler:
     """Handles Region of Interest selection and management"""
 

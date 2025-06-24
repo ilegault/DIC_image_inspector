@@ -1,6 +1,5 @@
 # ui.image_display.py
-import tkinter
-import numpy as np
+
 from PIL import Image, ImageTk
 from tkinter import messagebox
 

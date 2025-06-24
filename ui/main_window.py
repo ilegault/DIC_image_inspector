@@ -48,8 +48,6 @@ class DICQualityInspector:
 
         integrate_blur_awareness_into_existing_analyzer(self)
 
-
-
     def create_gui(self):
         # Main title
         title_frame = tk.Frame(self.root, bg='#2c3e50')

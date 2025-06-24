@@ -1,5 +1,4 @@
 # enhanced_debug_integration_BLUR_INTEGRATED.py
-# Your working speckle analyzer + blur detection and blur heatmap overlay
 
 import cv2
 import numpy as np
@@ -1574,31 +1573,3 @@ def integrate_blur_awareness_into_existing_analyzer(main_window):
         import traceback
         traceback.print_exc()
         return False
-
-
-# Usage instructions
-"""
-INTEGRATION INSTRUCTIONS:
-
-1. Replace your existing enhanced_debug_integration.py with this file
-
-2. Or add this import to your main application:
-   from enhanced_debug_integration_BLUR_INTEGRATED import integrate_blur_awareness_into_existing_analyzer
-
-3. Call the integration function after creating your app:
-   integrate_blur_awareness_into_existing_analyzer(app)
-
-This will enhance your debug button with:
-✓ All your existing speckle detection logic preserved
-✓ Blur detection integrated into method selection  
-✓ Blur heatmap showing where detection might struggle
-✓ Blur-aware parameter selection for different image conditions
-✓ Combined visualizations showing speckles on blur map
-✓ Clear explanations of why methods were chosen
-
-The blur heatmap helps users understand:
-- BLUE areas = blurry regions where speckle detection is challenging
-- RED areas = sharp regions where detection should work well  
-- WHITE dots = successfully detected speckles
-- Method selection automatically adapts to blur conditions
-"""
