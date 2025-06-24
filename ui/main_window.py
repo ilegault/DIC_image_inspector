@@ -11,7 +11,7 @@ from ui.file_operations import FileOperations
 from analysis.utils.image_processing import get_analysis_region
 from analysis.quality_map.map_generator import generate_quality_map
 from analysis.analyzer import DICAnalyzer
-from debug_output.enhanced_debug_integration import integrate_blur_aware_debug
+from debug_output.enhanced_debug_integration import integrate_blur_awareness_into_existing_analyzer
 
 
 class DICQualityInspector:
@@ -51,7 +51,7 @@ class DICQualityInspector:
         self.image_canvas.bind('<B1-Motion>', self.roi_handler.update_roi_selection)
         self.image_canvas.bind('<ButtonRelease-1>', self.roi_handler.end_roi_selection)
 
-        integrate_blur_aware_debug(self)
+        integrate_blur_awareness_into_existing_analyzer(self)
 
 
 
