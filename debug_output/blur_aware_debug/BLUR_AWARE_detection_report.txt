@@ -1,0 +1,59 @@
+BLUR-AWARE SPECKLE DETECTION REPORT
+=============================================
+
+Analysis Time: 2025-06-24 11:27:05
+Image Dimensions: 1199 x 1418
+Output Folder: debug_output\blur_aware_debug
+
+BLUR ANALYSIS:
+---------------
+Blur Level: Very Blurry
+Blur Score: 7.8/100
+Laplacian Variance: 45.0
+Sobel Variance: 497.5
+High Freq Ratio: 0.370
+
+METHOD SELECTION:
+-----------------
+Best Method: Adaptive_Normal_35_C1
+DIC Quality Score: 95.1/100
+✓ Adaptive thresholding preferred for blurry images
+✓ Larger block sizes better handle blur
+✓ Otsu methods penalized for blur conditions
+
+DETECTION RESULTS:
+------------------
+Total Speckles: 47
+Quality Score: 72.0/100
+
+SIZE BREAKDOWN:
+---------------
+Small (1-50px):     40
+Medium (51-500px):    6
+Large (501+px):       1
+                  ----
+Total:               47
+
+BLUR-AWARE IMPROVEMENTS:
+-------------------------
+✓ Automatic blur detection using multiple metrics
+✓ Method selection adapted to image characteristics
+✓ Enhanced adaptive thresholding for blurry images
+✓ Preprocessing methods tested for severe blur
+✓ Scoring adjustments based on blur level
+
+BLUR-SPECIFIC OPTIMIZATIONS:
+-----------------------------
+• Tested multiple adaptive block sizes (7-41 pixels)
+• Tested both Gaussian and Mean adaptive methods
+• Applied blur reduction preprocessing
+• Boosted adaptive methods in scoring
+• Penalized global Otsu thresholding
+
+RECOMMENDATIONS:
+----------------
+• Consider improving image sharpness for better DIC results
+• Check camera focus and lighting conditions
+• Larger speckles may be needed for reliable correlation
+• SUCCESS: Detected 1 large speckles
+• Large speckles preserved despite blur challenges

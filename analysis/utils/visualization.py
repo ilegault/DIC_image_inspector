@@ -138,7 +138,7 @@ def save_debug_visualizations(image, roi_coords, output_dir="debug_output", pref
 
     Args:
         image: Original image as numpy array
-        roi_coords: ROI coordinates tuple (x1, y1, x2, y2) or None
+        roi_coords: Either rectangle (x1,y1,x2,y2) or polygon [(x1,y1), (x2,y2), ...]
         output_dir: Base directory to save output
         prefix: Prefix for output directory name
         save_intermediate_steps: Whether to save intermediate processing steps
@@ -150,7 +150,7 @@ def save_debug_visualizations(image, roi_coords, output_dir="debug_output", pref
 
     # Create output directory with timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(output_dir, prefix)
+    output_path = os.path.join(output_dir, f"{prefix}_{timestamp}")
     os.makedirs(output_path, exist_ok=True)
 
     # Dictionary to store information about saved images
@@ -163,24 +163,46 @@ def save_debug_visualizations(image, roi_coords, output_dir="debug_output", pref
 
     # Create visualizations only if ROI is provided
     if roi_coords is not None:
-        x1, y1, x2, y2 = roi_coords
-        roi_width = x2 - x1
-        roi_height = y2 - y1
+        # Determine if ROI is polygon or rectangle
+        is_polygon = (
+            isinstance(roi_coords, (list, tuple)) and
+            len(roi_coords) >= 3 and
+            isinstance(roi_coords[0], (list, tuple))
+        )
 
-        # Extract ROI
-        roi = image[y1:y2, x1:x2].copy()
+        if is_polygon:
+            # Create mask for polygon ROI
+            mask = np.zeros(image.shape[:2], dtype=np.uint8)
+            pts = np.array(roi_coords, dtype=np.int32)
+            cv2.fillPoly(mask, [pts], 255)
+
+            # Extract ROI using mask
+            roi = cv2.bitwise_and(image, image, mask=mask)
+
+            # Calculate bounding box for reference
+            x_coords = [pt[0] for pt in roi_coords]
+            y_coords = [pt[1] for pt in roi_coords]
+            x1, y1 = min(x_coords), min(y_coords)
+            x2, y2 = max(x_coords), max(y_coords)
+        else:
+            # Rectangle ROI
+            x1, y1, x2, y2 = map(int, roi_coords)  # Ensure integer coordinates
+            roi = image[y1:y2, x1:x2].copy()
 
         # Save ROI
         roi_path = os.path.join(output_path, "roi.png")
         Image.fromarray(roi).save(roi_path)
         saved_images["roi"] = roi_path
 
-        # Create resized original image that matches ROI dimensions exactly
-        original_resized = cv2.resize(image, (image.shape[1], image.shape[0]))
-
         # Create ROI outline visualization
-        outline_image = original_resized.copy()
-        cv2.rectangle(outline_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        outline_image = image.copy()
+        if is_polygon:
+            # Draw polygon outline
+            cv2.polylines(outline_image, [pts], True, (0, 255, 0), 2)
+        else:
+            # Draw rectangle outline
+            cv2.rectangle(outline_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
         outline_path = os.path.join(output_path, "roi_outline.png")
         Image.fromarray(outline_image).save(outline_path)
         saved_images["roi_outline"] = outline_path
@@ -210,21 +232,20 @@ def save_debug_visualizations(image, roi_coords, output_dir="debug_output", pref
             saved_images["gradient"] = gradient_path
 
         # Create composite visualization
-        # First create consistent-sized images for the composite
-        comp_width = original_resized.shape[1]
-        comp_height = original_resized.shape[0]
+        composite_image = outline_image.copy()
 
-        # Create ROI highlight with consistent dimensions
-        roi_highlight = original_resized.copy()
-        # Draw semi-transparent overlay
-        overlay = roi_highlight.copy()
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), -1)
-        cv2.addWeighted(overlay, 0.3, roi_highlight, 0.7, 0, roi_highlight)
-        cv2.rectangle(roi_highlight, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        # Add semi-transparent overlay
+        overlay = composite_image.copy()
+        if is_polygon:
+            cv2.fillPoly(overlay, [pts], (0, 255, 0))
+        else:
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), -1)
 
-        # Create composite image
+        cv2.addWeighted(overlay, 0.3, composite_image, 0.7, 0, composite_image)
+
+        # Save composite
         composite_path = os.path.join(output_path, "composite.png")
-        Image.fromarray(roi_highlight).save(composite_path)
+        Image.fromarray(composite_image).save(composite_path)
         saved_images["composite"] = composite_path
     else:
         # No ROI selected, just save the original image as composite

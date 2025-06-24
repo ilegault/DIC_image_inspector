@@ -35,10 +35,30 @@ def enhance_app_debug_functionality(main_window):
             # Get ROI or full image
             if hasattr(main_window, 'roi_handler') and main_window.roi_handler.roi_coords:
                 roi_coords = main_window.roi_handler.roi_coords
-                x1, y1, x2, y2 = roi_coords
-                roi_image = main_window.original_image[y1:y2, x1:x2].copy()
-                print(f"Using ROI: {roi_coords}")
-                print(f"ROI dimensions: {x2 - x1} x {y2 - y1}")
+
+                # Handle polygon ROI
+                if isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0], (list, tuple)):
+                    print(f"Using polygon ROI with {len(roi_coords)} points")
+                    mask = np.zeros(main_window.original_image.shape[:2], dtype=np.uint8)
+                    pts = np.array(roi_coords, dtype=np.int32)
+                    cv2.fillPoly(mask, [pts], 255)
+                    roi_image = cv2.bitwise_and(main_window.original_image, main_window.original_image, mask=mask)
+
+                    # Calculate bounding box for reference
+                    x_coords = [pt[0] for pt in roi_coords]
+                    y_coords = [pt[1] for pt in roi_coords]
+                    x1, y1 = min(x_coords), min(y_coords)
+                    x2, y2 = max(x_coords), max(y_coords)
+                    print(f"ROI bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+                # Handle rectangle ROI
+                elif isinstance(roi_coords, (list, tuple)) and len(roi_coords) == 4:
+                    x1, y1, x2, y2 = roi_coords
+                    roi_image = main_window.original_image[y1:y2, x1:x2].copy()
+                    print(f"Using rectangular ROI: {roi_coords}")
+                    print(f"ROI dimensions: {x2 - x1} x {y2 - y1}")
+                else:
+                    print("Invalid ROI format")
+                    roi_image = main_window.original_image.copy()
             else:
                 roi_image = main_window.original_image.copy()
                 print("Using full image")
