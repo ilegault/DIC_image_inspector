@@ -1,8 +1,8 @@
 
 # analysis.file_operations.py
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox
 import numpy as np
-from PIL import Image, ImageTk, ImageGrab
+from PIL import Image
 import os
 
 class FileOperations:
@@ -60,6 +60,9 @@ class FileOperations:
         # Enable ROI selection and analysis
         self.main_window.roi_btn.config(state='normal')
         self.main_window.analyze_btn.config(state='normal')
+
+        if hasattr(self.main_window, 'state_manager'):
+            self.main_window.state_manager.update_state("image_loaded")
 
     def save_report(self):
         """Save analysis report to file"""

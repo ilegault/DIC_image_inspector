@@ -241,3 +241,18 @@ fabric.properties
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
 
+# IDE files
+.idea/
+*.xml
+.vscode/
+*.pyc
+*.pyo
+*.pyd
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project specific
+debug_output/
+

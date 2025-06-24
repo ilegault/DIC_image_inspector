@@ -638,7 +638,6 @@ class ImageDisplay:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save debug visualizations: {str(e)}")
 
-
     def debug_speckle_pattern(self):
         """Debug speckle pattern in the selected ROI"""
         if not hasattr(self.main_window, 'original_image') or self.main_window.original_image is None:
@@ -650,30 +649,29 @@ class ImageDisplay:
             return
 
         try:
+            # Import functionality from pattern_analyzer instead of roi_speckle_fix
             from analysis.core.pattern_analyzer import analyze_roi_speckles
-            from analysis.utils.image_processing import get_analysis_region
 
-            # Get ROI coordinates
+            # Get ROI from the image
             roi_coords = self.main_window.roi_handler.roi_coords
             image = self.main_window.original_image
 
-            # Extract ROI using get_analysis_region which handles both polygon and rectangle ROIs
-            roi_image = get_analysis_region(image, roi_coords)
+            # Extract ROI
+            x1, y1, x2, y2 = roi_coords
+            roi_image = image[y1:y2, x1:x2]
 
-            # Run analysis on the extracted region
+            # Run analysis
             analysis_result = analyze_roi_speckles(roi_image)
 
             # Show results
             messagebox.showinfo("Speckle Analysis",
-                              f"Speckle count: {analysis_result['count']}\n"
-                              f"Average size: {analysis_result['avg_size']:.1f} pixels\n"
-                              f"Coverage: {analysis_result['coverage']:.1f}%\n"
-                              f"Quality score: {analysis_result['quality']:.1f}/100")
+                                f"Speckle count: {analysis_result['count']}\n"
+                                f"Average size: {analysis_result['avg_size']:.1f} pixels\n"
+                                f"Coverage: {analysis_result['coverage']:.1f}%\n"
+                                f"Quality score: {analysis_result['quality']:.1f}/100")
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to analyze speckles: {str(e)}")
-            print(f"Debug speckle analysis error: {str(e)}")
-
 
     def update_quality_map(self, quality_map_data, quality_visualization=None):
         """Update the quality map data and optionally show the overlay."""

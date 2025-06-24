@@ -25,6 +25,16 @@ class ROIHandler:
         """Toggle ROI selection mode on/off"""
         self.roi_selection_mode = not self.roi_selection_mode
 
+        # Check if ROI selection is allowed
+        if hasattr(self.main_window, 'state_manager'):
+            if not self.main_window.state_manager.can_select_roi():
+                self.main_window.status_var.set("Cannot select ROI during analysis")
+                return
+
+            if self.main_window.state_manager.is_analysis_in_progress():
+                self.main_window.status_var.set("Cannot modify ROI during analysis")
+                return
+
         if self.roi_selection_mode:
             self.main_window.roi_btn.config(bg=self.selection_active_color)
             self.canvas.config(cursor="crosshair")
@@ -71,6 +81,9 @@ class ROIHandler:
         self.update_roi_info()
         self.main_window.status_var.set("Polygon ROI selected")
         self.main_window.quality_map_btn.config(state='normal')
+
+        if hasattr(self.main_window, 'state_manager'):
+            self.main_window.state_manager.update_state("roi_selected")
 
     def on_canvas_motion(self, event):
         """Show preview line from last point to mouse"""
@@ -159,6 +172,9 @@ class ROIHandler:
 
         self.update_roi_info()
         self.main_window.status_var.set("ROI cleared - analyzing full image")
+
+        if hasattr(self.main_window, 'state_manager'):
+            self.main_window.state_manager.update_state("image_loaded")
 
     def update_roi_info(self):
         """Update the ROI information display"""

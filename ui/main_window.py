@@ -8,10 +8,9 @@ import threading
 from ui.image_display import ImageDisplay
 from ui.roi_handler import ROIHandler
 from ui.file_operations import FileOperations
-from analysis.utils.image_processing import get_analysis_region
-from analysis.quality_map.map_generator import generate_quality_map
 from analysis.analyzer import DICAnalyzer
 from debug_output.enhanced_debug_integration import integrate_blur_awareness_into_existing_analyzer
+from ui.button_state_manager import ButtonStateManager
 
 
 class DICQualityInspector:
@@ -37,6 +36,7 @@ class DICQualityInspector:
         self.image_display = ImageDisplay(self.image_canvas, self)
         self.file_operations = FileOperations(self)
         self.roi_handler = ROIHandler(self)
+        self.state_manager = ButtonStateManager(self)
 
         # Connect UI elements to manager methods
         self.load_btn.config(command=self.file_operations.load_image)
@@ -264,6 +264,7 @@ class DICQualityInspector:
             # Store selection coordinates
             x1, y1 = min(self.start_x, event.x), min(self.start_y, event.y)
             x2, y2 = max(self.start_x, event.x), max(self.start_y, event.y)
+
             # Close screenshot window
             screenshot_window.destroy()
 
@@ -281,7 +282,6 @@ class DICQualityInspector:
                     self.current_image = self.original_image.copy()
 
                     # Clear previous ROI
-                    self.roi_coords = None
                     self.roi_handler.update_roi_info()
 
                     # Use same approach as load_image_from_path
@@ -291,16 +291,19 @@ class DICQualityInspector:
                     self.image_canvas.xview_moveto(0)
                     self.image_canvas.yview_moveto(0)
 
-                    # Enable buttons
-                    self.roi_btn.config(state='normal')
-                    self.analyze_btn.config(state='normal')
-                    self.status_var.set(f"Screenshot captured: {screenshot.width}x{screenshot.height} pixels")
-                    self.quality_map_btn.config(state='normal')
+                    # Update state to image_loaded (this is the key addition)
+                    if hasattr(self, 'state_manager'):
+                        self.state_manager.update_state("image_loaded")
 
+                    self.status_var.set(f"Screenshot captured: {screenshot.width}x{screenshot.height} pixels")
 
                 except Exception as e:
                     self.root.deiconify()
                     messagebox.showerror("Error", f"Failed to capture screenshot: {str(e)}")
+
+                    # Reset to no_image state on error
+                    if hasattr(self, 'state_manager'):
+                        self.state_manager.update_state("no_image")
             else:
                 self.root.deiconify()
                 self.status_var.set("Screenshot cancelled - area too small")
@@ -328,21 +331,105 @@ class DICQualityInspector:
         screenshot_window.grab_set()
         screenshot_window.update()
 
+    def _analyze_worker(self):
+        """Worker thread to perform image analysis"""
+        try:
+            # Store current view state before analysis
+            current_zoom = self.image_display.zoom_level
+            visible_x = self.image_canvas.xview()
+            visible_y = self.image_canvas.yview()
+
+            # Do NOT crop/mask the image for analysis or quality map generation!
+            # analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
+
+            # Print original image dimensions for debugging
+            print(f"DEBUG: Original image shape: {self.original_image.shape}")
+
+            # Generate quality map based on the full image
+            from analysis.quality_map.map_generator import generate_quality_map
+            quality_map, visualization = generate_quality_map(self.original_image)
+
+            # Store quality map data for later use
+            self.image_display.quality_map_data = quality_map
+            self.image_display.quality_visualization = visualization
+
+            # Use the DICAnalyzer class for analysis on the full image
+            analyzer = DICAnalyzer()
+            results = analyzer.analyze(self.original_image)
+
+            # Store results
+            self.analysis_results = results
+
+            # Update GUI on the main thread
+            self.root.after(0, lambda: self._update_results_display())
+
+            # Enable the quality map button after successful analysis
+            self.root.after(0, lambda: self.quality_map_btn.config(state='normal'))
+
+            # Show quality map after updating results
+            self.root.after(100, lambda: self.image_display.show_quality_map())
+
+            # Update quality map data for overlay
+            if hasattr(self, 'image_display'):
+                self.image_display.update_quality_map(
+                    results.get('quality_map'),
+                    results.get('quality_visualization')
+                )
+
+        except Exception as e:
+            import traceback
+            error_message = str(e)
+            traceback_info = traceback.format_exc()
+            print(f"Analysis Error: {error_message}\n{traceback_info}")  # Debug information
+            self.root.after(0, lambda msg=error_message: messagebox.showerror(
+                "Analysis Error", f"Failed to analyze image: {msg}"))
+
+        finally:
+            # Re-enable analyze button in GUI thread
+            self.root.after(0, lambda: self.analyze_btn.config(state='normal'))
+
     def analyze_image(self):
-        """Analyze image quality for DIC and show quality map"""
+        """Enhanced analyze with state management"""
         if self.original_image is None:
             return
 
-        if self.roi_coords:
-            self.status_var.set("Analyzing ROI for DIC quality...")
-            self.roi_btn.config(state='disabled')
-        else:
-            self.status_var.set("Analyzing full image for DIC quality...")
-            self.roi_btn.config(state='disabled')
-        self.analyze_btn.config(state='disabled')
+        # Check if analysis is allowed
+        if not self.state_manager.can_analyze():
+            self.status_var.set("Analysis not available in current state")
+            return
 
-        # Run analysis in separate thread to prevent GUI freezing
+        if self.state_manager.is_analysis_in_progress():
+            self.status_var.set("Analysis already in progress")
+            return
+
+        # Update state to analyzing
+        self.state_manager.update_state("analyzing")
+
+        # Run analysis in separate thread
         threading.Thread(target=self._analyze_worker, daemon=True).start()
+
+    def _on_analysis_complete(self, score):
+        """Handle analysis completion"""
+        # Update results display
+        self._update_results_display()
+
+        # Update state to analysis_complete
+        self.state_manager.update_state("analysis_complete", score=score)
+
+        # Auto-show quality map
+        self.root.after(100, lambda: self.image_display.show_quality_map())
+
+    def _on_analysis_error(self, error_msg):
+        """Handle analysis error"""
+        messagebox.showerror("Analysis Error", f"Failed to analyze image: {error_msg}")
+
+        # Reset to appropriate state
+        if (hasattr(self, 'roi_handler') and
+                self.roi_handler.roi_coords and
+                len(self.roi_handler.roi_coords) >= 3):
+            self.state_manager.update_state("roi_selected")
+        else:
+            self.state_manager.update_state("image_loaded")
 
     def _update_results_display(self):
         """Update the GUI with analysis results"""
@@ -431,7 +518,7 @@ class DICQualityInspector:
         self.save_btn.config(state='normal')
 
         # Update status
-        roi_text = "ROI" if self.roi_coords else "full image"
+        roi_text = "ROI" if (self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3) else "full image"
         self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
 
     def _update_results_display_and_show_map(self, results=None, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
@@ -451,67 +538,15 @@ class DICQualityInspector:
         # Update the results panel
         self._update_results_display()
 
-        # Get the image to analyze
-        analysis_region = get_analysis_region(
-            self.original_image,
-            self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
-        )
 
         # Generate and show quality map
-        quality_map, visualization = generate_quality_map(analysis_region)
+        from analysis.quality_map.map_generator import generate_quality_map
+        quality_map, visualization = generate_quality_map(self.original_image)
 
-        # Display the quality map
+        # Display the quality map (the overlay function will use ROI for masking)
+        self.image_display.quality_map_data = quality_map
+        self.image_display.quality_visualization = visualization
         self.image_display.show_quality_map()
-
-    def _analyze_worker(self):
-        """Worker thread to perform image analysis"""
-        try:
-            # Store current view state before analysis
-            current_zoom = self.image_display.zoom_level
-            visible_x = self.image_canvas.xview()
-            visible_y = self.image_canvas.yview()
-
-            # Get the analysis region (ROI or full image)
-            analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
-
-            # Print original and analysis region dimensions for debugging
-            print(f"DEBUG: Original image shape: {self.original_image.shape}")
-            print(f"DEBUG: Analysis region shape: {analysis_region.shape}")
-
-            # Generate quality map based on analysis region
-            quality_map, visualization = generate_quality_map(analysis_region)
-
-            # Store quality map data for later use
-            self.image_display.quality_map_data = quality_map
-            self.image_display.quality_visualization = visualization
-
-            # Use the DICAnalyzer class for analysis
-            analyzer = DICAnalyzer()
-            results = analyzer.analyze(analysis_region)
-
-            # Store results
-            self.analysis_results = results
-
-            # Update GUI on the main thread
-            self.root.after(0, lambda: self._update_results_display())
-
-            # Enable the quality map button after successful analysis
-            self.root.after(0, lambda: self.quality_map_btn.config(state='normal'))
-
-            # Show quality map after updating results
-            self.root.after(100, lambda: self.image_display.show_quality_map())
-
-        except Exception as e:
-            import traceback
-            error_message = str(e)
-            traceback_info = traceback.format_exc()
-            print(f"Analysis Error: {error_message}\n{traceback_info}")  # Debug information
-            self.root.after(0, lambda msg=error_message: messagebox.showerror(
-                "Analysis Error", f"Failed to analyze image: {msg}"))
-
-        finally:
-            # Re-enable analyze button in GUI thread
-            self.root.after(0, lambda: self.analyze_btn.config(state='normal'))
 
     def show_help(self):
         """Show comprehensive help for the application"""
@@ -593,9 +628,11 @@ class DICQualityInspector:
         image_mpx = (image_size[0] * image_size[1]) / 1_000_000
 
         # Get ROI size if available (for analyzing selected regions)
-        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords:
-            x1, y1, x2, y2 = self.roi_handler.roi_coords
-            roi_width, roi_height = x2 - x1, y2 - y1
+        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
+            # Estimate bounding box for polygon for adaptive thresholds
+            xs = [pt[0] for pt in self.roi_handler.roi_coords]
+            ys = [pt[1] for pt in self.roi_handler.roi_coords]
+            roi_width, roi_height = max(xs) - min(xs), max(ys) - min(ys)
             roi_mpx = (roi_width * roi_height) / 1_000_000
         else:
             roi_mpx = image_mpx
