@@ -181,6 +181,7 @@ class DICQualityInspector:
 
         canvas_results.create_window((0, 0), window=self.results_frame, anchor='nw')
 
+
         def configure_scroll_region(event):
             canvas_results.configure(scrollregion=canvas_results.bbox('all'))
 
@@ -209,6 +210,7 @@ class DICQualityInspector:
         )
         self.debug_btn.pack(side='left', padx=5)
 
+        self.quality_map_btn.config(state='disabled')
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -264,7 +266,6 @@ class DICQualityInspector:
             # Store selection coordinates
             x1, y1 = min(self.start_x, event.x), min(self.start_y, event.y)
             x2, y2 = max(self.start_x, event.x), max(self.start_y, event.y)
-
             # Close screenshot window
             screenshot_window.destroy()
 
@@ -296,6 +297,8 @@ class DICQualityInspector:
                     self.roi_btn.config(state='normal')
                     self.analyze_btn.config(state='normal')
                     self.status_var.set(f"Screenshot captured: {screenshot.width}x{screenshot.height} pixels")
+                    self.quality_map_btn.config(state='normal')
+
 
                 except Exception as e:
                     self.root.deiconify()
@@ -334,9 +337,10 @@ class DICQualityInspector:
 
         if self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
             self.status_var.set("Analyzing ROI for DIC quality...")
+            self.roi_btn.config(state='disabled')
         else:
             self.status_var.set("Analyzing full image for DIC quality...")
-
+            self.roi_btn.config(state='disabled')
         self.analyze_btn.config(state='disabled')
 
         # Remove rectangle ROI deletion (polygon ROI is handled in roi_handler)

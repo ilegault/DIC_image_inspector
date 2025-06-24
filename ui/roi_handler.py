@@ -1,5 +1,4 @@
 # ui/roi_handler.py
-
 class ROIHandler:
     """Handles Region of Interest selection and management"""
 
@@ -70,6 +69,7 @@ class ROIHandler:
             self.main_window.analyze_btn.config(state='normal')
         self.update_roi_info()
         self.main_window.status_var.set("Polygon ROI selected")
+        self.main_window.quality_map_btn.config(state='normal')
 
     def on_canvas_motion(self, event):
         """Show preview line from last point to mouse"""

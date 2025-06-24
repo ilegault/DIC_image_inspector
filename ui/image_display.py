@@ -1,8 +1,6 @@
 # ui.image_display.py
 import tkinter
 import numpy as np
-
-
 from PIL import Image, ImageTk
 from tkinter import messagebox
 
@@ -292,7 +290,8 @@ class ImageDisplay:
 
         # Update status
         self.main_window.status_var.set("Display reset to original view")
-
+        self.main_window.roi_btn.config(state='normal')
+        self.main_window.analyze_btn.config(state='disabled')# Disable ROI button
 
     def reset_cursor(self, event):
         """Reset cursor when Ctrl key is released."""
