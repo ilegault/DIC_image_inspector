@@ -33,8 +33,6 @@ class DICQualityInspector:
         # Create GUI
         self.create_gui()
 
-        integrate_comprehensive_analyzer(self)
-
         # Create managers
         self.image_display = ImageDisplay(self.image_canvas, self)
         self.file_operations = FileOperations(self)
