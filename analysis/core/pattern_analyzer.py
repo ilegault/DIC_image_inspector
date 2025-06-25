@@ -222,38 +222,3 @@ def analyze_pattern_quality(gray_image):
         'quality_score': min(100, quality_score),
         'binary_result': binary
     }
-
-
-def analyze_roi_speckles(roi_image, roi_coords=None):
-    """Perform detailed analysis of speckle pattern in the selected ROI"""
-    if roi_image is None:
-        return {"error": "No image provided"}
-
-    try:
-        from analysis.metrics.pattern_metrics import evaluate_pattern_quality
-
-        # Convert to grayscale if needed
-        if len(roi_image.shape) == 3:
-            roi_gray = cv2.cvtColor(roi_image, cv2.COLOR_RGB2GRAY)
-        else:
-            roi_gray = roi_image.copy()
-
-        # Run comprehensive analysis
-        pattern_results = analyze_pattern_quality(roi_gray)
-        segmentation_results = analyze_roi_speckles_improved(roi_gray)
-
-        # Create the results dictionary
-        results = {
-            'speckle_count': segmentation_results['speckle_count'],
-            'pattern_quality': pattern_results['quality_score'],
-            'size_stats': pattern_results.get('size_stats', {}),
-            'coverage': segmentation_results.get('confidence', 0) * 100
-        }
-
-        return results
-
-    except Exception as e:
-        import traceback
-        print(f"Error in ROI speckle analysis: {str(e)}")
-        print(traceback.format_exc())
-        return {"error": str(e)}

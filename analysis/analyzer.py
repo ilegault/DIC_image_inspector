@@ -1,10 +1,7 @@
 # analysis/analyzer.py
 
 import cv2
-import numpy as np
 from analysis.metrics.metrics_manager import MetricsManager
-from analysis.quality_map.map_generator import generate_quality_map
-from analysis.utils.image_processing import get_analysis_region
 
 
 class DICAnalyzer:
@@ -18,7 +15,6 @@ class DICAnalyzer:
         """Initialize the analyzer with default parameters"""
         self.subset_size = None
         self.overlap = 0.5
-
 
     def analyze(self, image):
         """Analyze an image for DIC quality metrics
@@ -41,20 +37,11 @@ class DICAnalyzer:
         # Store the subset size for reference
         self.subset_size = metrics_manager.subset_size
 
-        # Run all metrics calculations
+        # Run all metrics calculations (without quality map generation)
         metrics = metrics_manager.compute_all_metrics(image)
-
-        # Generate the quality map visualization
-        quality_map, visualization = generate_quality_map(image)
-
-        # Store quality map in results
-        metrics['quality_map'] = quality_map
-        metrics['quality_visualization'] = visualization
 
         # Format results for display in the UI
         formatted_results = self._format_results(metrics)
-
-
 
         return formatted_results
 
@@ -83,10 +70,6 @@ class DICAnalyzer:
 
             # Additional metrics
             'avg_subset_quality': round(metrics.get('avg_subset_quality', 0) * 100, 1),
-
-            # Store quality map and visualization
-            'quality_map': metrics.get('quality_map'),
-            'quality_visualization': metrics.get('quality_visualization'),
 
             # Store subset metrics for detailed analysis
             'subset_metrics': metrics.get('subset_metrics_map', {}),

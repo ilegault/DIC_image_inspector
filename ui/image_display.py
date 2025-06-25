@@ -680,3 +680,55 @@ class ImageDisplay:
         # If overlay is toggled on, show it
         if hasattr(self, 'showing_quality_overlay') and self.showing_quality_overlay:
             self.show_quality_map()
+
+    def show_enhanced_quality_map(self):
+        """Display enhanced quality map with VIC-2D style visualization"""
+        if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
+            return
+
+        # Store current view state
+        current_zoom = self.zoom_level
+        visible_x = self.canvas.xview()
+        visible_y = self.canvas.yview()
+
+        # Create enhanced quality map generator
+        from analysis.quality_map.map_generator import EnhancedDICQualityMap
+        quality_generator = EnhancedDICQualityMap()
+
+        # Get ROI coordinates if available
+        roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+
+        # Generate enhanced quality visualization
+        results = quality_generator.generate_quality_map(
+            self.main_window.original_image,
+            roi_coords
+        )
+
+        # Convert to PIL image for display
+        from PIL import Image
+        visualization_pil = Image.fromarray(results['visualization'])
+
+        # Set flag to prevent recursion during display
+        self._updating_quality_map = True
+
+        # Display with preserved view
+        self.display_image(visualization_pil, preserve_view=True)
+
+        # Clear the flag
+        self._updating_quality_map = False
+
+        # Restore view state exactly
+        self.zoom_level = current_zoom
+        self.canvas.xview_moveto(visible_x[0])
+        self.canvas.yview_moveto(visible_y[0])
+
+        # Update state
+        self.showing_quality_overlay = True
+
+        # Print quality statistics
+        stats = results['statistics']
+        print(f"Enhanced Quality Map Generated:")
+        print(f"  Average Quality: {stats['mean_quality']:.3f}")
+        print(f"  Excellent Area: {stats['excellent_area_percent']:.1f}%")
+        print(f"  Good Area: {stats['good_area_percent']:.1f}%")
+        print(f"  Overall Score: {stats['overall_score']:.1f}/100")

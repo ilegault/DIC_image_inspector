@@ -73,11 +73,11 @@ class ROIHandler:
         self.roi_selection_mode = False
         self.main_window.roi_btn.config(bg="#9b59b6")
         self.canvas.config(cursor="")
-        if hasattr(self.main_window, 'debug_btn'):
-            self.main_window.debug_btn.config(state='normal')
+
         # Enable the analyze button after ROI is finished
         if hasattr(self.main_window, 'analyze_btn'):
             self.main_window.analyze_btn.config(state='normal')
+
         self.update_roi_info()
         self.main_window.status_var.set("Polygon ROI selected")
         self.main_window.quality_map_btn.config(state='normal')
@@ -108,7 +108,8 @@ class ROIHandler:
             self.preview_line = None
 
         # Prevent ROI perimeter from being redrawn after analyze/overlay
-        if hasattr(self.main_window, 'image_display') and getattr(self.main_window.image_display, 'showing_quality_overlay', False):
+        if hasattr(self.main_window, 'image_display') and getattr(self.main_window.image_display,
+                                                                  'showing_quality_overlay', False):
             return  # Do not redraw ROI perimeter when quality map is shown
 
         display_scale = getattr(self.canvas, 'display_scale', 1.0)
@@ -166,10 +167,6 @@ class ROIHandler:
         if hasattr(self.main_window, 'roi_btn'):
             self.main_window.roi_btn.config(bg="#9b59b6")  # Reset button color
 
-        # Disable the debug button when ROI is cleared
-        if hasattr(self.main_window, 'debug_btn'):
-            self.main_window.debug_btn.config(state='disabled')
-
         self.update_roi_info()
         self.main_window.status_var.set("ROI cleared - analyzing full image")
 
@@ -181,7 +178,7 @@ class ROIHandler:
         if self.roi_coords and len(self.roi_coords) >= 3:
             # Calculate area using Shoelace formula
             xys = self.roi_coords
-            area = 0.5 * abs(sum(x0*y1 - x1*y0
+            area = 0.5 * abs(sum(x0 * y1 - x1 * y0
                                  for ((x0, y0), (x1, y1)) in zip(xys, xys[1:] + [xys[0]])))
             total_area = 0
             if hasattr(self.main_window, 'original_image') and self.main_window.original_image is not None:
@@ -246,3 +243,39 @@ class ROIHandler:
         image_shape_changed = False
         if image_shape_changed:
             self.clear_roi()
+
+
+def get_analysis_region(image, roi_coords=None):
+    """Extract region of interest from image
+
+    Args:
+        image: Input image as numpy array
+        roi_coords: ROI coordinates (polygon list or rectangle tuple)
+
+    Returns:
+        numpy.ndarray: Extracted region
+    """
+    if roi_coords is None or image is None:
+        return image
+
+    if isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0], (list, tuple)):
+        # Polygon ROI
+        import cv2
+        import numpy as np
+        mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        pts = np.array(roi_coords, dtype=np.int32)
+        cv2.fillPoly(mask, [pts], 255)
+        if len(image.shape) == 3:
+            masked = cv2.bitwise_and(image, image, mask=mask)
+        else:
+            masked = cv2.bitwise_and(image, image, mask=mask)
+        return masked
+    elif isinstance(roi_coords, (list, tuple)) and len(roi_coords) == 4:
+        # Rectangle ROI
+        x1, y1, x2, y2 = roi_coords
+        h, w = image.shape[:2]
+        x1, x2 = max(0, x1), min(w, x2)
+        y1, y2 = max(0, y1), min(h, y2)
+        return image[y1:y2, x1:x2]
+    else:
+        return image

@@ -9,7 +9,8 @@ from ui.image_display import ImageDisplay
 from ui.roi_handler import ROIHandler
 from ui.file_operations import FileOperations
 from analysis.analyzer import DICAnalyzer
-from debug_output.enhanced_debug_integration import integrate_blur_awareness_into_existing_analyzer
+from analysis.quality_map.map_generator import generate_quality_map
+from ui.roi_handler import get_analysis_region
 from ui.button_state_manager import ButtonStateManager
 
 
@@ -44,9 +45,8 @@ class DICQualityInspector:
         self.screenshot_btn.config(command=self.start_screenshot)
         self.analyze_btn.config(command=self.analyze_image)
         self.quality_map_btn.config(command=self.image_display.toggle_quality_map_overlay)
+        self.save_btn.config(command=self.file_operations.save_report)
         self.quality_map_btn.config(state='disabled')
-
-        integrate_blur_awareness_into_existing_analyzer(self)
 
     def create_gui(self):
         # Main title
@@ -90,6 +90,12 @@ class DICQualityInspector:
                                   padx=20, pady=5, state='disabled')
         self.save_btn.pack(side='left', padx=5)
 
+        # Help button
+        self.help_btn = tk.Button(btn_frame, text="❓ Help",
+                                  bg="#7f8c8d", fg="white", font=("Arial", 12, "bold"),
+                                  padx=10, pady=5, command=self.show_help)
+        self.help_btn.pack(side="left", padx=5)
+
         # ROI Info
         roi_info_frame = tk.Frame(control_frame, bg='#34495e')
         roi_info_frame.pack(pady=5)
@@ -120,24 +126,18 @@ class DICQualityInspector:
 
         self.image_canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
 
-        # Change the positioning of components
+        # Position components
         self.image_canvas.grid(row=0, column=0, sticky='nsew')
         v_scrollbar.grid(row=0, column=1, sticky='ns')
         h_scrollbar.grid(row=1, column=0, sticky='ew')
 
-        # Configure grid weights to make the canvas expand
+        # Configure grid weights
         canvas_frame.grid_rowconfigure(0, weight=1)
         canvas_frame.grid_columnconfigure(0, weight=1)
 
         # Image processing buttons
         process_frame = tk.Frame(left_panel, bg='#34495e')
         process_frame.pack(pady=10)
-
-        # Add this to the btn_frame in create_gui method
-        self.help_btn = tk.Button(btn_frame, text="❓ Help",
-                                  bg="#7f8c8d", fg="white", font=("Arial", 12, "bold"),
-                                  padx=10, pady=5, command=self.show_help)
-        self.help_btn.pack(side="left", padx=5)
 
         original_btn = tk.Button(process_frame, text="Original",
                                  bg='#95a5a6', fg='white', padx=10,
@@ -159,6 +159,11 @@ class DICQualityInspector:
                                       command=lambda: self.image_display.reset_display())
         reset_display_btn.pack(side='left', padx=2)
 
+        # Quality map button
+        self.quality_map_btn = tk.Button(process_frame, text="Quality Map",
+                                         bg='#2ecc71', fg='white', padx=10)
+        self.quality_map_btn.pack(side='left', padx=2)
+
         # Right panel - Analysis results
         right_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
         right_panel.pack(side='right', fill='y', padx=5)
@@ -179,7 +184,6 @@ class DICQualityInspector:
 
         canvas_results.create_window((0, 0), window=self.results_frame, anchor='nw')
 
-
         def configure_scroll_region(event):
             canvas_results.configure(scrollregion=canvas_results.bbox('all'))
 
@@ -190,25 +194,6 @@ class DICQualityInspector:
         status_bar = tk.Label(self.root, textvariable=self.status_var, relief='sunken',
                               anchor='w', bg='#95a5a6', fg='white')
         status_bar.pack(side='bottom', fill='x')
-
-        self.quality_map_btn = tk.Button(process_frame, text="Quality Map",
-                                         bg='#2ecc71', fg='white', padx=10)
-        self.quality_map_btn.pack(side='left', padx=2)
-
-        self.debug_btn = tk.Button(
-            btn_frame,  # Using the correct variable name
-            text="🐞 Debug ROI",
-            command=lambda: self.image_display.save_debug_visualizations(),
-            bg="#ffcc00",  # Yellow for debug
-            fg="black",
-            font=('Arial', 12, 'bold'),
-            padx=10,
-            pady=5,
-            state='disabled'  # Initially disabled until ROI is selected
-        )
-        self.debug_btn.pack(side='left', padx=5)
-
-        self.quality_map_btn.config(state='disabled')
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -291,7 +276,7 @@ class DICQualityInspector:
                     self.image_canvas.xview_moveto(0)
                     self.image_canvas.yview_moveto(0)
 
-                    # Update state to image_loaded (this is the key addition)
+                    # Update state to image_loaded
                     if hasattr(self, 'state_manager'):
                         self.state_manager.update_state("image_loaded")
 
@@ -332,61 +317,56 @@ class DICQualityInspector:
         screenshot_window.update()
 
     def _analyze_worker(self):
-        """Worker thread to perform image analysis"""
+        """Worker thread for analysis with integrated quality map generation"""
         try:
-            # Store current view state before analysis
-            current_zoom = self.image_display.zoom_level
-            visible_x = self.image_canvas.xview()
-            visible_y = self.image_canvas.yview()
+            # Get analysis region (but always analyze full image for quality map alignment)
+            if self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
+                # For polygon ROI, extract region for statistical analysis only
+                analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
+                print(f"Analyzing polygon ROI with {len(self.roi_handler.roi_coords)} points")
+            else:
+                # Full image analysis
+                analysis_region = self.original_image.copy()
+                print("Analyzing full image")
 
-            # Do NOT crop/mask the image for analysis or quality map generation!
-            # analysis_region = get_analysis_region(self.original_image, self.roi_handler.roi_coords)
-
-            # Print original image dimensions for debugging
-            print(f"DEBUG: Original image shape: {self.original_image.shape}")
-
-            # Generate quality map based on the full image
-            from analysis.quality_map.map_generator import generate_quality_map
+            # ALWAYS generate quality map from full image for proper overlay alignment
+            print("Generating quality map from full image...")
             quality_map, visualization = generate_quality_map(self.original_image)
 
-            # Store quality map data for later use
+            # Store quality map data in image display for overlay
             self.image_display.quality_map_data = quality_map
             self.image_display.quality_visualization = visualization
+            print(
+                f"Quality map generated: shape {quality_map.shape}, range {quality_map.min():.3f}-{quality_map.max():.3f}")
 
-            # Use the DICAnalyzer class for analysis on the full image
-            analyzer = DICAnalyzer()
-            results = analyzer.analyze(self.original_image)
+            # Run main DIC analysis on the analysis region
+            print("Running DIC analysis...")
+            self.analyzer = DICAnalyzer()  # Store analyzer instance to access subset_size
+            results = self.analyzer.analyze(analysis_region)
+
+            # Add quality map data to results
+            if quality_map is not None:
+                results['quality_map'] = quality_map
+                results['quality_visualization'] = visualization
+                # Calculate overall quality statistics
+                avg_quality = np.mean(quality_map)
+                results['average_quality'] = avg_quality * 100  # Scale to 0-100
+                print(f"Average quality: {avg_quality:.3f}")
 
             # Store results
             self.analysis_results = results
 
-            # Update GUI on the main thread
-            self.root.after(0, lambda: self._update_results_display())
+            print(f"Analysis complete. Overall score: {results.get('overall_score', 'N/A')}")
 
-            # Enable the quality map button after successful analysis
-            self.root.after(0, lambda: self.quality_map_btn.config(state='normal'))
-
-            # Show quality map after updating results
-            self.root.after(100, lambda: self.image_display.show_quality_map())
-
-            # Update quality map data for overlay
-            if hasattr(self, 'image_display'):
-                self.image_display.update_quality_map(
-                    results.get('quality_map'),
-                    results.get('quality_visualization')
-                )
+            # Update UI in main thread
+            self.root.after(0, lambda: self._on_analysis_complete(results.get('overall_score', 0)))
 
         except Exception as e:
             import traceback
             error_message = str(e)
             traceback_info = traceback.format_exc()
-            print(f"Analysis Error: {error_message}\n{traceback_info}")  # Debug information
-            self.root.after(0, lambda msg=error_message: messagebox.showerror(
-                "Analysis Error", f"Failed to analyze image: {msg}"))
-
-        finally:
-            # Re-enable analyze button in GUI thread
-            self.root.after(0, lambda: self.analyze_btn.config(state='normal'))
+            print(f"Analysis Error: {error_message}\n{traceback_info}")
+            self.root.after(0, lambda: self._on_analysis_error(error_message))
 
     def analyze_image(self):
         """Enhanced analyze with state management"""
@@ -416,8 +396,18 @@ class DICQualityInspector:
         # Update state to analysis_complete
         self.state_manager.update_state("analysis_complete", score=score)
 
-        # Auto-show quality map
-        self.root.after(100, lambda: self.image_display.show_quality_map())
+        # Enable quality map button
+        self.quality_map_btn.config(state='normal')
+
+        # Auto-show quality map after a brief delay
+        self.root.after(500, self._auto_show_quality_map)
+
+    def _auto_show_quality_map(self):
+        """Automatically show quality map after analysis"""
+        if hasattr(self.image_display, 'quality_map_data') and self.image_display.quality_map_data is not None:
+            # Only auto-show if not already showing
+            if not getattr(self.image_display, 'showing_quality_overlay', False):
+                self.image_display.toggle_quality_map_overlay()
 
     def _on_analysis_error(self, error_msg):
         """Handle analysis error"""
@@ -432,7 +422,7 @@ class DICQualityInspector:
             self.state_manager.update_state("image_loaded")
 
     def _update_results_display(self):
-        """Update the GUI with analysis results"""
+        """Update the GUI with simplified DIC-focused results"""
         # Clear previous results
         for widget in self.results_frame.winfo_children():
             widget.destroy()
@@ -442,111 +432,231 @@ class DICQualityInspector:
 
         results = self.analysis_results
 
-        # Overall Score (prominent display)
+        # Overall Quality Score (prominent display similar to your reference image)
         score_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
         score_frame.pack(fill='x', padx=10, pady=10)
 
         overall_score = results['overall_score']
 
-        # Color code the score
-        if overall_score >= 80:
+        # Color code the score with more realistic DIC thresholds
+        if overall_score >= 70:
             score_color = '#27ae60'  # Green
-            score_text = "Excellent"
-        elif overall_score >= 60:
+            score_text = "Excellent for DIC"
+        elif overall_score >= 50:
             score_color = '#f39c12'  # Orange
-            score_text = "Good"
-        elif overall_score >= 40:
+            score_text = "Good for DIC"
+        elif overall_score >= 30:
             score_color = '#e67e22'  # Dark Orange
-            score_text = "Fair"
-        else:
+            score_text = "Acceptable for DIC"
+        elif overall_score >= 15:
             score_color = '#e74c3c'  # Red
-            score_text = "Poor"
+            score_text = "Challenging for DIC"
+        else:
+            score_color = '#8e44ad'  # Purple
+            score_text = "Very Difficult for DIC"
 
-        tk.Label(score_frame, text="Overall DIC Quality Score",
-                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack()
-        tk.Label(score_frame, text=f"{overall_score}/100",
-                 font=('Arial', 24, 'bold'), fg=score_color, bg='#34495e').pack()
+        tk.Label(score_frame, text="DIC Pattern Quality",
+                 font=('Arial', 16, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
+
+        # Large quality score display
+        score_display_frame = tk.Frame(score_frame, bg='#34495e')
+        score_display_frame.pack(pady=10)
+
+        tk.Label(score_display_frame, text=f"{overall_score}",
+                 font=('Arial', 48, 'bold'), fg=score_color, bg='#34495e').pack(side='left')
+        tk.Label(score_display_frame, text="/100",
+                 font=('Arial', 24), fg='#bdc3c7', bg='#34495e').pack(side='left', anchor='s', padx=(5, 0))
+
         tk.Label(score_frame, text=score_text,
-                 font=('Arial', 12), fg=score_color, bg='#34495e').pack()
+                 font=('Arial', 14), fg=score_color, bg='#34495e').pack()
 
-        # Detailed metrics
-        metrics_frame = tk.Frame(self.results_frame, bg='#34495e')
-        metrics_frame.pack(fill='x', padx=10, pady=5)
+        # Average Quality from Quality Map (if available)
+        if 'average_quality' in results:
+            avg_quality = results['average_quality']
+            tk.Label(score_frame, text=f"Average Pattern Quality: {avg_quality:.1f}%",
+                     font=('Arial', 11), fg='#bdc3c7', bg='#34495e').pack(pady=(5, 0))
 
-        tk.Label(metrics_frame, text="Detailed Analysis",
-                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack()
+        # DIC Analysis Parameters Section
+        params_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
+        params_frame.pack(fill='x', padx=10, pady=10)
 
-        # Create metric displays
-        metrics = [
-            ("Contrast", results['contrast'], "%", "Optimal: 20-80%"),
-            ("Speckle Density", results['speckle_density'], " features/Mpx", "Good: 50-200"),
-            ("Gradient Strength", results['gradient_magnitude'], "", "Good: >30, Excellent: >50"),
-            ("Noise Level (SNR)", results['noise_level'], " dB", "Good: >20 dB"),
-            ("Pattern Uniformity", results['pattern_uniformity'], "%", "Good: >70%"),
-            ("Feature Size", results['feature_size'], " pixels", "Optimal: 3-15 px"),
-            ("Intensity Distribution", results['intensity_distribution'], "%", "Good: >60%"),
-            ("Edge Quality", results['edge_quality'], "%", "Good: >50%")
-        ]
+        tk.Label(params_frame, text="📐 Recommended DIC Parameters",
+                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
 
-        for name, value, unit, guidance in metrics:
-            metric_frame = tk.Frame(metrics_frame, bg='#34495e')
-            metric_frame.pack(fill='x', pady=2)
+        # Calculate recommended parameters based on analysis
+        recommended_params = self._calculate_dic_parameters(results)
 
-            tk.Label(metric_frame, text=f"{name}:",
-                     font=('Arial', 10, 'bold'), fg='#bdc3c7', bg='#34495e', width=20, anchor='w').pack(side='left')
-            tk.Label(metric_frame, text=f"{value}{unit}",
-                     font=('Arial', 10), fg='#ecf0f1', bg='#34495e', width=15, anchor='w').pack(side='left')
-            tk.Label(metric_frame, text=guidance,
-                     font=('Arial', 8), fg='#95a5a6', bg='#34495e', anchor='w').pack(side='left')
+        # Facet Size
+        param_frame = tk.Frame(params_frame, bg='#34495e')
+        param_frame.pack(fill='x', padx=15, pady=5)
 
-        # Recommendations
-        recommendations = self._generate_recommendations(results)
+        tk.Label(param_frame, text="Facet Size:",
+                 font=('Arial', 12, 'bold'), fg='#bdc3c7', bg='#34495e', width=15, anchor='w').pack(side='left')
+        tk.Label(param_frame, text=f"{recommended_params['facet_size']} pixels",
+                 font=('Arial', 12), fg='#ecf0f1', bg='#34495e').pack(side='left')
+
+        # Step Size
+        param_frame = tk.Frame(params_frame, bg='#34495e')
+        param_frame.pack(fill='x', padx=15, pady=5)
+
+        tk.Label(param_frame, text="Step Size:",
+                 font=('Arial', 12, 'bold'), fg='#bdc3c7', bg='#34495e', width=15, anchor='w').pack(side='left')
+        tk.Label(param_frame, text=f"{recommended_params['step_size']} pixels",
+                 font=('Arial', 12), fg='#ecf0f1', bg='#34495e').pack(side='left')
+
+        # Overlap Percentage
+        param_frame = tk.Frame(params_frame, bg='#34495e')
+        param_frame.pack(fill='x', padx=15, pady=5)
+
+        tk.Label(param_frame, text="Overlap:",
+                 font=('Arial', 12, 'bold'), fg='#bdc3c7', bg='#34495e', width=15, anchor='w').pack(side='left')
+        tk.Label(param_frame, text=f"{recommended_params['overlap']}%",
+                 font=('Arial', 12), fg='#ecf0f1', bg='#34495e').pack(side='left')
+
+        # Expected Accuracy
+        param_frame = tk.Frame(params_frame, bg='#34495e')
+        param_frame.pack(fill='x', padx=15, pady=5)
+
+        tk.Label(param_frame, text="Expected Accuracy:",
+                 font=('Arial', 12, 'bold'), fg='#bdc3c7', bg='#34495e', width=15, anchor='w').pack(side='left')
+        tk.Label(param_frame, text=recommended_params['accuracy'],
+                 font=('Arial', 12), fg='#ecf0f1', bg='#34495e').pack(side='left')
+
+        # DIC-Specific Recommendations
+        recommendations = self._generate_dic_recommendations(results, recommended_params)
         if recommendations:
             rec_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
             rec_frame.pack(fill='x', padx=10, pady=10)
 
-            tk.Label(rec_frame, text="📋 Recommendations",
-                     font=('Arial', 12, 'bold'), fg='#ecf0f1', bg='#34495e').pack()
+            tk.Label(rec_frame, text="🎯 DIC Setup Recommendations",
+                     font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
 
-            for rec in recommendations:
-                tk.Label(rec_frame, text=f"• {rec}",
-                         font=('Arial', 9), fg='#bdc3c7', bg='#34495e',
-                         wraplength=350, justify='left').pack(anchor='w', padx=10)
+            for i, rec in enumerate(recommendations, 1):
+                rec_item_frame = tk.Frame(rec_frame, bg='#34495e')
+                rec_item_frame.pack(fill='x', padx=10, pady=3)
 
-        # Re-enable buttons
-        self.analyze_btn.config(state='normal')
-        self.save_btn.config(state='normal')
+                tk.Label(rec_item_frame, text=f"{i}.",
+                         font=('Arial', 10, 'bold'), fg='#3498db', bg='#34495e', width=3, anchor='w').pack(side='left')
+                tk.Label(rec_item_frame, text=rec,
+                         font=('Arial', 10), fg='#bdc3c7', bg='#34495e',
+                         wraplength=320, justify='left', anchor='w').pack(side='left', fill='x', expand=True)
 
         # Update status
         roi_text = "ROI" if (self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3) else "full image"
-        self.status_var.set(f"Analysis complete - Overall score: {overall_score}/100 ({roi_text})")
+        self.status_var.set(f"Analysis complete - DIC quality: {overall_score}/100 ({roi_text})")
 
-    def _update_results_display_and_show_map(self, results=None, preserve_view=False, zoom_level=None, x_view=None, y_view=None):
-        """Update the results display and show quality map
+    def _calculate_dic_parameters(self, results):
+        """Calculate recommended DIC parameters based on existing analysis results"""
 
-        Args:
-            results: The analysis results to display
-            preserve_view: Whether to preserve current view position
-            zoom_level: Current zoom level to restore
-            x_view: X view position to restore
-            y_view: Y view position to restore
-        """
-        # First update the results display with the provided results
-        if results:
-            self.analysis_results = results
+        # Use the existing subset size that was already calculated by the analyzer
+        if hasattr(self, 'analyzer') and hasattr(self.analyzer, 'subset_size'):
+            facet_size = self.analyzer.subset_size
+        else:
+            # Fallback: use the optimal subset size determination from your existing code
+            from analysis.core.subset_analyzer import determine_optimal_subset_size
+            if hasattr(self, 'original_image') and self.original_image is not None:
+                gray = self.original_image
+                if len(gray.shape) == 3:
+                    import cv2
+                    gray = cv2.cvtColor(gray, cv2.COLOR_RGB2GRAY)
+                facet_size = determine_optimal_subset_size(gray)
+            else:
+                facet_size = 21  # Fallback
 
-        # Update the results panel
-        self._update_results_display()
+        # Calculate step size for standard DIC overlap (75%)
+        overlap_percent = 75
+        step_size = max(1, int(facet_size * (1 - overlap_percent / 100)))
 
+        # Determine expected accuracy based on pattern quality (more realistic thresholds)
+        score = results.get('overall_score', 0)
+        if score >= 70:
+            accuracy = "±0.01 pixels"
+        elif score >= 50:
+            accuracy = "±0.02 pixels"
+        elif score >= 30:
+            accuracy = "±0.05 pixels"
+        elif score >= 15:
+            accuracy = "±0.1 pixels"
+        else:
+            accuracy = "±0.2 pixels"
 
-        # Generate and show quality map
-        from analysis.quality_map.map_generator import generate_quality_map
-        quality_map, visualization = generate_quality_map(self.original_image)
+        return {
+            'facet_size': facet_size,
+            'step_size': step_size,
+            'overlap': overlap_percent,
+            'accuracy': accuracy
+        }
 
-        # Display the quality map (the overlay function will use ROI for masking)
-        self.image_display.quality_map_data = quality_map
-        self.image_display.quality_visualization = visualization
-        self.image_display.show_quality_map()
+    def _generate_dic_recommendations(self, results, params):
+        """Generate DIC-specific recommendations"""
+        recommendations = []
+        score = results.get('overall_score', 0)
+
+        # Pattern quality recommendations with more realistic thresholds
+        if score >= 70:
+            recommendations.append("Excellent pattern! Proceed with DIC analysis using recommended parameters.")
+            recommendations.append("Consider using sub-pixel interpolation for maximum accuracy.")
+        elif score >= 50:
+            recommendations.append("Good pattern quality. DIC analysis should work well with standard settings.")
+            recommendations.append("Monitor correlation quality during analysis - most subsets should correlate well.")
+        elif score >= 30:
+            recommendations.append("Acceptable pattern for DIC analysis with proper setup.")
+            recommendations.append("Use recommended parameters and monitor correlation quality closely.")
+            recommendations.append("Consider slightly larger facet sizes if correlation issues occur.")
+        elif score >= 15:
+            recommendations.append("Challenging but workable pattern for DIC analysis.")
+            recommendations.append("Use larger facet sizes and careful correlation criteria.")
+            recommendations.append("Expect some subsets to have poor correlation - use subset filtering.")
+            recommendations.append("Consider improving lighting uniformity if possible.")
+        else:
+            recommendations.append("Very difficult pattern - DIC possible but with significant limitations.")
+            recommendations.append("Use maximum feasible facet sizes and conservative correlation criteria.")
+            recommendations.append("Expect substantial subset dropout and reduced spatial resolution.")
+            recommendations.append("Consider pattern enhancement or re-application if critical results needed.")
+
+        # Facet size specific recommendations
+        facet_size = params['facet_size']
+        if facet_size > 51:
+            recommendations.append(f"Large facet size ({facet_size}px) recommended due to speckle characteristics.")
+            recommendations.append("Larger facets provide better correlation but reduce spatial resolution.")
+        elif facet_size < 21:
+            recommendations.append(f"Small facet size ({facet_size}px) sufficient for this pattern.")
+            recommendations.append("Smaller facets give better spatial resolution but may be less robust.")
+
+        # Score-specific parameter adjustments
+        if score < 40:
+            recommendations.append("For low-quality patterns: Consider 80-85% overlap instead of 75%.")
+            recommendations.append("Use stricter correlation coefficients (>0.8) to filter poor subsets.")
+
+        # Contrast and feature recommendations
+        contrast = results.get('contrast', 0)
+        if contrast < 15:
+            recommendations.append("Very low contrast - improve lighting or pattern application if possible.")
+        elif contrast < 25:
+            recommendations.append("Low contrast detected - monitor for correlation difficulties.")
+        elif contrast > 80:
+            recommendations.append("High contrast detected - watch for saturation in DIC images.")
+
+        # Density recommendations adjusted for practical DIC
+        density = results.get('speckle_density', 0)
+        if density < 20:
+            recommendations.append("Very low speckle density - expect reduced correlation reliability.")
+        elif density < 40:
+            recommendations.append("Low speckle density - consider adding pattern features if possible.")
+        elif density > 300:
+            recommendations.append("Very high speckle density - pattern may be too busy for optimal correlation.")
+
+        # Software-specific recommendations based on score
+        if score >= 30:
+            recommendations.append("Pattern suitable for standard DIC analysis and strain mapping.")
+        else:
+            recommendations.append("Use post-processing filters to improve displacement field smoothness.")
+            recommendations.append("Consider temporal or spatial filtering to reduce noise in results.")
+
+        recommendations.append(
+            "Save DIC parameters: Facet size, step size, and correlation criteria for repeatability.")
+
+        return recommendations
 
     def show_help(self):
         """Show comprehensive help for the application"""
@@ -560,23 +670,24 @@ class DICQualityInspector:
     • Region of Interest (ROI):
       - Click "Select ROI" to enable ROI selection mode
       - Click and drag on the image to select your analysis region
-      - Clear the current ROI with the "Clear ROI" button
+      - Right-click to complete the polygon selection
 
     • Image Navigation:
       - Zoom: Use the mouse wheel to zoom in/out
       - Pan: Hold Ctrl + click and drag to move around
-      - Reset View: Click "Reset View" to return to original view
+      - Reset View: Click "Reset Display" to return to original view
 
     • Image Processing:
       - Original: Return to the unprocessed image
       - Edges: Display edge detection visualization
       - Gradient: Display gradient magnitude visualization
+      - Quality Map: Toggle overlay showing DIC quality analysis
 
     • Analysis:
       - Click "Analyze" to process the image quality metrics
       - Results are shown in the right panel
       - Higher overall scores indicate better DIC pattern quality
-      - Recommendations provide guidance to improve your pattern
+      - Quality map shows color-coded analysis across the image
 
     • Report:
       - Save a detailed analysis report using "Save Report"
