@@ -3,7 +3,6 @@
 from PIL import Image, ImageTk
 from tkinter import messagebox
 
-
 class ImageDisplay:
     def __init__(self, canvas, main_window=None):
         self.canvas = canvas
@@ -17,6 +16,7 @@ class ImageDisplay:
         self.quality_map_visible = False
         self.quality_map_data = None
         self.quality_visualization = None
+        self.legend_item = None  # For quality map legend
 
         # Setup mouse bindings for panning and zooming
         self.canvas.bind("<MouseWheel>", self.zoom)  # Windows mousewheel
@@ -24,7 +24,7 @@ class ImageDisplay:
         self.canvas.bind("<Button-5>", self.zoom)  # Linux scroll down
         self.canvas.bind("<Control-Button-1>", self.start_pan)
         self.canvas.bind("<Control-B1-Motion>", self.pan)
-        self.canvas.bind("<ButtonRelease-1>", self.end_pan)  # Add this line
+        self.canvas.bind("<ButtonRelease-1>", self.end_pan)
         self.canvas.bind("<KeyRelease-Control_L>", self.reset_cursor)
         self.canvas.bind("<KeyRelease-Control_R>", self.reset_cursor)
 
@@ -37,8 +37,9 @@ class ImageDisplay:
         self.pan_start_y = 0
         self.panning = False  # Add this flag to track panning state
 
+
     def display_image(self, pil_image, preserve_view=False):
-        """Display image with option to preserve current view
+        """Display image with option to preserve current view and center the image
 
         Args:
             pil_image: PIL Image to display
@@ -75,7 +76,7 @@ class ImageDisplay:
         if self.zoom_level != 1.0:
             new_width = int(display_image.width * self.zoom_level)
             new_height = int(display_image.height * self.zoom_level)
-            display_image = display_image.resize((new_width, new_height), resample = Image.Resampling.LANCZOS)
+            display_image = display_image.resize((new_width, new_height), resample=Image.Resampling.LANCZOS)
 
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(display_image)
@@ -101,6 +102,7 @@ class ImageDisplay:
             self.canvas.xview_moveto(visible_x[0])
             self.canvas.yview_moveto(visible_y[0])
 
+
         # Redraw ROI with updated scale and view
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             # Prevent recursion when showing quality map
@@ -110,6 +112,26 @@ class ImageDisplay:
 
         self.displayed_image = display_image  # Store the displayed image for future reference
         self.original_displayed_image = display_image.copy()
+
+
+    def show_quality_legend(self):
+        """Show the quality map legend panel in main window"""
+        if hasattr(self.main_window, 'show_legend_panel'):
+            try:
+                self.main_window.show_legend_panel()
+            except AttributeError:
+                # Legend panel not created yet, skip silently
+                pass
+
+
+    def hide_quality_legend(self):
+        """Hide the quality map legend panel in main window"""
+        if hasattr(self.main_window, 'hide_legend_panel'):
+            try:
+                self.main_window.hide_legend_panel()
+            except AttributeError:
+                # Legend panel not created yet, skip silently
+                pass
 
 
     def zoom(self, event):
@@ -154,7 +176,7 @@ class ImageDisplay:
         # Update photo image
         self.photo = ImageTk.PhotoImage(resized_image)
 
-        # Update canvas
+        # Update canvas with centering
         self.canvas.delete(self.image_item)
         self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
 
@@ -167,6 +189,10 @@ class ImageDisplay:
         # Redraw ROI if it exists
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             self.main_window.roi_handler.redraw_roi()
+
+        # Update legend position if showing
+        if hasattr(self, 'showing_quality_overlay') and self.showing_quality_overlay:
+            self.show_quality_legend()
 
         # Calculate new view center to maintain zoom point
         # Mouse position relative to visible canvas area
@@ -272,6 +298,9 @@ class ImageDisplay:
         if hasattr(self, 'showing_quality_overlay'):
             self.showing_quality_overlay = False
 
+        # Hide legend
+        self.hide_quality_legend()
+
         # Reset quality map button appearance if it exists
         if hasattr(self.main_window, 'quality_map_btn'):
             self.main_window.quality_map_btn.config(bg='#2ecc71')  # Green when inactive
@@ -290,7 +319,8 @@ class ImageDisplay:
         # Update status
         self.main_window.status_var.set("Display reset to original view")
         self.main_window.roi_btn.config(state='normal')
-        self.main_window.analyze_btn.config(state='disabled')# Disable ROI button
+        self.main_window.analyze_btn.config(state='disabled')
+
 
     def reset_cursor(self, event):
         """Reset cursor when Ctrl key is released."""
@@ -476,6 +506,7 @@ class ImageDisplay:
     def show_quality_map(self):
         """Display quality map as overlay on original image"""
         if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
+            print("DEBUG: No quality map data available")
             return
 
         from analysis.utils.image_processing import create_quality_map_visualization
@@ -595,84 +626,6 @@ class ImageDisplay:
             print(f"ROI: {roi} | Display scale: {self.display_scale} | Zoom: {self.zoom_level}")
 
 
-    def save_debug_visualizations(self):
-        """Generate and save debug visualizations for the current ROI"""
-        if self.main_window.original_image is None:
-            messagebox.showerror("Error", "No image loaded")
-            return
-
-        if not hasattr(self.main_window, 'roi_handler') or not self.main_window.roi_handler.roi_coords:
-            messagebox.showinfo("Info", "No ROI selected. Please select a region first.")
-            return
-
-        try:
-            # Import the visualization function
-            from analysis.utils.visualization import save_debug_visualizations, open_image_with_default_viewer
-
-            # Get current timestamp for unique output folder
-            import datetime
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-            # Generate debug outputs
-            debug_info = save_debug_visualizations(
-                self.main_window.original_image,
-                self.main_window.roi_handler.roi_coords,
-                output_dir="debug_output",
-                prefix=f"debug_{timestamp}",
-                save_intermediate_steps=True
-            )
-
-            # Show success message with path
-            output_dir = debug_info["output_directory"]
-            messagebox.showinfo("Debug Output",
-                                f"Debug visualizations saved to:\n{output_dir}\n\n"
-                                f"Total images saved: {len(debug_info['saved_images'])}")
-
-            # Open the composite visualization if available
-            if 'composite' in debug_info['saved_images']:
-                open_image_with_default_viewer(debug_info['saved_images']['composite'])
-
-            # Update status
-            self.main_window.status_var.set(f"Debug visualizations saved to {output_dir}")
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save debug visualizations: {str(e)}")
-
-    def debug_speckle_pattern(self):
-        """Debug speckle pattern in the selected ROI"""
-        if not hasattr(self.main_window, 'original_image') or self.main_window.original_image is None:
-            messagebox.showerror("Error", "No image loaded")
-            return
-
-        if not hasattr(self.main_window, 'roi_handler') or not self.main_window.roi_handler.roi_coords:
-            messagebox.showinfo("Info", "No ROI selected. Please select a region first.")
-            return
-
-        try:
-            # Import functionality from pattern_analyzer instead of roi_speckle_fix
-            from analysis.core.pattern_analyzer import analyze_roi_speckles
-
-            # Get ROI from the image
-            roi_coords = self.main_window.roi_handler.roi_coords
-            image = self.main_window.original_image
-
-            # Extract ROI
-            x1, y1, x2, y2 = roi_coords
-            roi_image = image[y1:y2, x1:x2]
-
-            # Run analysis
-            analysis_result = analyze_roi_speckles(roi_image)
-
-            # Show results
-            messagebox.showinfo("Speckle Analysis",
-                                f"Speckle count: {analysis_result['count']}\n"
-                                f"Average size: {analysis_result['avg_size']:.1f} pixels\n"
-                                f"Coverage: {analysis_result['coverage']:.1f}%\n"
-                                f"Quality score: {analysis_result['quality']:.1f}/100")
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to analyze speckles: {str(e)}")
-
     def update_quality_map(self, quality_map_data, quality_visualization=None):
         """Update the quality map data and optionally show the overlay."""
         self.quality_map_data = quality_map_data
@@ -680,55 +633,3 @@ class ImageDisplay:
         # If overlay is toggled on, show it
         if hasattr(self, 'showing_quality_overlay') and self.showing_quality_overlay:
             self.show_quality_map()
-
-    def show_enhanced_quality_map(self):
-        """Display enhanced quality map with VIC-2D style visualization"""
-        if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
-            return
-
-        # Store current view state
-        current_zoom = self.zoom_level
-        visible_x = self.canvas.xview()
-        visible_y = self.canvas.yview()
-
-        # Create enhanced quality map generator
-        from analysis.quality_map.map_generator import EnhancedDICQualityMap
-        quality_generator = EnhancedDICQualityMap()
-
-        # Get ROI coordinates if available
-        roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
-
-        # Generate enhanced quality visualization
-        results = quality_generator.generate_quality_map(
-            self.main_window.original_image,
-            roi_coords
-        )
-
-        # Convert to PIL image for display
-        from PIL import Image
-        visualization_pil = Image.fromarray(results['visualization'])
-
-        # Set flag to prevent recursion during display
-        self._updating_quality_map = True
-
-        # Display with preserved view
-        self.display_image(visualization_pil, preserve_view=True)
-
-        # Clear the flag
-        self._updating_quality_map = False
-
-        # Restore view state exactly
-        self.zoom_level = current_zoom
-        self.canvas.xview_moveto(visible_x[0])
-        self.canvas.yview_moveto(visible_y[0])
-
-        # Update state
-        self.showing_quality_overlay = True
-
-        # Print quality statistics
-        stats = results['statistics']
-        print(f"Enhanced Quality Map Generated:")
-        print(f"  Average Quality: {stats['mean_quality']:.3f}")
-        print(f"  Excellent Area: {stats['excellent_area_percent']:.1f}%")
-        print(f"  Good Area: {stats['good_area_percent']:.1f}%")
-        print(f"  Overall Score: {stats['overall_score']:.1f}/100")

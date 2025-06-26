@@ -109,18 +109,24 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
     Returns:
         numpy.ndarray: Image with quality map visualization
     """
-    if quality_map_data is None:
+    if quality_map_data is None or original_image is None:
+        return original_image
+
+    # Ensure both images are valid numpy arrays
+    if not isinstance(original_image, np.ndarray) or not isinstance(quality_map_data, np.ndarray):
+        print(f"Invalid input types: original_image={type(original_image)}, quality_map_data={type(quality_map_data)}")
         return original_image
 
     result = original_image.copy()
 
     # ROI coords must be in image coordinates!
-    if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0], (tuple, list)):
+    if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0],
+                                                                                                    (tuple, list)):
         # Ensure ROI coords are in image space (not canvas space)
-        # If any coordinate is > image size, assume it's in canvas space and convert
         h, w = result.shape[:2]
         max_x = max(pt[0] for pt in roi_coords)
         max_y = max(pt[1] for pt in roi_coords)
+
         # If any point is outside image, convert from canvas to image space
         if max_x > w or max_y > h:
             # Defensive: fallback to scaling if needed
@@ -130,26 +136,68 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
         else:
             roi_coords_img = [(int(round(x)), int(round(y))) for (x, y) in roi_coords]
 
+        # Create mask for ROI
         mask = np.zeros(result.shape[:2], dtype=np.uint8)
         pts = np.array(roi_coords_img, dtype=np.int32)
         cv2.fillPoly(mask, [pts], 255)
+
+        # Normalize quality map
         min_val, max_val = np.min(quality_map_data), np.max(quality_map_data)
         if max_val > min_val:
             normalized_map = ((quality_map_data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
         else:
             normalized_map = np.zeros_like(quality_map_data, dtype=np.uint8)
+
+        # Apply colormap
         colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
         colored_map = cv2.applyColorMap(normalized_map, colormap_const)
         colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
+
+        # Ensure dimensions match
+        if colored_map.shape[:2] != result.shape[:2]:
+            colored_map = cv2.resize(colored_map, (result.shape[1], result.shape[0]))
+
+        # Create blended result
         blended = result.copy()
         mask_bool = mask > 0
-        blended[mask_bool] = cv2.addWeighted(
-            result[mask_bool], 0.3, colored_map[mask_bool], 0.7, 0
-        )
-        result = blended
+
+        # Safe blending with proper error checking
+        try:
+            if np.any(mask_bool):
+                # Extract regions safely
+                original_region = result[mask_bool]
+                colored_region = colored_map[mask_bool]
+
+                # Ensure both regions have the same shape and are valid
+                if (original_region is not None and colored_region is not None and
+                        original_region.shape == colored_region.shape and
+                        original_region.size > 0 and colored_region.size > 0):
+
+                    # Perform blending
+                    blended_region = cv2.addWeighted(
+                        original_region.astype(np.uint8), 0.3,
+                        colored_region.astype(np.uint8), 0.7, 0
+                    )
+                    blended[mask_bool] = blended_region
+                else:
+                    print("Warning: Invalid regions for blending, using original image")
+
+            result = blended
+
+        except Exception as e:
+            print(f"Error in ROI blending: {e}")
+            # Fallback: apply quality map to entire image
+            from analysis.quality_map.map_generator import visualize_quality_map
+            result = visualize_quality_map(result, quality_map_data)
     else:
-        from analysis.quality_map.map_generator import visualize_quality_map
-        result = visualize_quality_map(result, quality_map_data)
+        # No ROI selected, apply to entire image
+        try:
+            from analysis.quality_map.map_generator import visualize_quality_map
+            result = visualize_quality_map(result, quality_map_data)
+        except Exception as e:
+            print(f"Error in full image visualization: {e}")
+            # Return original image if visualization fails
+            result = original_image
 
     return result
 
