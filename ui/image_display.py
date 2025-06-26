@@ -39,22 +39,24 @@ class ImageDisplay:
 
 
     def display_image(self, pil_image, preserve_view=False):
-        """Display image with option to preserve current view and center the image
+        """Display image with proper centering and no shifting to top-left
 
         Args:
             pil_image: PIL Image to display
             preserve_view: If True, maintain current zoom level and scroll position
         """
         # Store current view state if needed
-        if preserve_view and self.displayed_image:
+        if preserve_view and hasattr(self, 'displayed_image') and self.displayed_image:
             current_zoom = self.zoom_level
             visible_x = self.canvas.xview()
             visible_y = self.canvas.yview()
+            preserve_state = True
         else:
             # Default to reset view
             current_zoom = 1.0
-            visible_x = (0, 1)
-            visible_y = (0, 1)
+            visible_x = None
+            visible_y = None
+            preserve_state = False
 
         # Calculate scale
         display_image = pil_image.copy()
@@ -81,37 +83,99 @@ class ImageDisplay:
         # Convert to PhotoImage
         self.photo = ImageTk.PhotoImage(display_image)
 
-        # Clear canvas and display image
-        self.canvas.delete('all')
-        self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+        # Get canvas dimensions - force update first
+        self.canvas.update_idletasks()
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
 
-        # Update scroll region to match the image dimensions
-        self.canvas.configure(scrollregion=(0, 0, self.photo.width(), self.photo.height()))
+        # Use reasonable defaults if canvas not rendered yet
+        if canvas_width <= 1:
+            canvas_width = 600
+        if canvas_height <= 1:
+            canvas_height = 400
+
+        # Get image dimensions
+        img_width = self.photo.width()
+        img_height = self.photo.height()
+
+        print(f"Canvas: {canvas_width}x{canvas_height}, Image: {img_width}x{img_height}")
+
+        # Clear canvas
+        self.canvas.delete('all')
+
+        # Initialize offset values
+        self.image_offset_x = 0
+        self.image_offset_y = 0
+
+        # Determine positioning strategy
+        if img_width <= canvas_width and img_height <= canvas_height:
+            # Image fits entirely in canvas - center it
+            x_pos = (canvas_width - img_width) // 2
+            y_pos = (canvas_height - img_height) // 2
+
+            print(f"Image fits in canvas. Centering at: {x_pos}, {y_pos}")
+
+            # Set scroll region to canvas size (no scrolling needed)
+            self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
+
+            # Place image at calculated center position
+            self.image_item = self.canvas.create_image(x_pos, y_pos, anchor='nw', image=self.photo)
+
+            # Store offset for ROI calculations
+            self.image_offset_x = x_pos
+            self.image_offset_y = y_pos
+
+        else:
+            # Image is larger than canvas - enable scrolling
+            print(f"Image larger than canvas. Enabling scrolling.")
+
+            # Set scroll region to image size
+            self.canvas.configure(scrollregion=(0, 0, img_width, img_height))
+
+            # Place image at origin for scrolling
+            self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+
+            # No offset needed when scrolling
+            self.image_offset_x = 0
+            self.image_offset_y = 0
+
+        # Handle view positioning
+        if preserve_state and visible_x and visible_y:
+            # Restore previous view position
+            print("Restoring previous view position")
+            self.canvas.xview_moveto(visible_x[0])
+            self.canvas.yview_moveto(visible_y[0])
+        elif img_width > canvas_width or img_height > canvas_height:
+            # Center the view for large images (only if not preserving view)
+            print("Centering view for large image")
+            if img_width > canvas_width:
+                center_x = 0.5 - (canvas_width / img_width) / 2
+                center_x = max(0, min(1 - canvas_width / img_width, center_x))
+                self.canvas.xview_moveto(center_x)
+
+            if img_height > canvas_height:
+                center_y = 0.5 - (canvas_height / img_height) / 2
+                center_y = max(0, min(1 - canvas_height / img_height, center_y))
+                self.canvas.yview_moveto(center_y)
 
         # Update canvas.display_scale for ROI handler
         self.canvas.display_scale = self.display_scale * self.zoom_level
 
         # Store the displayed image
         self.displayed_image = display_image
+        if not hasattr(self, 'original_displayed_image'):
+            self.original_displayed_image = display_image.copy()
 
-        # Force canvas to update
+        # Force final canvas update
         self.canvas.update_idletasks()
 
-        # Restore previous view position if preserving view
-        if preserve_view:
-            self.canvas.xview_moveto(visible_x[0])
-            self.canvas.yview_moveto(visible_y[0])
-
+        print(f"Final image position: offset_x={self.image_offset_x}, offset_y={self.image_offset_y}")
 
         # Redraw ROI with updated scale and view
         if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler.roi_coords:
             # Prevent recursion when showing quality map
             if not hasattr(self, '_updating_quality_map') or not self._updating_quality_map:
                 self.main_window.roi_handler.redraw_roi()
-
-
-        self.displayed_image = display_image  # Store the displayed image for future reference
-        self.original_displayed_image = display_image.copy()
 
 
     def show_quality_legend(self):
@@ -509,28 +573,31 @@ class ImageDisplay:
             print("DEBUG: No quality map data available")
             return
 
-        from analysis.utils.image_processing import create_quality_map_visualization
-
-        # Store current view state
+        # Store current view state to maintain positioning
         current_zoom = self.zoom_level
         visible_x = self.canvas.xview()
         visible_y = self.canvas.yview()
 
-        # Always use the full original image for visualization
+        print(f"Storing view state: zoom={current_zoom}, x={visible_x}, y={visible_y}")
+
+        # FIXED: Use the corrected ROI visualization
         roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
-        # Pass display_scale=1.0 because roi_coords are in image coordinates
+
+        # Import the fixed function
+        from analysis.utils.image_processing import create_quality_map_visualization
+
         visualization = create_quality_map_visualization(
             self.main_window.original_image.copy(),
             self.quality_map_data,
             roi_coords,
-            1.0
+            1.0  # display_scale should be 1.0 for image coordinates
         )
 
         # Convert to PIL image for display
         from PIL import Image
         visualization_pil = Image.fromarray(visualization)
 
-        # Set a flag to prevent recursion during display
+        # Set flag to prevent recursion during display
         self._updating_quality_map = True
 
         # Display with preserved view
@@ -539,13 +606,16 @@ class ImageDisplay:
         # Clear the flag
         self._updating_quality_map = False
 
-        # Restore view state exactly
+        # Restore exact view state
         self.zoom_level = current_zoom
-        self.canvas.xview_moveto(visible_x[0])
-        self.canvas.yview_moveto(visible_y[0])
+        if visible_x and visible_y:
+            self.canvas.xview_moveto(visible_x[0])
+            self.canvas.yview_moveto(visible_y[0])
 
         # Update state
         self.showing_quality_overlay = True
+
+        print(f"Quality map displayed with preserved positioning")
 
 
     def sync_view_state(self):

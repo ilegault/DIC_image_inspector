@@ -3,8 +3,6 @@
 import cv2
 import numpy as np
 import warnings
-from scipy.signal import correlate2d
-from scipy.stats import entropy
 from analysis.core.subset_analyzer import determine_optimal_subset_size
 
 # Suppress specific overflow warnings for this module
@@ -14,21 +12,7 @@ warnings.filterwarnings('ignore', category=RuntimeWarning, message='overflow enc
 
 
 def generate_quality_map(image, colormap='dic_quality', alpha=0.7):
-    """Generate a DIC quality map and visualization of the input image
-
-    Uses sophisticated quality calculations internally but presents a clean interface.
-    All complex metrics are calculated for accurate quality assessment but hidden from user.
-
-    Args:
-        image: Input image (numpy array)
-        colormap: Colormap to use for visualization ('dic_quality', 'jet', 'viridis', etc.)
-        alpha: Blending factor for overlay (0.0-1.0)
-
-    Returns:
-        tuple: (quality_map, visualization) where:
-            - quality_map is the raw quality data (0-1 float values)
-            - visualization is the RGB visualization ready for display
-    """
+    """Generate a DIC quality map with better resolution and color variation"""
     # Convert to grayscale if needed
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -41,16 +25,37 @@ def generate_quality_map(image, colormap='dic_quality', alpha=0.7):
     else:
         rgb_image = image.copy()
 
-    # Determine optimal subset size for DIC analysis
+    # FIXED: Better subset size and step size for more detail
     subset_size = determine_optimal_subset_size(gray)
-    step_size = max(5, subset_size // 3)  # Good sampling density
+    # FIXED: Smaller step size for better color variation
+    step_size = max(3, subset_size // 4)  # More detailed sampling
 
     print(f"Generating quality map with subset size: {subset_size}, step: {step_size}")
 
-    # Generate quality map using sophisticated subset analysis (internal complexity)
+    # Generate quality map using sophisticated subset analysis
     quality_map = _analyze_subset_quality_advanced(gray, subset_size, step_size)
 
-    # Create clean visualization (simple output)
+    # DEBUG: Print quality map statistics
+    print(f"Quality map statistics:")
+    print(f"  Min: {np.min(quality_map):.4f}")
+    print(f"  Max: {np.max(quality_map):.4f}")
+    print(f"  Mean: {np.mean(quality_map):.4f}")
+    print(f"  Std: {np.std(quality_map):.4f}")
+
+    # Check distribution
+    excellent_pixels = np.sum(quality_map >= 0.75)
+    good_pixels = np.sum((quality_map >= 0.60) & (quality_map < 0.75))
+    acceptable_pixels = np.sum((quality_map >= 0.45) & (quality_map < 0.60))
+    poor_pixels = np.sum(quality_map < 0.45)
+    total_pixels = quality_map.size
+
+    print(f"Quality distribution:")
+    print(f"  Excellent (≥75%): {excellent_pixels / total_pixels * 100:.1f}%")
+    print(f"  Good (60-75%): {good_pixels / total_pixels * 100:.1f}%")
+    print(f"  Acceptable (45-60%): {acceptable_pixels / total_pixels * 100:.1f}%")
+    print(f"  Poor (<45%): {poor_pixels / total_pixels * 100:.1f}%")
+
+    # Create clean visualization
     visualization = _create_quality_visualization(rgb_image, quality_map, colormap, alpha)
 
     # Calculate average quality for minimal reporting
@@ -123,129 +128,177 @@ def _analyze_subset_quality_advanced(gray, subset_size=21, step_size=5):
 
 
 def _calculate_comprehensive_quality(subset, subset_gradients, full_image, x_pos, y_pos, subset_size):
-    """Calculate comprehensive quality score for a single subset
+    """
+    FIXED: Subset size independent quality calculation
 
-    This implements sophisticated DIC quality metrics internally:
-    1. Gradient content analysis (SSG, distribution)
-    2. Contrast measures (multiple types)
-    3. Uniqueness evaluation (correlation potential)
-    4. Noise level assessment
-    5. Pattern complexity (entropy, texture)
-    6. Feature characteristics
-
-    All complexity is hidden - just returns a single quality score.
+    The issue was that quality metrics were too sensitive to subset size.
+    Now normalized to be consistent across different subset sizes.
     """
 
-    # 1. GRADIENT ANALYSIS (35% weight) - Most critical for DIC
-    # Sum of Squared Gradients (SSG) - key DIC metric
+    # 1. GRADIENT ANALYSIS (60% weight) - FIXED: Size-normalized
+    # Sum of Squared Gradients (SSG) - normalized by subset area
     ssg = np.sum(subset_gradients ** 2)
     normalized_ssg = ssg / (subset.size * 255 ** 2)
+
+    # Mean Intensity Gradient (MIG) - most reliable metric per literature
+    mig = np.mean(subset_gradients)
+    normalized_mig = mig / 255.0
+
+    # FIXED: Size-independent gradient scoring
+    # Scale factors adjusted for subset size independence
+    mig_score = min(1.0, normalized_mig * 6)  # Reduced sensitivity
+    ssg_score = min(1.0, normalized_ssg * 200)  # Reduced sensitivity
 
     # Gradient distribution quality
     gradient_mean = np.mean(subset_gradients)
     gradient_std = np.std(subset_gradients)
     gradient_cv = gradient_std / (gradient_mean + 1e-6)
 
-    # Gradient score combines magnitude and distribution
-    if normalized_ssg < 0.001:
-        gradient_score = 0
-    elif normalized_ssg > 0.1:
-        gradient_score = 1.0
+    # Size-independent distribution scoring
+    if 0.5 <= gradient_cv <= 2.0:
+        distribution_bonus = 1.0
+    elif 0.3 <= gradient_cv <= 3.0:
+        distribution_bonus = 0.9
     else:
-        gradient_score = np.log10(normalized_ssg * 1000) / 2
+        distribution_bonus = 0.8
 
-    # Penalize poor gradient distribution
-    if gradient_cv < 0.5:  # Too uniform
-        gradient_score *= 0.8
-    elif gradient_cv > 2.5:  # Too chaotic
-        gradient_score *= 0.7
+    # Combined gradient score
+    gradient_score = (mig_score * 0.7 + ssg_score * 0.3) * distribution_bonus
 
-    # 2. CONTRAST ANALYSIS (20% weight)
+    # 2. SPECKLE MORPHOLOGY ANALYSIS (20% weight) - FIXED: Size-normalized
+    morphology_score = _analyze_speckle_morphology(subset, subset_size)
+
+    # 3. CONTRAST ANALYSIS (10% weight) - Already size-independent
     subset_std = np.std(subset)
     subset_mean = np.mean(subset)
-
-    # Convert to float to prevent overflow and use numpy functions
-    subset_float = subset.astype(np.float64)
-    min_val = np.min(subset_float)
-    max_val = np.max(subset_float)
-
-    # Multiple contrast measures with overflow protection
     rms_contrast = subset_std / (subset_mean + 1e-6)
+    contrast_score = min(1.0, rms_contrast / 0.25)  # Slightly adjusted threshold
 
-    # Robust Michelson contrast calculation using numpy operations
-    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
-        if np.isclose(max_val, min_val, atol=1e-10):
-            michelson_contrast = 0.0
-        else:
-            # Calculate using numpy operations with proper handling
-            numerator = max_val - min_val
-            denominator = max_val + min_val
-
-            if denominator > 1e-10 and np.isfinite(denominator):
-                michelson_contrast = numerator / denominator
-            else:
-                michelson_contrast = 0.0
-
-    # Ensure michelson_contrast is valid and within bounds
-    if not np.isfinite(michelson_contrast):
-        michelson_contrast = 0.0
-    michelson_contrast = np.clip(michelson_contrast, 0.0, 1.0)
-
-    # Combined contrast score
-    contrast_score = min(1.0, rms_contrast / 0.4) * 0.7 + min(1.0, michelson_contrast) * 0.3
-
-    # 3. UNIQUENESS ANALYSIS (25% weight) - Critical for DIC correlation
-    uniqueness_score = _calculate_subset_uniqueness(subset, full_image, x_pos, y_pos, subset_size)
-
-    # 4. PATTERN COMPLEXITY (10% weight)
-    # Entropy analysis
-    hist, _ = np.histogram(subset, bins=32, range=(0, 256), density=True)
-    pattern_entropy = entropy(hist[hist > 0]) if np.any(hist > 0) else 0
-    entropy_score = min(1.0, pattern_entropy / 4.0)  # Normalize
-
-    # Local texture analysis
-    if subset.shape[0] > 5 and subset.shape[1] > 5:
-        # Calculate local binary pattern-like features
-        center = subset[1:-1, 1:-1]
-        neighbors = [
-            subset[:-2, :-2], subset[:-2, 1:-1], subset[:-2, 2:],
-            subset[1:-1, :-2], subset[1:-1, 2:],
-            subset[2:, :-2], subset[2:, 1:-1], subset[2:, 2:]
-        ]
-
-        # Count texture variations
-        texture_variations = 0
-        for neighbor in neighbors:
-            texture_variations += np.sum(neighbor != center)
-
-        texture_score = min(1.0, texture_variations / (center.size * 4))
-    else:
-        texture_score = 0.5
-
-    complexity_score = entropy_score * 0.6 + texture_score * 0.4
-
-    # 5. NOISE ASSESSMENT (10% weight)
-    # Estimate noise using median filtering
-    if subset.shape[0] > 3 and subset.shape[1] > 3:
-        median_filtered = cv2.medianBlur(subset, 3)
-        noise = subset.astype(float) - median_filtered.astype(float)
-        noise_std = np.std(noise)
-        signal_std = np.std(median_filtered)
-        snr = signal_std / (noise_std + 1e-6)
-        noise_score = min(1.0, snr / 25.0)  # Good SNR > 25
-    else:
-        noise_score = 0.5
+    # 4. UNIQUENESS ANALYSIS (10% weight) - FIXED: Size-compensated
+    uniqueness_score = _calculate_size_independent_uniqueness(subset, subset_size)
 
     # COMBINE ALL METRICS INTO FINAL QUALITY SCORE
     overall_quality = (
-            gradient_score * 0.35 +  # Gradient content
-            contrast_score * 0.20 +  # Contrast quality
-            uniqueness_score * 0.25 +  # Correlation potential
-            complexity_score * 0.10 +  # Pattern complexity
-            noise_score * 0.10  # Noise level
+            gradient_score * 0.60 +  # Gradient content (DOMINANT)
+            morphology_score * 0.20 +  # Speckle morphology
+            contrast_score * 0.10 +  # Basic contrast
+            uniqueness_score * 0.10  # Pattern uniqueness
     )
 
     return max(0.0, min(1.0, overall_quality))
+
+
+def _analyze_speckle_morphology(subset, subset_size):
+    """
+    FIXED: Size-independent speckle morphology analysis
+
+    Now accounts for subset size to give consistent results
+    regardless of the subset dimensions.
+    """
+    # Create binary image using adaptive thresholding
+    # Adjust block size based on subset size
+    block_size = max(3, min(subset_size // 3, 15))
+    if block_size % 2 == 0:
+        block_size += 1
+
+    binary = cv2.adaptiveThreshold(
+        subset, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY, block_size, 2
+    )
+
+    # Find connected components (speckles)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+
+    if num_labels < 2:  # No meaningful speckles
+        return 0.3  # Neutral score, not penalizing
+
+    # Analyze speckle sizes (skip background at index 0)
+    areas = stats[1:, cv2.CC_STAT_AREA]
+
+    # FIXED: Size-relative speckle filtering
+    # Minimum speckle should be ~0.5% of subset area
+    min_speckle_area = max(2, int(subset_size * subset_size * 0.005))
+    # Maximum speckle should be ~5% of subset area
+    max_speckle_area = int(subset_size * subset_size * 0.05)
+
+    valid_areas = areas[(areas >= min_speckle_area) & (areas <= max_speckle_area)]
+
+    if len(valid_areas) == 0:
+        return 0.4  # Some speckles exist but wrong size
+
+    # Calculate size-normalized speckle characteristics
+    avg_speckle_diameter = np.sqrt(np.mean(valid_areas) / np.pi) * 2
+    coverage = np.sum(valid_areas) / (subset.shape[0] * subset.shape[1])
+    speckle_count = len(valid_areas)
+
+    # FIXED: Size-relative scoring
+    # Optimal speckle diameter: 2-8% of subset size
+    relative_speckle_size = avg_speckle_diameter / subset_size
+    if 0.02 <= relative_speckle_size <= 0.08:
+        size_score = 1.0
+    elif 0.015 <= relative_speckle_size <= 0.12:
+        size_score = 0.9
+    elif 0.01 <= relative_speckle_size <= 0.15:
+        size_score = 0.7
+    else:
+        size_score = 0.5
+
+    # Coverage scoring (30-70% is good for most DIC)
+    if 0.25 <= coverage <= 0.70:
+        coverage_score = 1.0
+    elif 0.15 <= coverage <= 0.80:
+        coverage_score = 0.9
+    else:
+        coverage_score = 0.6
+
+    # Density scoring - relative to subset size
+    expected_speckles = subset_size * subset_size / (avg_speckle_diameter ** 2 * 4)
+    density_ratio = speckle_count / (expected_speckles + 1e-6)
+    if 0.3 <= density_ratio <= 3.0:
+        density_score = 1.0
+    elif 0.1 <= density_ratio <= 5.0:
+        density_score = 0.8
+    else:
+        density_score = 0.6
+
+    return size_score * 0.5 + coverage_score * 0.3 + density_score * 0.2
+
+
+def _calculate_size_independent_uniqueness(subset, subset_size):
+    """
+    FIXED: Size-independent uniqueness calculation
+
+    Accounts for subset size to provide consistent uniqueness scoring.
+    """
+    # Calculate gradients
+    grad_x = cv2.Sobel(subset, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(subset, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+
+    # Size-normalized feature counting
+    total_pixels = subset_size * subset_size
+
+    # Directional features (good for correlation)
+    horizontal_features = np.sum(np.abs(grad_x) > np.abs(grad_y))
+    vertical_features = np.sum(np.abs(grad_y) > np.abs(grad_x))
+    total_features = horizontal_features + vertical_features
+
+    if total_features == 0:
+        return 0.3
+
+    # Balance of directional features
+    balance = min(horizontal_features, vertical_features) / total_features
+
+    # Size-normalized gradient variance
+    gradient_variance = np.var(gradient_magnitude)
+    # Normalize by subset size to make size-independent
+    normalized_variance = min(1.0, gradient_variance / (subset_size * 10))
+
+    # Feature density relative to subset size
+    feature_density = total_features / total_pixels
+    density_score = min(1.0, feature_density * 3)  # Reasonable density
+
+    return balance * 0.4 + normalized_variance * 0.4 + density_score * 0.2
 
 
 def _calculate_subset_uniqueness(subset, full_image, x_pos, y_pos, subset_size):
@@ -327,10 +380,7 @@ def _calculate_subset_uniqueness(subset, full_image, x_pos, y_pos, subset_size):
 
 
 def _create_quality_visualization(base_image, quality_map, colormap_name='dic_quality', alpha=0.7):
-    """Create clean quality map visualization
-
-    Simple interface despite complex calculations behind the scenes.
-    """
+    """Create clean quality map visualization with proper debugging"""
     if quality_map is None:
         return base_image
 
@@ -340,14 +390,16 @@ def _create_quality_visualization(base_image, quality_map, colormap_name='dic_qu
     else:
         rgb_image = base_image.copy()
 
-    # Scale quality map to 0-255 for visualization
-    normalized_map = (quality_map * 255).astype(np.uint8)
+    # DEBUG: Check quality map before processing
+    print(f"Quality map before colormap: min={quality_map.min():.4f}, max={quality_map.max():.4f}")
 
-    # Apply colormap
+    # Apply colormap - Handle data scaling properly!
     if colormap_name == 'dic_quality':
-        colored_map = _apply_dic_colormap(normalized_map)
+        # Quality map should be 0-1, pass directly to colormap
+        colored_map = _apply_dic_colormap(quality_map)  # Pass 0-1 data directly
     else:
-        # Use OpenCV colormap
+        # For OpenCV colormaps, scale to 0-255
+        normalized_map = (quality_map * 255).astype(np.uint8)
         colormap_const = getattr(cv2, f'COLORMAP_{colormap_name.upper()}', cv2.COLORMAP_JET)
         colored_map = cv2.applyColorMap(normalized_map, colormap_const)
         colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
@@ -363,52 +415,61 @@ def _create_quality_visualization(base_image, quality_map, colormap_name='dic_qu
 
 
 def _apply_dic_colormap(quality_map):
-    """Apply professional DIC-style colormap
-
-    Red (poor) -> Orange (marginal) -> Yellow (acceptable) -> Green (good) -> Blue (excellent)
+    """
+    IMPROVED: Better color variation for DIC quality visualization
     """
     h, w = quality_map.shape
     colored = np.zeros((h, w, 3), dtype=np.uint8)
 
-    # Normalize to 0-1
-    normalized = quality_map.astype(float) / 255.0
+    # Ensure quality_map is 0-1 range
+    if quality_map.max() > 1.0:
+        normalized = quality_map.astype(float) / 255.0
+        print(f"WARNING: Quality map had values > 1, normalizing from 0-255 to 0-1")
+    else:
+        normalized = quality_map.astype(float)
 
-    # Define quality-based color transitions
-    # Poor quality (0.0-0.2): Dark Red to Red
-    mask_very_poor = normalized <= 0.2
-    colored[mask_very_poor] = [128, 0, 0]  # Dark red
+    normalized = np.clip(normalized, 0, 1)
+    print(f"Colormap input range: {normalized.min():.4f} - {normalized.max():.4f}")
 
-    # Poor to marginal (0.2-0.4): Red to Orange
-    mask_poor = (normalized > 0.2) & (normalized <= 0.4)
-    if np.any(mask_poor):
-        transition = np.clip((normalized[mask_poor] - 0.2) / 0.2, 0, 1)
-        colored[mask_poor, 0] = np.clip(128 + transition * 127, 0, 255).astype(np.uint8)  # Red increases
-        colored[mask_poor, 1] = np.clip(transition * 165, 0, 255).astype(np.uint8)  # Orange component
-        colored[mask_poor, 2] = 0
+    # IMPROVED: More granular color transitions for better variation
 
-    # Marginal to acceptable (0.4-0.6): Orange to Yellow
-    mask_marginal = (normalized > 0.4) & (normalized <= 0.6)
-    if np.any(mask_marginal):
-        transition = np.clip((normalized[mask_marginal] - 0.4) / 0.2, 0, 1)
-        colored[mask_marginal, 0] = 255  # Red stays high
-        colored[mask_marginal, 1] = np.clip(165 + transition * 90, 0, 255).astype(np.uint8)  # Green increases
-        colored[mask_marginal, 2] = 0
+    # Poor quality (0.0-0.10): Dark Red
+    mask_very_poor = normalized <= 0.10
+    colored[mask_very_poor] = [60, 0, 0]  # Very dark red
 
-    # Acceptable to good (0.6-0.8): Yellow to Green
-    mask_acceptable = (normalized > 0.6) & (normalized <= 0.8)
-    if np.any(mask_acceptable):
-        transition = np.clip((normalized[mask_acceptable] - 0.6) / 0.2, 0, 1)
-        colored[mask_acceptable, 0] = np.clip(255 * (1 - transition), 0, 255).astype(np.uint8)  # Red decreases
-        colored[mask_acceptable, 1] = 255  # Green at max
-        colored[mask_acceptable, 2] = 0
+    # Challenging (0.10-0.25): Red
+    mask_challenging = (normalized > 0.10) & (normalized <= 0.25)
+    colored[mask_challenging] = [200, 0, 0]  # Red
 
-    # Good to excellent (0.8-1.0): Green to Blue
-    mask_good = normalized > 0.8
-    if np.any(mask_good):
-        transition = np.clip((normalized[mask_good] - 0.8) / 0.2, 0, 1)  # Ensure 0-1 range
-        colored[mask_good, 0] = 0
-        colored[mask_good, 1] = np.clip(255 * (1 - transition), 0, 255).astype(np.uint8)  # Green decreases
-        colored[mask_good, 2] = np.clip(transition * 255, 0, 255).astype(np.uint8)  # Blue increases
+    # Marginal (0.25-0.40): Orange-Red
+    mask_marginal = (normalized > 0.25) & (normalized <= 0.40)
+    colored[mask_marginal] = [255, 100, 0]  # Orange-red
+
+    # Acceptable (0.40-0.55): Orange
+    mask_acceptable = (normalized > 0.40) & (normalized <= 0.55)
+    colored[mask_acceptable] = [255, 165, 0]  # Orange
+
+    # Good (0.55-0.70): Yellow
+    mask_good = (normalized > 0.55) & (normalized <= 0.70)
+    colored[mask_good] = [255, 255, 0]  # Yellow
+
+    # Very Good (0.70-0.85): Green
+    mask_very_good = (normalized > 0.70) & (normalized <= 0.85)
+    colored[mask_very_good] = [0, 255, 0]  # Green
+
+    # Excellent (0.85-1.0): Blue
+    mask_excellent = normalized > 0.85
+    colored[mask_excellent] = [0, 120, 255]  # Blue
+
+    # DEBUG: Print color distribution
+    print(f"Color mapping results:")
+    print(f"  Dark Red (≤10%): {np.sum(mask_very_poor)} pixels")
+    print(f"  Red (10-25%): {np.sum(mask_challenging)} pixels")
+    print(f"  Orange-Red (25-40%): {np.sum(mask_marginal)} pixels")
+    print(f"  Orange (40-55%): {np.sum(mask_acceptable)} pixels")
+    print(f"  Yellow (55-70%): {np.sum(mask_good)} pixels")
+    print(f"  Green (70-85%): {np.sum(mask_very_good)} pixels")
+    print(f"  Blue (≥85%): {np.sum(mask_excellent)} pixels")
 
     return colored
 
@@ -421,51 +482,34 @@ def visualize_quality_map(base_image, quality_map, colormap_name='dic_quality', 
     return _create_quality_visualization(base_image, quality_map, colormap_name, alpha)
 
 
-def create_quality_map_visualization(original_image, quality_map_data, roi_coords=None):
-    """Create quality map visualization for ROI or full image
 
-    Clean interface function that handles ROI visualization.
-    All the sophisticated quality calculations are done internally.
-    """
-    if quality_map_data is None:
-        return original_image
 
-    # Make a copy to avoid modifying the original
-    result = original_image.copy()
 
-    # Apply quality map
-    if roi_coords:
-        x1, y1, x2, y2 = roi_coords
 
-        # Create colored version of the quality map
-        quality_normalized = (quality_map_data * 255).astype(np.uint8)
-        colored_map = _apply_dic_colormap(quality_normalized)
 
-        # Extract the ROI region
-        roi_height, roi_width = y2 - y1, x2 - x1
 
-        # Make sure quality map has the right dimensions for the ROI
-        if colored_map.shape[:2] != (roi_height, roi_width):
-            colored_map = cv2.resize(colored_map, (roi_width, roi_height))
 
-        # Create blended overlay just for the ROI region
-        roi_overlay = cv2.addWeighted(
-            result[y1:y2, x1:x2], 0.3,  # Keep 30% of original
-            colored_map, 0.7,  # Add 70% of quality map
-            0
-        )
 
-        # Apply the overlay only to the ROI region
-        result[y1:y2, x1:x2] = roi_overlay
-    else:
-        # No ROI selected, apply to entire image
-        quality_normalized = (quality_map_data * 255).astype(np.uint8)
-        colored_map = _apply_dic_colormap(quality_normalized)
 
-        # Resize if needed
-        if colored_map.shape[:2] != result.shape[:2]:
-            colored_map = cv2.resize(colored_map, (result.shape[1], result.shape[0]))
 
-        result = cv2.addWeighted(result, 0.3, colored_map, 0.7, 0)
 
-    return result
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

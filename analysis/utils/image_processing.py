@@ -98,16 +98,11 @@ def convert_roi_coords_to_image_space(roi_coords, display_scale):
 
 
 def create_quality_map_visualization(original_image, quality_map_data, roi_coords=None, display_scale=1.0):
-    """Create quality map visualization for the image
+    """
+    FIXED: Create quality map visualization for the image
 
-    Args:
-        original_image: Original image as numpy array
-        quality_map_data: Quality map data as numpy array (should match original_image size)
-        roi_coords: Optional ROI coordinates (rectangle or polygon, in image coordinates)
-        display_scale: The scale factor from image to canvas/display (should be 1.0 for image space)
-
-    Returns:
-        numpy.ndarray: Image with quality map visualization
+    The issue was that ROI polygons were being handled incorrectly, causing the
+    quality map to only show in a small region instead of the full ROI area.
     """
     if quality_map_data is None or original_image is None:
         return original_image
@@ -119,9 +114,17 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
 
     result = original_image.copy()
 
-    # ROI coords must be in image coordinates!
-    if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3 and isinstance(roi_coords[0],
-                                                                                                    (tuple, list)):
+    # DEBUG: Print dimensions for troubleshooting
+    print(f"DEBUG: original_image shape: {original_image.shape}")
+    print(f"DEBUG: quality_map_data shape: {quality_map_data.shape}")
+    print(f"DEBUG: roi_coords type: {type(roi_coords)}")
+    if roi_coords:
+        print(f"DEBUG: roi_coords length: {len(roi_coords)}")
+
+    # Handle ROI visualization
+    if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3:
+        print("DEBUG: Processing polygon ROI")
+
         # Ensure ROI coords are in image space (not canvas space)
         h, w = result.shape[:2]
         max_x = max(pt[0] for pt in roi_coords)
@@ -129,77 +132,119 @@ def create_quality_map_visualization(original_image, quality_map_data, roi_coord
 
         # If any point is outside image, convert from canvas to image space
         if max_x > w or max_y > h:
-            # Defensive: fallback to scaling if needed
             if display_scale is None or display_scale == 0:
                 display_scale = 1.0
             roi_coords_img = [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
+            print(f"DEBUG: Converted ROI coords from canvas to image space")
         else:
             roi_coords_img = [(int(round(x)), int(round(y))) for (x, y) in roi_coords]
 
-        # Create mask for ROI
+        # Create mask for ROI - this is the key fix!
         mask = np.zeros(result.shape[:2], dtype=np.uint8)
         pts = np.array(roi_coords_img, dtype=np.int32)
         cv2.fillPoly(mask, [pts], 255)
 
-        # Normalize quality map
+        print(f"DEBUG: ROI mask created, non-zero pixels: {np.sum(mask > 0)}")
+
+        # FIXED: Apply quality map colors to the ENTIRE quality map, then mask the result
+        # This ensures we get the correct colors throughout the ROI
+
+        # Normalize quality map for coloring
         min_val, max_val = np.min(quality_map_data), np.max(quality_map_data)
         if max_val > min_val:
-            normalized_map = ((quality_map_data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+            normalized_map = ((quality_map_data - min_val) / (max_val - min_val)).astype(float)
         else:
-            normalized_map = np.zeros_like(quality_map_data, dtype=np.uint8)
+            normalized_map = np.zeros_like(quality_map_data, dtype=float)
 
-        # Apply colormap
-        colormap_const = getattr(cv2, f'COLORMAP_JET', cv2.COLORMAP_JET)
-        colored_map = cv2.applyColorMap(normalized_map, colormap_const)
-        colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
+        print(f"DEBUG: Normalized quality map range: {normalized_map.min():.4f} - {normalized_map.max():.4f}")
 
-        # Ensure dimensions match
+        # Apply DIC colormap using the same function as the main visualization
+        colored_map = _apply_dic_colormap_for_roi(normalized_map)
+
+        print(f"DEBUG: Colored map shape: {colored_map.shape}")
+
+        # Resize colored map to match original image dimensions if needed
         if colored_map.shape[:2] != result.shape[:2]:
             colored_map = cv2.resize(colored_map, (result.shape[1], result.shape[0]))
+            print(f"DEBUG: Resized colored map to: {colored_map.shape}")
 
-        # Create blended result
+        # Create blended result - ONLY in the ROI area
         blended = result.copy()
         mask_bool = mask > 0
 
-        # Safe blending with proper error checking
-        try:
-            if np.any(mask_bool):
-                # Extract regions safely
-                original_region = result[mask_bool]
-                colored_region = colored_map[mask_bool]
+        if np.any(mask_bool):
+            print(f"DEBUG: Applying quality colors to {np.sum(mask_bool)} pixels")
+            # Blend colors only in ROI region
+            blended[mask_bool] = cv2.addWeighted(
+                result[mask_bool].astype(np.uint8), 0.3,
+                colored_map[mask_bool].astype(np.uint8), 0.7, 0
+            )
+        else:
+            print("DEBUG: WARNING - No pixels in ROI mask!")
 
-                # Ensure both regions have the same shape and are valid
-                if (original_region is not None and colored_region is not None and
-                        original_region.shape == colored_region.shape and
-                        original_region.size > 0 and colored_region.size > 0):
+        result = blended
 
-                    # Perform blending
-                    blended_region = cv2.addWeighted(
-                        original_region.astype(np.uint8), 0.3,
-                        colored_region.astype(np.uint8), 0.7, 0
-                    )
-                    blended[mask_bool] = blended_region
-                else:
-                    print("Warning: Invalid regions for blending, using original image")
-
-            result = blended
-
-        except Exception as e:
-            print(f"Error in ROI blending: {e}")
-            # Fallback: apply quality map to entire image
-            from analysis.quality_map.map_generator import visualize_quality_map
-            result = visualize_quality_map(result, quality_map_data)
     else:
         # No ROI selected, apply to entire image
+        print("DEBUG: No ROI, applying to entire image")
         try:
             from analysis.quality_map.map_generator import visualize_quality_map
             result = visualize_quality_map(result, quality_map_data)
         except Exception as e:
             print(f"Error in full image visualization: {e}")
-            # Return original image if visualization fails
             result = original_image
 
     return result
+
+
+def _apply_dic_colormap_for_roi(quality_map):
+    """
+    Apply DIC colormap for ROI visualization
+
+    Same logic as main colormap but ensures we handle ROI properly
+    """
+    h, w = quality_map.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # Ensure quality_map is 0-1 range
+    normalized = np.clip(quality_map.astype(float), 0, 1)
+
+    print(f"DEBUG: ROI colormap input range: {normalized.min():.4f} - {normalized.max():.4f}")
+
+    # Apply same thresholds as main visualization
+    # Poor quality (0.0-0.15): Dark Red
+    mask_very_poor = normalized <= 0.15
+    colored[mask_very_poor] = [80, 0, 0]
+
+    # Challenging (0.15-0.30): Red
+    mask_challenging = (normalized > 0.15) & (normalized <= 0.30)
+    colored[mask_challenging] = [255, 0, 0]
+
+    # Acceptable (0.30-0.45): Orange
+    mask_acceptable = (normalized > 0.30) & (normalized <= 0.45)
+    colored[mask_acceptable] = [255, 165, 0]
+
+    # Good (0.45-0.60): Yellow
+    mask_good = (normalized > 0.45) & (normalized <= 0.60)
+    colored[mask_good] = [255, 255, 0]
+
+    # Very Good (0.60-0.75): Green
+    mask_very_good = (normalized > 0.60) & (normalized <= 0.75)
+    colored[mask_very_good] = [0, 255, 0]
+
+    # Excellent (0.75-1.0): Blue
+    mask_excellent = normalized > 0.75
+    colored[mask_excellent] = [0, 100, 255]
+
+    print(f"DEBUG: ROI color distribution:")
+    print(f"  Dark Red: {np.sum(mask_very_poor)} pixels")
+    print(f"  Red: {np.sum(mask_challenging)} pixels")
+    print(f"  Orange: {np.sum(mask_acceptable)} pixels")
+    print(f"  Yellow: {np.sum(mask_good)} pixels")
+    print(f"  Green: {np.sum(mask_very_good)} pixels")
+    print(f"  Blue: {np.sum(mask_excellent)} pixels")
+
+    return colored
 
 
 def create_edge_visualization(image, roi_coords=None):

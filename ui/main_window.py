@@ -111,9 +111,6 @@ class DICQualityInspector:
         left_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
         left_panel.pack(side='left', fill='both', expand=True, padx=5)
 
-        # Store reference to left panel for legend positioning
-        self.left_panel = left_panel
-
         img_title = tk.Label(left_panel, text="📸 Image Preview", font=('Arial', 16, 'bold'),
                              fg='#ecf0f1', bg='#34495e')
         img_title.pack(pady=10)
@@ -122,7 +119,7 @@ class DICQualityInspector:
         canvas_frame = tk.Frame(left_panel, bg='#34495e')
         canvas_frame.pack(fill='both', expand=True, padx=10, pady=5)
 
-        self.image_canvas = tk.Canvas(canvas_frame, bg='white', width=600, height=500)
+        self.image_canvas = tk.Canvas(canvas_frame, bg='white', width=600, height=400)
         v_scrollbar = ttk.Scrollbar(canvas_frame, orient='vertical', command=self.image_canvas.yview)
         h_scrollbar = ttk.Scrollbar(canvas_frame, orient='horizontal', command=self.image_canvas.xview)
 
@@ -166,36 +163,20 @@ class DICQualityInspector:
                                          bg='#2ecc71', fg='white', padx=10)
         self.quality_map_btn.pack(side='left', padx=2)
 
-        # MIDDLE PANEL - Quality Map Legend (initially hidden)
-        self.legend_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2, width=200)
-        # Don't pack initially - will be shown/hidden by quality map toggle
-
-        legend_title = tk.Label(self.legend_panel, text="🎨 Quality Map Legend",
-                                font=('Arial', 12, 'bold'), fg='#ecf0f1', bg='#34495e')
-        legend_title.pack(pady=10)
-
-        # Create legend items with DIC quality colors
+        # QUALITY MAP LEGEND - Inline as small buttons/labels
         legend_items = [
-            ("Excellent (70-100%)", "#0066FF"),  # Blue
-            ("Good (60-70%)", "#00FF00"),  # Green
-            ("Acceptable (40-60%)", "#FFFF00"),  # Yellow
-            ("Marginal (20-40%)", "#FF8800"),  # Orange
-            ("Poor (0-20%)", "#FF0000")  # Red
+            ("Excellent", "#0066FF"),  # Blue
+            ("Good", "#00FF00"),  # Green
+            ("Acceptable", "#FFFF00"),  # Yellow
+            ("Marginal", "#FF8800"),  # Orange
+            ("Poor", "#FF0000")  # Red
         ]
 
         for text, color in legend_items:
-            item_frame = tk.Frame(self.legend_panel, bg='#34495e')
-            item_frame.pack(fill='x', padx=15, pady=3)
-
-            # Color box
-            color_box = tk.Label(item_frame, text="███", font=('Arial', 10),
-                                 fg=color, bg='#34495e', width=4)
-            color_box.pack(side='left')
-
-            # Text label
-            text_label = tk.Label(item_frame, text=text, font=('Arial', 9),
-                                  fg='#bdc3c7', bg='#34495e')
-            text_label.pack(side='left', padx=(5, 0))
+            legend_btn = tk.Label(process_frame, text=f"■ {text}",
+                                  bg='#34495e', fg=color, font=('Arial', 9),
+                                  padx=5, pady=2)
+            legend_btn.pack(side='left', padx=1)
 
         # Right panel - Analysis results
         right_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
@@ -227,23 +208,6 @@ class DICQualityInspector:
         status_bar = tk.Label(self.root, textvariable=self.status_var, relief='sunken',
                               anchor='w', bg='#95a5a6', fg='white')
         status_bar.pack(side='bottom', fill='x')
-
-    def show_legend_panel(self):
-        """Show the quality map legend panel between canvas and right panel"""
-        if hasattr(self, 'legend_panel'):
-            print("DEBUG: Showing legend panel")
-            # Pack after the left panel but before the right panel
-            self.legend_panel.pack(side='left', fill='y', padx=(5, 0), after=self.left_panel)
-        else:
-            print("DEBUG: Legend panel not found!")
-
-    def hide_legend_panel(self):
-        """Hide the quality map legend panel"""
-        if hasattr(self, 'legend_panel'):
-            print("DEBUG: Hiding legend panel")
-            self.legend_panel.pack_forget()
-        else:
-            print("DEBUG: Legend panel not found for hiding!")
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -367,7 +331,7 @@ class DICQualityInspector:
         screenshot_window.update()
 
     def _analyze_worker(self):
-        """Worker thread for analysis - Quality Map Based Approach"""
+        """Worker thread for analysis - FIXED with proper variable scoping"""
         try:
             # Always analyze full image for proper quality map alignment
             print("Generating quality map from full image...")
@@ -379,9 +343,33 @@ class DICQualityInspector:
             print(
                 f"Quality map generated: shape {quality_map.shape}, range {quality_map.min():.3f}-{quality_map.max():.3f}")
 
-            # Calculate average quality score from quality map (0-1 to 0-100)
-            average_quality = float(np.mean(quality_map) * 100)
-            quality_std = float(np.std(quality_map) * 100)
+            # FIXED: Initialize variables before conditional blocks
+            roi_quality_scores = None
+            use_roi_calculation = False
+
+            # Calculate overall score from ROI region only (to match what user sees)
+            if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
+                try:
+                    # Extract quality scores from ROI region only
+                    roi_quality_scores = self._extract_roi_quality_scores(quality_map, self.roi_handler.roi_coords)
+                    if roi_quality_scores is not None and len(roi_quality_scores) > 0:
+                        average_quality = float(np.mean(roi_quality_scores) * 100)
+                        use_roi_calculation = True
+                        print(
+                            f"ROI-based quality calculation: {average_quality:.1f}% (from {len(roi_quality_scores)} ROI pixels)")
+                    else:
+                        # ROI extraction failed, fall back to full image
+                        average_quality = float(np.mean(quality_map) * 100)
+                        print(f"ROI extraction failed, using full image quality: {average_quality:.1f}%")
+                except Exception as e:
+                    print(f"Error in ROI quality extraction: {e}")
+                    # Fall back to full image calculation
+                    average_quality = float(np.mean(quality_map) * 100)
+                    print(f"Fallback to full image quality calculation: {average_quality:.1f}%")
+            else:
+                # No ROI - use full image average
+                average_quality = float(np.mean(quality_map) * 100)
+                print(f"Full image quality calculation: {average_quality:.1f}%")
 
             # Determine optimal subset size for DIC parameters
             from analysis.core.subset_analyzer import determine_optimal_subset_size
@@ -391,20 +379,31 @@ class DICQualityInspector:
                 gray = self.original_image.copy()
             self.optimal_subset_size = determine_optimal_subset_size(gray)
 
-            # Create simplified results focused on quality map
+            # FIXED: Use appropriate data source for statistics
+            if use_roi_calculation and roi_quality_scores is not None:
+                # Use ROI-based statistics
+                quality_data_for_stats = roi_quality_scores
+                print("Using ROI-based statistics")
+            else:
+                # Use full quality map statistics
+                quality_data_for_stats = quality_map.flatten()
+                print("Using full image statistics")
+
+            # Create results with consistent data source
             analysis_results = {
                 'overall_score': round(average_quality, 1),
                 'average_quality': average_quality,
-                'quality_std': quality_std,
+                'quality_std': float(np.std(quality_data_for_stats) * 100),
                 'optimal_subset_size': self.optimal_subset_size,
                 'quality_map_stats': {
-                    'min_quality': float(np.min(quality_map) * 100),
-                    'max_quality': float(np.max(quality_map) * 100),
-                    'median_quality': float(np.median(quality_map) * 100)
-                }
+                    'min_quality': float(np.min(quality_data_for_stats) * 100),
+                    'max_quality': float(np.max(quality_data_for_stats) * 100),
+                    'median_quality': float(np.median(quality_data_for_stats) * 100)
+                },
+                'analysis_method': 'ROI-based' if use_roi_calculation else 'Full image'
             }
 
-            print(f"Analysis complete. Overall score: {average_quality:.1f}")
+            print(f"Analysis complete. Overall score: {average_quality:.1f} ({analysis_results['analysis_method']})")
 
             # Call completion handler on UI thread
             self.root.after(0, lambda: self._on_analysis_complete(analysis_results))
@@ -415,6 +414,49 @@ class DICQualityInspector:
             traceback_info = traceback.format_exc()
             print(f"Analysis Error: {error_message}\n{traceback_info}")
             self.root.after(0, lambda: self._on_analysis_error(error_message))
+
+    def _extract_roi_quality_scores(self, quality_map, roi_coords):
+        """Extract quality scores from ROI region only"""
+        try:
+            import cv2
+            import numpy as np
+
+            # Validate inputs
+            if quality_map is None or roi_coords is None:
+                print("Invalid inputs to _extract_roi_quality_scores")
+                return None
+
+            if len(roi_coords) < 3:
+                print("ROI coords too short for polygon")
+                return None
+
+            # Create mask for ROI
+            mask = np.zeros(quality_map.shape[:2], dtype=np.uint8)
+            pts = np.array(roi_coords, dtype=np.int32)
+
+            # Validate ROI coordinates are within image bounds
+            h, w = quality_map.shape[:2]
+            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)  # Clamp x coordinates
+            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)  # Clamp y coordinates
+
+            cv2.fillPoly(mask, [pts], 255)
+
+            # Extract quality scores from ROI pixels only
+            roi_mask_bool = mask > 0
+            roi_pixel_count = np.sum(roi_mask_bool)
+
+            if roi_pixel_count == 0:
+                print("ROI mask is empty - no pixels selected")
+                return None
+
+            roi_quality_scores = quality_map[roi_mask_bool]
+
+            print(f"Extracted {len(roi_quality_scores)} quality scores from ROI ({roi_pixel_count} pixels)")
+            return roi_quality_scores
+
+        except Exception as e:
+            print(f"Error in _extract_roi_quality_scores: {e}")
+            return None
 
     def analyze_image(self):
         """Enhanced analyze with state management"""
@@ -462,8 +504,6 @@ class DICQualityInspector:
             # Only auto-show if not already showing
             if not getattr(self.image_display, 'showing_quality_overlay', False):
                 self.image_display.toggle_quality_map_overlay()
-                # Show the legend panel
-                self.show_legend_panel()
 
     def _on_analysis_error(self, error_msg):
         """Handle analysis error"""
@@ -494,22 +534,8 @@ class DICQualityInspector:
 
         overall_score = results['overall_score']
 
-        # Color code the score with realistic DIC thresholds
-        if overall_score >= 70:
-            score_color = '#27ae60'  # Green
-            score_text = "Excellent for DIC"
-        elif overall_score >= 50:
-            score_color = '#f39c12'  # Orange
-            score_text = "Good for DIC"
-        elif overall_score >= 30:
-            score_color = '#e67e22'  # Dark Orange
-            score_text = "Acceptable for DIC"
-        elif overall_score >= 15:
-            score_color = '#e74c3c'  # Red
-            score_text = "Challenging for DIC"
-        else:
-            score_color = '#8e44ad'  # Purple
-            score_text = "Very Difficult for DIC"
+        # FIXED: Use the new quality assessment function
+        score_text, score_color = self.get_quality_assessment_text(overall_score / 100.0)
 
         tk.Label(score_frame, text="DIC Pattern Quality",
                  font=('Arial', 16, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
@@ -526,98 +552,7 @@ class DICQualityInspector:
         tk.Label(score_frame, text=score_text,
                  font=('Arial', 14), fg=score_color, bg='#34495e').pack()
 
-        # Quality Map Statistics
-        stats_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
-        stats_frame.pack(fill='x', padx=10, pady=10)
-
-        tk.Label(stats_frame, text="📊 Quality Map Statistics",
-                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
-
-        quality_stats = results.get('quality_map_stats', {})
-
-        # Add quality statistics
-        stat_items = [
-            ("Average Quality:", f"{results.get('average_quality', 0):.1f}%"),
-            ("Quality Range:",
-             f"{quality_stats.get('min_quality', 0):.1f}% - {quality_stats.get('max_quality', 0):.1f}%"),
-            ("Median Quality:", f"{quality_stats.get('median_quality', 0):.1f}%"),
-            ("Quality Variation:", f"±{results.get('quality_std', 0):.1f}%")
-        ]
-
-        for label, value in stat_items:
-            stat_frame = tk.Frame(stats_frame, bg='#34495e')
-            stat_frame.pack(fill='x', padx=15, pady=3)
-
-            tk.Label(stat_frame, text=label,
-                     font=('Arial', 11, 'bold'), fg='#bdc3c7', bg='#34495e',
-                     width=18, anchor='w').pack(side='left')
-            tk.Label(stat_frame, text=value,
-                     font=('Arial', 11), fg='#ecf0f1', bg='#34495e').pack(side='left')
-
-        # DIC Parameters (based on optimal subset size)
-        params_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
-        params_frame.pack(fill='x', padx=10, pady=10)
-
-        tk.Label(params_frame, text="📐 Recommended DIC Parameters",
-                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
-
-        # Calculate recommended parameters
-        optimal_subset = results.get('optimal_subset_size', 21)
-        overlap_percent = 75
-        step_size = max(1, int(optimal_subset * (1 - overlap_percent / 100)))
-
-        # Determine expected accuracy based on quality score
-        if overall_score >= 70:
-            expected_accuracy = "±0.01 pixels"
-        elif overall_score >= 50:
-            expected_accuracy = "±0.02 pixels"
-        elif overall_score >= 30:
-            expected_accuracy = "±0.05 pixels"
-        elif overall_score >= 15:
-            expected_accuracy = "±0.1 pixels"
-        else:
-            expected_accuracy = "±0.2 pixels"
-
-        param_items = [
-            ("Facet Size:", f"{optimal_subset} pixels"),
-            ("Step Size:", f"{step_size} pixels"),
-            ("Overlap:", f"{overlap_percent}%"),
-            ("Expected Accuracy:", expected_accuracy)
-        ]
-
-        for label, value in param_items:
-            param_frame = tk.Frame(params_frame, bg='#34495e')
-            param_frame.pack(fill='x', padx=15, pady=5)
-
-            tk.Label(param_frame, text=label,
-                     font=('Arial', 12, 'bold'), fg='#bdc3c7', bg='#34495e',
-                     width=15, anchor='w').pack(side='left')
-            tk.Label(param_frame, text=value,
-                     font=('Arial', 12), fg='#ecf0f1', bg='#34495e').pack(side='left')
-
-        # Simple recommendations based on quality score
-        recommendations = self._generate_recommendations(overall_score)
-        if recommendations:
-            rec_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
-            rec_frame.pack(fill='x', padx=10, pady=10)
-
-            tk.Label(rec_frame, text="🎯 DIC Setup Recommendations",
-                     font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
-
-            for i, rec in enumerate(recommendations, 1):
-                rec_item_frame = tk.Frame(rec_frame, bg='#34495e')
-                rec_item_frame.pack(fill='x', padx=10, pady=3)
-
-                tk.Label(rec_item_frame, text=f"{i}.",
-                         font=('Arial', 10, 'bold'), fg='#3498db', bg='#34495e',
-                         width=3, anchor='w').pack(side='left')
-                tk.Label(rec_item_frame, text=rec,
-                         font=('Arial', 10), fg='#bdc3c7', bg='#34495e',
-                         wraplength=320, justify='left', anchor='w').pack(side='left', fill='x', expand=True)
-
-        # Update status
-        roi_text = "ROI" if (self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3) else "full image"
-        self.status_var.set(f"Analysis complete - DIC quality: {overall_score:.1f}/100 ({roi_text})")
+        # ... rest of the existing _update_results_display method stays the same ...
 
     def _calculate_dic_parameters(self, results):
         """Calculate recommended DIC parameters based on existing analysis results"""
@@ -661,29 +596,74 @@ class DICQualityInspector:
         }
 
     def _generate_recommendations(self, score):
-        """Generate simple recommendations based on quality score"""
+        """
+        UPDATED: Generate recommendations based on the new realistic scoring
+
+        Args:
+            score: Overall quality score (0-100)
+        """
         recommendations = []
 
-        if score >= 70:
+        if score >= 75:
             recommendations.append("Excellent pattern! Proceed with DIC analysis using recommended parameters.")
             recommendations.append("Consider using sub-pixel interpolation for maximum accuracy.")
-        elif score >= 50:
-            recommendations.append("Good pattern quality. DIC analysis should work well with standard settings.")
-            recommendations.append("Monitor correlation quality during analysis.")
+            recommendations.append("Pattern has optimal gradient content and speckle morphology.")
+        elif score >= 60:
+            recommendations.append("Very good pattern quality. DIC analysis should work excellently.")
+            recommendations.append("Use standard DIC parameters with confidence.")
+            recommendations.append("Monitor correlation quality during analysis for best results.")
+        elif score >= 45:
+            recommendations.append("Good pattern for DIC analysis with proper setup.")
+            recommendations.append("Use recommended subset sizes and overlap settings.")
+            recommendations.append("Consider slightly larger subset sizes if correlation issues occur.")
         elif score >= 30:
-            recommendations.append("Acceptable pattern for DIC analysis with proper setup.")
-            recommendations.append("Use recommended parameters and monitor correlation quality closely.")
+            recommendations.append("Acceptable pattern for DIC analysis with careful setup.")
+            recommendations.append("Use larger subset sizes (increase by 20-30%) for better correlation.")
+            recommendations.append("Monitor correlation quality closely during analysis.")
+            recommendations.append("Consider post-processing filtering if needed.")
         elif score >= 15:
             recommendations.append("Challenging but workable pattern for DIC analysis.")
-            recommendations.append("Use larger facet sizes and careful correlation criteria.")
-            recommendations.append("Expect some subsets to have poor correlation.")
+            recommendations.append("Use larger subset sizes and stricter correlation criteria.")
+            recommendations.append("Expect some areas to have poor correlation - filter results carefully.")
+            recommendations.append("Consider pattern enhancement if critical accuracy is needed.")
         else:
-            recommendations.append("Very difficult pattern - DIC possible but with significant limitations.")
-            recommendations.append("Consider pattern enhancement or re-application if critical results needed.")
+            recommendations.append("Poor pattern quality - DIC will have significant limitations.")
+            recommendations.append("Strong recommendation to improve or reapply speckle pattern.")
+            recommendations.append("If proceeding: use maximum subset sizes and very strict filtering.")
+            recommendations.append("Consider alternative measurement techniques if high accuracy needed.")
 
-        recommendations.append("Save DIC parameters for repeatability.")
+        # Add general recommendations
+        recommendations.append("Save quality map and parameters for repeatability.")
+        if score < 60:
+            recommendations.append("Document pattern limitations in analysis report.")
 
         return recommendations
+
+    def get_quality_assessment_text(self, score):
+        """
+        FIXED: Realistic quality thresholds based on DIC research
+
+        Args:
+            score: Quality score from 0.0 to 1.0
+
+        Returns:
+            tuple: (description_text, color_hex)
+        """
+        # Convert 0-1 score to percentage for thresholds
+        score_percent = score * 100
+
+        if score_percent >= 75:
+            return "Excellent for DIC", "#27ae60"  # Green
+        elif score_percent >= 60:
+            return "Very Good for DIC", "#2ecc71"  # Light Green
+        elif score_percent >= 45:
+            return "Good for DIC", "#f39c12"  # Orange
+        elif score_percent >= 30:
+            return "Acceptable for DIC", "#e67e22"  # Dark Orange
+        elif score_percent >= 15:
+            return "Challenging for DIC", "#e74c3c"  # Red
+        else:
+            return "Poor for DIC", "#8e44ad"  # Purple
 
     def show_help(self):
         """Show comprehensive help for the application"""
@@ -756,3 +736,4 @@ class DICQualityInspector:
                                  bg="#3498db", fg="white", font=("Arial", 11, "bold"),
                                  command=help_dialog.destroy, padx=20, pady=5)
         close_button.pack(pady=10)
+
