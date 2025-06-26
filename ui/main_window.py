@@ -154,9 +154,9 @@ class DICQualityInspector:
                                  command=lambda: self.image_display.show_gradient())
         gradient_btn.pack(side='left', padx=2)
 
-        reset_display_btn = tk.Button(process_frame, text="Reset Display",
+        reset_display_btn = tk.Button(process_frame, text="Reset",
                                       bg='#e74c3c', fg='white', padx=10,
-                                      command=lambda: self.image_display.reset_display())
+                                      command=self.full_reset)
         reset_display_btn.pack(side='left', padx=2)
 
         # Quality map button
@@ -819,6 +819,87 @@ class DICQualityInspector:
             return "Challenging for DIC", "#e74c3c"  # Red
         else:
             return "Poor for DIC", "#8e44ad"  # Purple
+
+    def full_reset(self):
+        """Complete application reset - everything back to initial state"""
+        print("Performing full application reset...")
+
+        # 1. CLEAR ALL DATA
+        self.original_image = None
+        self.current_image = None
+        self.analysis_results = {}
+        self.roi_coords = None
+        self.roi_selection_mode = False
+        self.roi_start = None
+        self.roi_rect = None
+
+        # 2. RESET IMAGE DISPLAY
+        if hasattr(self, 'image_display'):
+            # Clear quality map data
+            self.image_display.quality_map_data = None
+            self.image_display.quality_visualization = None
+            self.image_display.showing_quality_overlay = False
+
+            # Reset zoom and view
+            self.image_display.zoom_level = 1.0
+            self.image_display.displayed_image = None
+            self.image_display.photo = None
+            self.image_display.image_item = None
+
+            # Clear canvas
+            self.image_canvas.delete('all')
+            self.image_canvas.configure(scrollregion=(0, 0, 0, 0))
+            self.image_canvas.xview_moveto(0)
+            self.image_canvas.yview_moveto(0)
+            self.image_canvas.config(cursor="")
+
+        # 3. RESET ROI HANDLER
+        if hasattr(self, 'roi_handler'):
+            self.roi_handler.roi_coords = []
+            self.roi_handler.roi_polygon = None
+            self.roi_handler.preview_line = None
+            self.roi_handler.roi_selection_mode = False
+            self.roi_handler.clear_roi()  # This will also update the info display
+
+        # 4. RESET BUTTON STATES
+        # Load and screenshot buttons should be enabled
+        self.load_btn.config(state='normal', bg='#3498db')
+        self.screenshot_btn.config(state='normal', bg='#e67e22')
+
+        # All analysis buttons should be disabled
+        self.roi_btn.config(state='disabled', bg='#9b59b6')
+        self.analyze_btn.config(state='disabled', bg='#27ae60', text="🔬 Analyze")
+        self.quality_map_btn.config(state='disabled', bg='#2ecc71')
+        self.save_btn.config(state='disabled', bg='#8e44ad')
+
+        # 5. CLEAR RESULTS DISPLAY
+        if hasattr(self, 'results_frame'):
+            for widget in self.results_frame.winfo_children():
+                widget.destroy()
+
+            # Add a message indicating reset state
+            reset_msg_frame = tk.Frame(self.results_frame, bg='#34495e')
+            reset_msg_frame.pack(fill='x', padx=10, pady=20)
+
+            tk.Label(reset_msg_frame, text="🔄 Application Reset",
+                     font=('Arial', 16, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=10)
+
+            tk.Label(reset_msg_frame, text="Load an image to begin analysis",
+                     font=('Arial', 12), fg='#bdc3c7', bg='#34495e').pack()
+
+        # 6. RESET STATE MANAGER
+        if hasattr(self, 'state_manager'):
+            self.state_manager.current_state = "no_image"
+            self.state_manager.analysis_in_progress = False
+            self.state_manager.update_state("no_image")
+
+        # 7. RESET STATUS
+        self.status_var.set("Application reset - Load an image to begin")
+
+        # 8. FORCE UI UPDATE
+        self.root.update_idletasks()
+
+        print("Full reset complete - ready for new analysis")
 
     def show_help(self):
         """Show comprehensive help for the application"""

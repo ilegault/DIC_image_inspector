@@ -1,4 +1,4 @@
-# ui/roi_handler.py
+# ui/roi_handler.py - FIXED: Always start fresh when selecting ROI
 
 class ROIHandler:
     """Handles Region of Interest selection and management"""
@@ -21,11 +21,8 @@ class ROIHandler:
         self.canvas.bind("<ButtonPress-3>", self.on_canvas_right_click)
         self.canvas.bind("<Motion>", self.on_canvas_motion)
 
-
     def toggle_roi_selection(self):
-        """Toggle ROI selection mode on/off"""
-        self.roi_selection_mode = not self.roi_selection_mode
-
+        """FIXED: Always start fresh ROI selection - clear existing ROI first"""
         # Check if ROI selection is allowed
         if hasattr(self.main_window, 'state_manager'):
             if not self.main_window.state_manager.can_select_roi():
@@ -36,22 +33,20 @@ class ROIHandler:
                 self.main_window.status_var.set("Cannot modify ROI during analysis")
                 return
 
-        if self.roi_selection_mode:
-            self.main_window.roi_btn.config(bg=self.selection_active_color)
-            self.canvas.config(cursor="crosshair")
-            self.main_window.status_var.set("Click to add points, right-click to finish the polygon ROI")
-        else:
-            self.main_window.roi_btn.config(bg="#9b59b6")  # Default purple
-            self.canvas.config(cursor="")
-            self.main_window.status_var.set("ROI selection mode disabled")
-            self.roi_coords = []
-            if self.roi_polygon:
-                self.canvas.delete(self.roi_polygon)
-                self.roi_polygon = None
-            if self.preview_line:
-                self.canvas.delete(self.preview_line)
-                self.preview_line = None
+        # FIXED: Always clear existing ROI and start fresh
+        if self.roi_coords or self.roi_polygon or self.roi_selection_mode:
+            print("Clearing existing ROI to start fresh selection")
+            self.clear_roi()
 
+        # Start new ROI selection
+        self.roi_selection_mode = True
+        self.main_window.roi_btn.config(bg=self.selection_active_color, text="🎯 Click Points")
+        self.canvas.config(cursor="crosshair")
+        self.main_window.status_var.set("NEW ROI: Click to add points, right-click to finish polygon")
+
+        # Reset state to image_loaded since we're starting a new ROI
+        if hasattr(self.main_window, 'state_manager'):
+            self.main_window.state_manager.update_state("image_loaded")
 
     def on_canvas_left_click(self, event):
         """Add a point to the polygon ROI on left click"""
@@ -77,17 +72,28 @@ class ROIHandler:
         # Only add point if it's within the image bounds
         if image_x >= 0 and image_y >= 0:
             self.roi_coords.append((image_x, image_y))
-            self.redraw_polygon_roi(preview_point=None)
+            print(f"Added ROI point {len(self.roi_coords)}: ({image_x:.1f}, {image_y:.1f})")
 
+            # Update button text to show progress
+            self.main_window.roi_btn.config(text=f"🎯 Points: {len(self.roi_coords)}")
+
+            self.redraw_polygon_roi(preview_point=None)
 
     def on_canvas_right_click(self, event):
         """Finish the polygon ROI on right click"""
         if not self.roi_selection_mode or len(self.roi_coords) < 3:
+            if len(self.roi_coords) < 3:
+                self.main_window.status_var.set("Need at least 3 points for ROI polygon")
             return
+
+        print(f"Finishing ROI polygon with {len(self.roi_coords)} points")
+
         # Close the polygon by connecting last to first
         self.redraw_polygon_roi(preview_point=None, finalize=True)
         self.roi_selection_mode = False
-        self.main_window.roi_btn.config(bg="#9b59b6")
+
+        # Reset button appearance and text
+        self.main_window.roi_btn.config(bg="#9b59b6", text="🎯 New ROI")
         self.canvas.config(cursor="")
 
         # Enable the analyze button after ROI is finished
@@ -95,12 +101,11 @@ class ROIHandler:
             self.main_window.analyze_btn.config(state='normal')
 
         self.update_roi_info()
-        self.main_window.status_var.set("Polygon ROI selected")
-        self.main_window.quality_map_btn.config(state='normal')
+        self.main_window.status_var.set(f"ROI polygon completed with {len(self.roi_coords)} points")
 
+        # Update state to roi_selected
         if hasattr(self.main_window, 'state_manager'):
             self.main_window.state_manager.update_state("roi_selected")
-
 
     def on_canvas_motion(self, event):
         """Show preview line from last point to mouse"""
@@ -123,7 +128,6 @@ class ROIHandler:
         image_y = canvas_y / display_scale
 
         self.redraw_polygon_roi(preview_point=(image_x, image_y))
-
 
     def redraw_polygon_roi(self, preview_point=None, finalize=False):
         """Draw the polygon ROI and preview line"""
@@ -190,27 +194,28 @@ class ROIHandler:
                 width=2
             )
 
-
     def clear_roi(self):
         """Remove the current ROI selection"""
+        print("Clearing ROI selection")
+
         if self.roi_polygon:
             self.canvas.delete(self.roi_polygon)
             self.roi_polygon = None
         if self.preview_line:
             self.canvas.delete(self.preview_line)
             self.preview_line = None
+
         self.roi_coords = []
         self.roi_selection_mode = False
 
         if hasattr(self.main_window, 'roi_btn'):
-            self.main_window.roi_btn.config(bg="#9b59b6")  # Reset button color
+            self.main_window.roi_btn.config(bg="#9b59b6", text="🎯 Select ROI")  # Reset button text
 
         self.update_roi_info()
         self.main_window.status_var.set("ROI cleared - analyzing full image")
 
         if hasattr(self.main_window, 'state_manager'):
             self.main_window.state_manager.update_state("image_loaded")
-
 
     def update_roi_info(self):
         """Update the ROI information display"""
@@ -234,7 +239,6 @@ class ROIHandler:
                 self.main_window.roi_info_label.config(
                     text="ROI: Not Selected (analyzing full image)"
                 )
-
 
     def redraw_roi(self):
         """Redraw the ROI polygon after zoom or pan operations"""
@@ -267,7 +271,6 @@ class ROIHandler:
                 fill='',
                 width=2
             )
-
 
     def sync_roi_with_view(self, zoom_level=None, visible_x=None, visible_y=None):
         """Synchronize ROI with current view after analysis"""
