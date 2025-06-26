@@ -1,4 +1,4 @@
-# module: ui.main_window
+# ui/main_window.py - FIXED: Complete results display implementation
 
 import tkinter as tk
 import cv2
@@ -12,6 +12,7 @@ from ui.file_operations import FileOperations
 from analysis.quality_map.map_generator import generate_quality_map
 from ui.button_state_manager import ButtonStateManager
 from analysis.core.subset_analyzer import determine_optimal_subset_size
+
 
 class DICQualityInspector:
     def __init__(self, root):
@@ -163,20 +164,34 @@ class DICQualityInspector:
                                          bg='#2ecc71', fg='white', padx=10)
         self.quality_map_btn.pack(side='left', padx=2)
 
-        # QUALITY MAP LEGEND - Inline as small buttons/labels
+        # IMPROVED COLOR LEGEND - More readable with outlines
+        legend_frame = tk.Frame(left_panel, bg='#34495e')
+        legend_frame.pack(pady=5)
+
+        legend_title = tk.Label(legend_frame, text="Quality Map Legend:",
+                                font=('Arial', 10, 'bold'), fg='#ecf0f1', bg='#34495e')
+        legend_title.pack()
+
+        legend_items_frame = tk.Frame(legend_frame, bg='#34495e')
+        legend_items_frame.pack()
+
+        # FIXED: More readable legend with better contrast
         legend_items = [
-            ("Excellent", "#0066FF"),  # Blue
-            ("Good", "#00FF00"),  # Green
-            ("Acceptable", "#FFFF00"),  # Yellow
-            ("Marginal", "#FF8800"),  # Orange
-            ("Poor", "#FF0000")  # Red
+            ("Poor", "#8B0000", "white"),  # Dark red with white text
+            ("Challenging", "#FF0000", "white"),  # Red with white text
+            ("Acceptable", "#FF8C00", "black"),  # Orange with black text
+            ("Good", "#FFD700", "black"),  # Gold with black text
+            ("Very Good", "#32CD32", "black"),  # Lime green with black text
+            ("Excellent", "#0080FF", "white")  # Blue with white text
         ]
 
-        for text, color in legend_items:
-            legend_btn = tk.Label(process_frame, text=f"■ {text}",
-                                  bg='#34495e', fg=color, font=('Arial', 9),
-                                  padx=5, pady=2)
-            legend_btn.pack(side='left', padx=1)
+        for text, bg_color, text_color in legend_items:
+            legend_btn = tk.Label(legend_items_frame, text=f"  {text}  ",
+                                  bg=bg_color, fg=text_color,
+                                  font=('Arial', 9, 'bold'),
+                                  relief='raised', bd=1,
+                                  padx=8, pady=2)
+            legend_btn.pack(side='left', padx=2)
 
         # Right panel - Analysis results
         right_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
@@ -518,7 +533,7 @@ class DICQualityInspector:
             self.state_manager.update_state("image_loaded")
 
     def _update_results_display(self):
-        """Update the GUI with quality map based results"""
+        """FIXED: Complete results display with all metrics"""
         # Clear previous results
         for widget in self.results_frame.winfo_children():
             widget.destroy()
@@ -534,7 +549,7 @@ class DICQualityInspector:
 
         overall_score = results['overall_score']
 
-        # FIXED: Use the new quality assessment function
+        # Use the quality assessment function
         score_text, score_color = self.get_quality_assessment_text(overall_score / 100.0)
 
         tk.Label(score_frame, text="DIC Pattern Quality",
@@ -552,7 +567,147 @@ class DICQualityInspector:
         tk.Label(score_frame, text=score_text,
                  font=('Arial', 14), fg=score_color, bg='#34495e').pack()
 
-        # ... rest of the existing _update_results_display method stays the same ...
+        # Analysis method info
+        method_text = f"Analysis: {results.get('analysis_method', 'Unknown')}"
+        tk.Label(score_frame, text=method_text,
+                 font=('Arial', 10), fg='#bdc3c7', bg='#34495e').pack()
+
+        # Quality Statistics
+        stats_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
+        stats_frame.pack(fill='x', padx=10, pady=5)
+
+        tk.Label(stats_frame, text="📈 Quality Statistics",
+                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
+
+        stats = results.get('quality_map_stats', {})
+
+        # Create two columns for statistics
+        stats_content_frame = tk.Frame(stats_frame, bg='#34495e')
+        stats_content_frame.pack(pady=5)
+
+        left_stats = tk.Frame(stats_content_frame, bg='#34495e')
+        left_stats.pack(side='left', padx=10)
+
+        right_stats = tk.Frame(stats_content_frame, bg='#34495e')
+        right_stats.pack(side='right', padx=10)
+
+        # Left column stats
+        tk.Label(left_stats, text=f"Maximum: {stats.get('max_quality', 0):.1f}%",
+                 font=('Arial', 11), fg='#2ecc71', bg='#34495e').pack(anchor='w')
+        tk.Label(left_stats, text=f"Average: {overall_score:.1f}%",
+                 font=('Arial', 11), fg='#3498db', bg='#34495e').pack(anchor='w')
+        tk.Label(left_stats, text=f"Minimum: {stats.get('min_quality', 0):.1f}%",
+                 font=('Arial', 11), fg='#e74c3c', bg='#34495e').pack(anchor='w')
+
+        # Right column stats
+        tk.Label(right_stats, text=f"Median: {stats.get('median_quality', 0):.1f}%",
+                 font=('Arial', 11), fg='#f39c12', bg='#34495e').pack(anchor='w')
+        tk.Label(right_stats, text=f"Std Dev: {results.get('quality_std', 0):.1f}%",
+                 font=('Arial', 11), fg='#9b59b6', bg='#34495e').pack(anchor='w')
+
+        # DIC Parameters Section
+        dic_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
+        dic_frame.pack(fill='x', padx=10, pady=5)
+
+        tk.Label(dic_frame, text="⚙️ Recommended DIC Parameters",
+                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
+
+        # Calculate DIC parameters
+        dic_params = self._calculate_dic_parameters(results)
+
+        # Create parameter display
+        param_content = tk.Frame(dic_frame, bg='#34495e')
+        param_content.pack(pady=5)
+
+        # Left column parameters
+        left_params = tk.Frame(param_content, bg='#34495e')
+        left_params.pack(side='left', padx=15)
+
+        # Right column parameters
+        right_params = tk.Frame(param_content, bg='#34495e')
+        right_params.pack(side='right', padx=15)
+
+        # Parameter values
+        tk.Label(left_params, text=f"Subset Size: {dic_params['facet_size']} pixels",
+                 font=('Arial', 11), fg='#3498db', bg='#34495e').pack(anchor='w')
+        tk.Label(left_params, text=f"Step Size: {dic_params['step_size']} pixels",
+                 font=('Arial', 11), fg='#2ecc71', bg='#34495e').pack(anchor='w')
+
+        tk.Label(right_params, text=f"Overlap: {dic_params['overlap']}%",
+                 font=('Arial', 11), fg='#f39c12', bg='#34495e').pack(anchor='w')
+        tk.Label(right_params, text=f"Expected Accuracy: {dic_params['accuracy']}",
+                 font=('Arial', 11), fg='#9b59b6', bg='#34495e').pack(anchor='w')
+
+        # Recommendations Section
+        recommendations_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
+        recommendations_frame.pack(fill='x', padx=10, pady=5)
+
+        tk.Label(recommendations_frame, text="💡 Recommendations",
+                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
+
+        # Generate and display recommendations
+        recommendations = self._generate_recommendations(overall_score)
+
+        # Create scrollable text widget for recommendations
+        rec_text_frame = tk.Frame(recommendations_frame, bg='#34495e')
+        rec_text_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        rec_text = tk.Text(rec_text_frame, height=8, width=45, wrap='word',
+                           bg='#2c3e50', fg='#ecf0f1', font=('Arial', 10),
+                           relief='sunken', bd=1)
+        rec_scrollbar = ttk.Scrollbar(rec_text_frame, orient='vertical', command=rec_text.yview)
+        rec_text.configure(yscrollcommand=rec_scrollbar.set)
+
+        rec_text.pack(side='left', fill='both', expand=True)
+        rec_scrollbar.pack(side='right', fill='y')
+
+        # Insert recommendations
+        for i, rec in enumerate(recommendations, 1):
+            rec_text.insert('end', f"{i}. {rec}\n\n")
+
+        rec_text.config(state='disabled')  # Make read-only
+
+        # Image Information Section
+        info_frame = tk.Frame(self.results_frame, bg='#34495e', relief='raised', bd=2)
+        info_frame.pack(fill='x', padx=10, pady=5)
+
+        tk.Label(info_frame, text="ℹ️ Image Information",
+                 font=('Arial', 14, 'bold'), fg='#ecf0f1', bg='#34495e').pack(pady=5)
+
+        # Image dimensions and ROI info
+        if hasattr(self, 'original_image') and self.original_image is not None:
+            h, w = self.original_image.shape[:2]
+            tk.Label(info_frame, text=f"Image Size: {w} × {h} pixels",
+                     font=('Arial', 11), fg='#bdc3c7', bg='#34495e').pack()
+
+        # ROI information
+        if hasattr(self, 'roi_handler') and self.roi_handler.roi_coords and len(self.roi_handler.roi_coords) >= 3:
+            roi_area = self._calculate_roi_area()
+            if hasattr(self, 'original_image') and self.original_image is not None:
+                h, w = self.original_image.shape[:2]
+                total_area = w * h
+                percentage = (roi_area / total_area * 100) if total_area > 0 else 0
+                tk.Label(info_frame, text=f"ROI Area: {roi_area:.0f} pixels² ({percentage:.1f}% of image)",
+                         font=('Arial', 11), fg='#bdc3c7', bg='#34495e').pack()
+            else:
+                tk.Label(info_frame, text=f"ROI Area: {roi_area:.0f} pixels²",
+                         font=('Arial', 11), fg='#bdc3c7', bg='#34495e').pack()
+        else:
+            tk.Label(info_frame, text="ROI: Full image analyzed",
+                     font=('Arial', 11), fg='#bdc3c7', bg='#34495e').pack()
+
+    def _calculate_roi_area(self):
+        """Calculate the area of the current ROI polygon"""
+        if not hasattr(self, 'roi_handler') or not self.roi_handler.roi_coords:
+            return 0
+
+        # Use shoelace formula for polygon area
+        coords = self.roi_handler.roi_coords
+        if len(coords) < 3:
+            return 0
+
+        area = 0.5 * abs(sum(x0 * y1 - x1 * y0 for ((x0, y0), (x1, y1)) in zip(coords, coords[1:] + [coords[0]])))
+        return area
 
     def _calculate_dic_parameters(self, results):
         """Calculate recommended DIC parameters based on existing analysis results"""
@@ -736,4 +891,3 @@ class DICQualityInspector:
                                  bg="#3498db", fg="white", font=("Arial", 11, "bold"),
                                  command=help_dialog.destroy, padx=20, pady=5)
         close_button.pack(pady=10)
-
