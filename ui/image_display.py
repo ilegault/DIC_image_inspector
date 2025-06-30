@@ -520,7 +520,7 @@ class ImageDisplay:
 
 
     def toggle_quality_map_overlay(self):
-        """Toggle quality map overlay on/off"""
+        """Toggle quality map overlay on/off with spectrum support"""
         print("DEBUG: toggle_quality_map_overlay called")
 
         # Initialize the state if it doesn't exist
@@ -553,8 +553,8 @@ class ImageDisplay:
                 print("DEBUG: Changing button to active state")
                 self.main_window.quality_map_btn.config(bg='#e74c3c')  # Red when active
 
-            # Show quality map overlay
-            self.show_quality_map()
+            # Show quality map overlay with spectrum
+            self.show_quality_map_with_spectrum()
         else:
             print("DEBUG: Should hide quality map and show original")
 
@@ -703,3 +703,130 @@ class ImageDisplay:
         # If overlay is toggled on, show it
         if hasattr(self, 'showing_quality_overlay') and self.showing_quality_overlay:
             self.show_quality_map()
+
+
+    def show_quality_map_with_spectrum(self):
+        """Display quality map with selected spectrum"""
+        if not hasattr(self, 'quality_map_data') or self.quality_map_data is None:
+            print("DEBUG: No quality map data available in show_quality_map_with_spectrum")
+            return
+
+        # Get selected spectrum from main window
+        spectrum_type = 'custom_dic'  # Default
+        if hasattr(self.main_window, 'selected_spectrum'):
+            spectrum_type = self.main_window.selected_spectrum.get()
+
+        print(f"Showing quality map with {spectrum_type} spectrum")
+
+        # Store current view state to maintain positioning
+        current_zoom = self.zoom_level
+        visible_x = self.canvas.xview()
+        visible_y = self.canvas.yview()
+
+        print(f"Storing view state: zoom={current_zoom}, x={visible_x}, y={visible_y}")
+
+        # Get ROI coordinates
+        roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+
+        print(f"ROI coords: {len(roi_coords) if roi_coords else 0} points")
+
+        try:
+            # FIXED: Use the corrected ROI visualization
+            from analysis.utils.image_processing import create_quality_map_visualization
+
+            visualization = create_quality_map_visualization(
+                self.main_window.original_image.copy(),
+                self.quality_map_data,
+                roi_coords,
+                1.0,  # display_scale should be 1.0 for image coordinates
+                spectrum_type
+            )
+
+            print(f"Visualization created: shape {visualization.shape}")
+
+            # Convert to PIL image for display
+            from PIL import Image
+            visualization_pil = Image.fromarray(visualization)
+
+            # Set flag to prevent recursion during display
+            self._updating_quality_map = True
+
+            # Display with preserved view
+            self.display_image(visualization_pil, preserve_view=True)
+
+            # Clear the flag
+            self._updating_quality_map = False
+
+            # Restore exact view state
+            self.zoom_level = current_zoom
+            if visible_x and visible_y:
+                self.canvas.xview_moveto(visible_x[0])
+                self.canvas.yview_moveto(visible_y[0])
+
+            # Update state
+            self.showing_quality_overlay = True
+
+            print(f"Quality map displayed with {spectrum_type} spectrum and preserved positioning")
+
+        except Exception as e:
+            print(f"Error showing quality map: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Fallback to original method
+            self.show_quality_map_fallback()
+
+
+    def show_quality_map_fallback(self):
+        """Fallback method using the original approach"""
+        print("Using fallback quality map display method")
+
+        # Store current view state to maintain positioning
+        current_zoom = self.zoom_level
+        visible_x = self.canvas.xview()
+        visible_y = self.canvas.yview()
+
+        print(f"Storing view state: zoom={current_zoom}, x={visible_x}, y={visible_y}")
+
+        # FIXED: Use the corrected ROI visualization
+        roi_coords = self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else None
+
+        # Import the fixed function
+        from analysis.utils.image_processing import create_quality_map_visualization
+
+        try:
+            visualization = create_quality_map_visualization(
+                self.main_window.original_image.copy(),
+                self.quality_map_data,
+                roi_coords,
+                1.0  # display_scale should be 1.0 for image coordinates
+            )
+
+            # Convert to PIL image for display
+            from PIL import Image
+            visualization_pil = Image.fromarray(visualization)
+
+            # Set flag to prevent recursion during display
+            self._updating_quality_map = True
+
+            # Display with preserved view
+            self.display_image(visualization_pil, preserve_view=True)
+
+            # Clear the flag
+            self._updating_quality_map = False
+
+            # Restore exact view state
+            self.zoom_level = current_zoom
+            if visible_x and visible_y:
+                self.canvas.xview_moveto(visible_x[0])
+                self.canvas.yview_moveto(visible_y[0])
+
+            # Update state
+            self.showing_quality_overlay = True
+
+            print(f"Quality map displayed with preserved positioning")
+
+        except Exception as e:
+            print(f"Error in fallback quality map display: {e}")
+            import traceback
+            traceback.print_exc()

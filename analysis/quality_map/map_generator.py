@@ -11,8 +11,19 @@ warnings.filterwarnings('ignore', category=RuntimeWarning, message='overflow enc
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='overflow encountered in scalar divide')
 
 
-def generate_quality_map(image, colormap='dic_quality', alpha=0.7):
-    """Generate a DIC quality map with better resolution and color variation"""
+# Update the main generate_quality_map function to support spectrum selection
+def generate_quality_map(image, colormap='custom_dic', alpha=0.7):
+    """
+    UPDATED: Generate a DIC quality map with selectable smooth spectrum
+
+    Args:
+        image: Input image
+        colormap: Spectrum type ('custom_dic', 'smooth_rainbow', 'thermal', etc.)
+        alpha: Blending factor for visualization
+
+    Returns:
+        tuple: (quality_map, visualization)
+    """
     # Convert to grayscale if needed
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -25,42 +36,23 @@ def generate_quality_map(image, colormap='dic_quality', alpha=0.7):
     else:
         rgb_image = image.copy()
 
-    # FIXED: Better subset size and step size for more detail
+    # Generate quality map using existing sophisticated analysis
     subset_size = determine_optimal_subset_size(gray)
-    # FIXED: Smaller step size for better color variation
     step_size = max(3, subset_size // 4)  # More detailed sampling
 
     print(f"Generating quality map with subset size: {subset_size}, step: {step_size}")
+    print(f"Using {colormap} spectrum for visualization")
 
     # Generate quality map using sophisticated subset analysis
     quality_map = _analyze_subset_quality_advanced(gray, subset_size, step_size)
 
-    # DEBUG: Print quality map statistics
+    # Print quality statistics
     print(f"Quality map statistics:")
-    print(f"  Min: {np.min(quality_map):.4f}")
-    print(f"  Max: {np.max(quality_map):.4f}")
-    print(f"  Mean: {np.mean(quality_map):.4f}")
-    print(f"  Std: {np.std(quality_map):.4f}")
+    print(f"  Min: {np.min(quality_map):.4f}, Max: {np.max(quality_map):.4f}")
+    print(f"  Mean: {np.mean(quality_map):.4f}, Std: {np.std(quality_map):.4f}")
 
-    # Check distribution
-    excellent_pixels = np.sum(quality_map >= 0.75)
-    good_pixels = np.sum((quality_map >= 0.60) & (quality_map < 0.75))
-    acceptable_pixels = np.sum((quality_map >= 0.45) & (quality_map < 0.60))
-    poor_pixels = np.sum(quality_map < 0.45)
-    total_pixels = quality_map.size
-
-    print(f"Quality distribution:")
-    print(f"  Excellent (≥75%): {excellent_pixels / total_pixels * 100:.1f}%")
-    print(f"  Good (60-75%): {good_pixels / total_pixels * 100:.1f}%")
-    print(f"  Acceptable (45-60%): {acceptable_pixels / total_pixels * 100:.1f}%")
-    print(f"  Poor (<45%): {poor_pixels / total_pixels * 100:.1f}%")
-
-    # Create clean visualization
+    # Create visualization with selected spectrum
     visualization = _create_quality_visualization(rgb_image, quality_map, colormap, alpha)
-
-    # Calculate average quality for minimal reporting
-    avg_quality = np.mean(quality_map)
-    print(f"Average quality: {avg_quality:.3f}")
 
     return quality_map, visualization
 
@@ -379,44 +371,17 @@ def _calculate_subset_uniqueness(subset, full_image, x_pos, y_pos, subset_size):
         return 0.3
 
 
-def _create_quality_visualization(base_image, quality_map, colormap_name='dic_quality', alpha=0.7):
-    """Create clean quality map visualization with proper debugging"""
-    if quality_map is None:
-        return base_image
-
-    # Ensure base image is RGB
-    if len(base_image.shape) == 2:
-        rgb_image = cv2.cvtColor(base_image, cv2.COLOR_GRAY2RGB)
-    else:
-        rgb_image = base_image.copy()
-
-    # DEBUG: Check quality map before processing
-    print(f"Quality map before colormap: min={quality_map.min():.4f}, max={quality_map.max():.4f}")
-
-    # Apply colormap - Handle data scaling properly!
-    if colormap_name == 'dic_quality':
-        # Quality map should be 0-1, pass directly to colormap
-        colored_map = _apply_dic_colormap(quality_map)  # Pass 0-1 data directly
-    else:
-        # For OpenCV colormaps, scale to 0-255
-        normalized_map = (quality_map * 255).astype(np.uint8)
-        colormap_const = getattr(cv2, f'COLORMAP_{colormap_name.upper()}', cv2.COLORMAP_JET)
-        colored_map = cv2.applyColorMap(normalized_map, colormap_const)
-        colored_map = cv2.cvtColor(colored_map, cv2.COLOR_BGR2RGB)
-
-    # Check dimensions match
-    if colored_map.shape[:2] != rgb_image.shape[:2]:
-        colored_map = cv2.resize(colored_map, (rgb_image.shape[1], rgb_image.shape[0]))
-
-    # Create blended overlay
-    visualization = cv2.addWeighted(rgb_image, 1 - alpha, colored_map, alpha, 0)
-
-    return visualization
-
-
-def _apply_dic_colormap(quality_map):
+def _apply_dic_colormap(quality_map, spectrum_type='smooth_rainbow'):
     """
-    IMPROVED: Better color variation for DIC quality visualization
+    UPDATED: Smooth spectrum colormap for DIC quality visualization
+
+    Args:
+        quality_map: Normalized quality data (0-1)
+        spectrum_type: Type of spectrum to use
+                      - 'smooth_rainbow': Red->Orange->Yellow->Green->Blue
+                      - 'thermal': Black->Red->Orange->Yellow->White
+                      - 'viridis_like': Purple->Blue->Green->Yellow
+                      - 'custom_dic': Optimized for DIC visualization
     """
     h, w = quality_map.shape
     colored = np.zeros((h, w, 3), dtype=np.uint8)
@@ -429,49 +394,271 @@ def _apply_dic_colormap(quality_map):
         normalized = quality_map.astype(float)
 
     normalized = np.clip(normalized, 0, 1)
-    print(f"Colormap input range: {normalized.min():.4f} - {normalized.max():.4f}")
 
-    # IMPROVED: More granular color transitions for better variation
+    if spectrum_type == 'smooth_rainbow':
+        # Smooth rainbow spectrum: Red -> Orange -> Yellow -> Green -> Blue
+        colored = _create_smooth_rainbow_spectrum(normalized)
+    elif spectrum_type == 'thermal':
+        # Thermal spectrum: Black -> Red -> Orange -> Yellow -> White
+        colored = _create_thermal_spectrum(normalized)
+    elif spectrum_type == 'viridis_like':
+        # Viridis-like spectrum: Purple -> Blue -> Green -> Yellow
+        colored = _create_viridis_like_spectrum(normalized)
+    elif spectrum_type == 'custom_dic':
+        # Custom DIC spectrum optimized for quality visualization
+        colored = _create_custom_dic_spectrum(normalized)
+    else:
+        # Fallback to smooth rainbow
+        colored = _create_smooth_rainbow_spectrum(normalized)
 
-    # Poor quality (0.0-0.10): Dark Red
-    mask_very_poor = normalized <= 0.10
-    colored[mask_very_poor] = [60, 0, 0]  # Very dark red
+    print(f"Applied {spectrum_type} spectrum colormap")
+    return colored
 
-    # Challenging (0.10-0.25): Red
-    mask_challenging = (normalized > 0.10) & (normalized <= 0.25)
-    colored[mask_challenging] = [200, 0, 0]  # Red
 
-    # Marginal (0.25-0.40): Orange-Red
-    mask_marginal = (normalized > 0.25) & (normalized <= 0.40)
-    colored[mask_marginal] = [255, 100, 0]  # Orange-red
+def _create_opencv_spectrum(normalized, colormap_id=cv2.COLORMAP_JET):
+    """Use OpenCV's built-in smooth colormaps"""
+    # Convert 0-1 to 0-255 for OpenCV
+    normalized_255 = (normalized * 255).astype(np.uint8)
 
-    # Acceptable (0.40-0.55): Orange
-    mask_acceptable = (normalized > 0.40) & (normalized <= 0.55)
-    colored[mask_acceptable] = [255, 165, 0]  # Orange
+    # Apply OpenCV colormap
+    colored_bgr = cv2.applyColorMap(normalized_255, colormap_id)
 
-    # Good (0.55-0.70): Yellow
-    mask_good = (normalized > 0.55) & (normalized <= 0.70)
-    colored[mask_good] = [255, 255, 0]  # Yellow
+    # Convert BGR to RGB
+    colored_rgb = cv2.cvtColor(colored_bgr, cv2.COLOR_BGR2RGB)
 
-    # Very Good (0.70-0.85): Green
-    mask_very_good = (normalized > 0.70) & (normalized <= 0.85)
-    colored[mask_very_good] = [0, 255, 0]  # Green
+    return colored_rgb
 
-    # Excellent (0.85-1.0): Blue
-    mask_excellent = normalized > 0.85
-    colored[mask_excellent] = [0, 120, 255]  # Blue
 
-    # DEBUG: Print color distribution
-    print(f"Color mapping results:")
-    print(f"  Dark Red (≤10%): {np.sum(mask_very_poor)} pixels")
-    print(f"  Red (10-25%): {np.sum(mask_challenging)} pixels")
-    print(f"  Orange-Red (25-40%): {np.sum(mask_marginal)} pixels")
-    print(f"  Orange (40-55%): {np.sum(mask_acceptable)} pixels")
-    print(f"  Yellow (55-70%): {np.sum(mask_good)} pixels")
-    print(f"  Green (70-85%): {np.sum(mask_very_good)} pixels")
-    print(f"  Blue (≥85%): {np.sum(mask_excellent)} pixels")
+def _create_smooth_rainbow_spectrum(normalized):
+    """Create smooth rainbow spectrum from red to blue"""
+    h, w = normalized.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # Define color points in RGB
+    colors = np.array([
+        [139, 0, 0],  # Dark red (very poor)
+        [255, 0, 0],  # Red (poor)
+        [255, 127, 0],  # Orange (challenging)
+        [255, 255, 0],  # Yellow (acceptable)
+        [127, 255, 0],  # Yellow-green (good)
+        [0, 255, 0],  # Green (very good)
+        [0, 127, 255],  # Light blue (excellent)
+        [0, 64, 255]  # Blue (outstanding)
+    ])
+
+    # Interpolate smoothly between colors
+    for i in range(h):
+        for j in range(w):
+            value = normalized[i, j]
+
+            # Map value to color index range
+            color_idx = value * (len(colors) - 1)
+            lower_idx = int(np.floor(color_idx))
+            upper_idx = min(lower_idx + 1, len(colors) - 1)
+
+            # Linear interpolation between adjacent colors
+            if lower_idx == upper_idx:
+                colored[i, j] = colors[lower_idx]
+            else:
+                t = color_idx - lower_idx  # interpolation factor
+                colored[i, j] = (1 - t) * colors[lower_idx] + t * colors[upper_idx]
 
     return colored
+
+
+def _create_thermal_spectrum(normalized):
+    """Create thermal spectrum from black to white"""
+    h, w = normalized.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    colors = np.array([
+        [0, 0, 0],  # Black (very poor)
+        [32, 0, 0],  # Very dark red
+        [64, 0, 0],  # Dark red
+        [128, 0, 0],  # Medium red
+        [192, 0, 0],  # Red
+        [255, 0, 0],  # Bright red
+        [255, 64, 0],  # Red-orange
+        [255, 128, 0],  # Orange
+        [255, 192, 0],  # Yellow-orange
+        [255, 255, 0],  # Yellow
+        [255, 255, 128],  # Light yellow
+        [255, 255, 192],  # Very light yellow
+        [255, 255, 255]  # White (excellent)
+    ], dtype=np.float32)
+
+    # Vectorized interpolation
+    color_indices = normalized * (len(colors) - 1)
+    lower_indices = np.floor(color_indices).astype(np.int32)
+    upper_indices = np.minimum(lower_indices + 1, len(colors) - 1)
+    t = color_indices - lower_indices
+
+    for c in range(3):
+        lower_colors = colors[lower_indices, c]
+        upper_colors = colors[upper_indices, c]
+        colored[:, :, c] = ((1 - t) * lower_colors + t * upper_colors).astype(np.uint8)
+
+    return colored
+
+
+def _create_viridis_like_spectrum(normalized):
+    """Create viridis-like spectrum"""
+    h, w = normalized.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    colors = np.array([
+        [68, 1, 84],  # Purple (very poor)
+        [72, 35, 116],  # Dark purple
+        [64, 67, 135],  # Purple-blue
+        [52, 94, 141],  # Blue
+        [41, 120, 142],  # Blue-cyan
+        [32, 144, 140],  # Cyan
+        [34, 167, 132],  # Cyan-green
+        [68, 190, 112],  # Green
+        [121, 209, 81],  # Light green
+        [189, 223, 38],  # Yellow-green
+        [253, 231, 37]  # Yellow (excellent)
+    ], dtype=np.float32)
+
+    # Vectorized interpolation
+    color_indices = normalized * (len(colors) - 1)
+    lower_indices = np.floor(color_indices).astype(np.int32)
+    upper_indices = np.minimum(lower_indices + 1, len(colors) - 1)
+    t = color_indices - lower_indices
+
+    for c in range(3):
+        lower_colors = colors[lower_indices, c]
+        upper_colors = colors[upper_indices, c]
+        colored[:, :, c] = ((1 - t) * lower_colors + t * upper_colors).astype(np.uint8)
+
+    return colored
+
+
+def _create_custom_dic_spectrum(normalized):
+    """Create custom DIC-optimized spectrum with ultra-smooth transitions"""
+    h, w = normalized.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # Custom colors optimized for DIC quality visualization
+    # More color points for ultra-smooth transitions
+    colors = np.array([
+        [32, 0, 0],  # Very dark red (critical: 0-5%)
+        [64, 0, 0],  # Dark red (very poor: 5-10%)
+        [128, 0, 0],  # Red (poor: 10-15%)
+        [192, 0, 0],  # Bright red (poor: 15-20%)
+        [255, 16, 0],  # Red-orange (challenging: 20-25%)
+        [255, 48, 0],  # Red-orange (challenging: 25-30%)
+        [255, 80, 0],  # Orange (marginal: 30-35%)
+        [255, 112, 0],  # Orange (marginal: 35-40%)
+        [255, 144, 0],  # Orange-yellow (acceptable: 40-45%)
+        [255, 176, 0],  # Orange-yellow (acceptable: 45-50%)
+        [255, 208, 0],  # Yellow-orange (good: 50-55%)
+        [255, 240, 0],  # Yellow (good: 55-60%)
+        [224, 255, 0],  # Yellow-green (very good: 60-65%)
+        [192, 255, 0],  # Yellow-green (very good: 65-70%)
+        [160, 255, 0],  # Light green (very good: 70-75%)
+        [128, 255, 0],  # Light green (excellent: 75-80%)
+        [64, 255, 32],  # Green (excellent: 80-85%)
+        [0, 255, 64],  # Green (excellent: 85-90%)
+        [0, 224, 96],  # Green-teal (outstanding: 90-92%)
+        [0, 192, 128],  # Teal (outstanding: 92-95%)
+        [0, 160, 192],  # Teal-blue (exceptional: 95-97%)
+        [0, 128, 255]  # Blue (exceptional: 97-100%)
+    ], dtype=np.float32)
+
+    # Enhanced smooth interpolation with cubic smoothing
+    color_indices = normalized * (len(colors) - 1)
+    lower_indices = np.floor(color_indices).astype(np.int32)
+    upper_indices = np.minimum(lower_indices + 1, len(colors) - 1)
+
+    # Interpolation factors with cubic smoothstep
+    t = color_indices - lower_indices
+    t_smooth = 3 * t ** 2 - 2 * t ** 3  # Smoothstep function for ultra-smooth transitions
+
+    # Vectorized color interpolation with smoothstep
+    for c in range(3):
+        lower_colors = colors[lower_indices, c]
+        upper_colors = colors[upper_indices, c]
+        colored[:, :, c] = ((1 - t_smooth) * lower_colors + t_smooth * upper_colors).astype(np.uint8)
+
+    return colored
+
+
+def _create_smooth_rainbow_spectrum(normalized):
+    """Create smooth rainbow spectrum from red to blue"""
+    h, w = normalized.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # Define color points in RGB for smooth rainbow
+    colors = np.array([
+        [139, 0, 0],  # Dark red (very poor: 0-10%)
+        [255, 0, 0],  # Red (poor: 10-20%)
+        [255, 64, 0],  # Red-orange (challenging: 20-30%)
+        [255, 128, 0],  # Orange (marginal: 30-40%)
+        [255, 192, 0],  # Orange-yellow (acceptable: 40-50%)
+        [255, 255, 0],  # Yellow (good: 50-60%)
+        [192, 255, 0],  # Yellow-green (very good: 60-70%)
+        [128, 255, 0],  # Light green (very good: 70-80%)
+        [0, 255, 0],  # Green (excellent: 80-90%)
+        [0, 192, 128],  # Teal (outstanding: 90-95%)
+        [0, 128, 255]  # Blue (exceptional: 95-100%)
+    ], dtype=np.float32)
+
+    # Vectorized smooth interpolation
+    color_indices = normalized * (len(colors) - 1)
+    lower_indices = np.floor(color_indices).astype(np.int32)
+    upper_indices = np.minimum(lower_indices + 1, len(colors) - 1)
+
+    # Interpolation factors
+    t = color_indices - lower_indices
+
+    # Vectorized color interpolation
+    for c in range(3):  # RGB channels
+        lower_colors = colors[lower_indices, c]
+        upper_colors = colors[upper_indices, c]
+        colored[:, :, c] = ((1 - t) * lower_colors + t * upper_colors).astype(np.uint8)
+
+    return colored
+
+
+def _create_quality_visualization(base_image, quality_map, colormap_name='custom_dic', alpha=0.7):
+    """
+    UPDATED: Create quality map visualization with smooth spectrum options
+
+    Args:
+        base_image: Base RGB image
+        quality_map: Quality map data (0-1)
+        colormap_name: Spectrum type to use
+        alpha: Blending factor (0-1)
+
+    Returns:
+        numpy.ndarray: Visualization with quality overlay
+    """
+    if quality_map is None:
+        return base_image
+
+    # Ensure base image is RGB
+    if len(base_image.shape) == 2:
+        rgb_image = cv2.cvtColor(base_image, cv2.COLOR_GRAY2RGB)
+    else:
+        rgb_image = base_image.copy()
+
+    print(f"Creating quality visualization with {colormap_name} spectrum")
+    print(f"Quality map stats: min={quality_map.min():.4f}, max={quality_map.max():.4f}, mean={quality_map.mean():.4f}")
+
+    # Apply selected colormap using the updated function
+    colored_map = _apply_dic_colormap(quality_map, colormap_name)
+
+    # Check dimensions match
+    if colored_map.shape[:2] != rgb_image.shape[:2]:
+        colored_map = cv2.resize(colored_map, (rgb_image.shape[1], rgb_image.shape[0]))
+        print(f"Resized colored map to match base image: {colored_map.shape}")
+
+    # Create blended overlay
+    visualization = cv2.addWeighted(rgb_image, 1 - alpha, colored_map, alpha, 0)
+
+    print(f"Quality visualization created successfully with {colormap_name}")
+    return visualization
 
 
 def visualize_quality_map(base_image, quality_map, colormap_name='dic_quality', alpha=0.7):
@@ -480,6 +667,67 @@ def visualize_quality_map(base_image, quality_map, colormap_name='dic_quality', 
     Clean interface - complexity hidden internally.
     """
     return _create_quality_visualization(base_image, quality_map, colormap_name, alpha)
+
+
+def _apply_dic_colormap(quality_map, spectrum_type='custom_dic'):
+    """
+    UPDATED: Apply smooth spectrum colormap to quality data
+
+    Args:
+        quality_map: Normalized quality data (0-1)
+        spectrum_type: Type of spectrum ('custom_dic', 'smooth_rainbow', 'thermal', etc.)
+
+    Returns:
+        numpy.ndarray: RGB colored image (H, W, 3) with dtype uint8
+    """
+    h, w = quality_map.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # Ensure quality_map is 0-1 range
+    if quality_map.max() > 1.0:
+        normalized = quality_map.astype(float) / 255.0
+        print(f"WARNING: Quality map had values > 1, normalizing from 0-255 to 0-1")
+    else:
+        normalized = quality_map.astype(float)
+
+    normalized = np.clip(normalized, 0, 1)
+    print(f"Applying {spectrum_type} spectrum to quality map range: {normalized.min():.4f} - {normalized.max():.4f}")
+
+    # Apply selected spectrum type
+    if spectrum_type == 'smooth_rainbow':
+        colored = _create_smooth_rainbow_spectrum(normalized)
+    elif spectrum_type == 'thermal':
+        colored = _create_thermal_spectrum(normalized)
+    elif spectrum_type == 'viridis_like':
+        colored = _create_viridis_like_spectrum(normalized)
+    elif spectrum_type == 'custom_dic':
+        colored = _create_custom_dic_spectrum(normalized)
+    elif spectrum_type == 'opencv_jet':
+        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_JET)
+    elif spectrum_type == 'opencv_viridis':
+        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_VIRIDIS)
+    elif spectrum_type == 'opencv_plasma':
+        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_PLASMA)
+    elif spectrum_type == 'opencv_inferno':
+        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_INFERNO)
+    else:
+        # Default to custom DIC spectrum
+        print(f"Unknown spectrum type '{spectrum_type}', defaulting to 'custom_dic'")
+        colored = _create_custom_dic_spectrum(normalized)
+
+    return colored
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1,9 +1,9 @@
-
-# analysis.file_operations.py
+# analysis.file_operations.py - FIXED: Full reset when loading new images
 from tkinter import filedialog, messagebox
 import numpy as np
 from PIL import Image
 import os
+
 
 class FileOperations:
     def __init__(self, main_window):
@@ -11,7 +11,7 @@ class FileOperations:
         self.main_window = main_window
 
     def load_image(self):
-        """Load an image from file"""
+        """Load an image from file with full application reset"""
         filetypes = [
             ("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff"),
             ("All files", "*.*")
@@ -21,15 +21,12 @@ class FileOperations:
 
         if filename:
             try:
-                # Reset analysis results and quality map data when loading a new image
-                self.main_window.analysis_results = {}
-                if hasattr(self.main_window.image_display, 'quality_map_data'):
-                    self.main_window.image_display.quality_map_data = None
-                    self.main_window.image_display.quality_visualization = None
-                    self.main_window.image_display.showing_quality_overlay = False
-
-                # Disable the quality map button until analysis is performed
-                self.main_window.quality_map_btn.config(state='disabled')
+                # FIXED: Only reset if the method exists (avoid first-load crash)
+                if hasattr(self.main_window, '_reset_application_data'):
+                    print("Resetting application state before loading new image...")
+                    self.main_window._reset_application_data()
+                else:
+                    print("First image load - skipping reset")
 
                 # Load and process the image
                 self.load_image_from_path(filename)
@@ -50,19 +47,35 @@ class FileOperations:
         self.main_window.original_image = np.array(pil_image)
         self.main_window.current_image = self.main_window.original_image.copy()
 
-        # Clear previous ROI
+        # FIXED: Explicitly clear ROI coordinates and update display
         self.main_window.roi_coords = None
-        self.main_window.roi_handler.update_roi_info()  # Use the ROI handler's method
+        if hasattr(self.main_window, 'roi_handler') and self.main_window.roi_handler:
+            self.main_window.roi_handler.roi_coords = []
+            self.main_window.roi_handler.roi_polygon = None
+            self.main_window.roi_handler.preview_line = None
+            self.main_window.roi_handler.roi_selection_mode = False
+            self.main_window.roi_handler.update_roi_info()  # Force update of ROI info display
+            print("ROI explicitly cleared after image load")
 
-        # Display image
+        # Display image (this will clear the canvas and redraw)
         self.main_window.image_display.display_image(pil_image)
 
-        # Enable ROI selection and analysis
+        # Enable ROI selection and analysis for new image
         self.main_window.roi_btn.config(state='normal')
         self.main_window.analyze_btn.config(state='normal')
 
+        # Update state to image_loaded
         if hasattr(self.main_window, 'state_manager'):
             self.main_window.state_manager.update_state("image_loaded")
+
+        # Update status
+        filename_only = os.path.basename(path)
+        h, w = self.main_window.original_image.shape[:2]
+        self.main_window.status_var.set(f"Image loaded: {filename_only} ({w}×{h} pixels)")
+
+        print(f"Image loaded successfully: {filename_only}")
+        print(
+            f"ROI coordinates after load: {self.main_window.roi_handler.roi_coords if hasattr(self.main_window, 'roi_handler') else 'No ROI handler'}")
 
     def save_report(self):
         """Save analysis report to file"""

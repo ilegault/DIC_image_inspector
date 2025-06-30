@@ -30,6 +30,9 @@ class DICQualityInspector:
         self.roi_start = None
         self.roi_rect = None
 
+        # ADD THIS LINE: Spectrum selection variable
+        self.selected_spectrum = tk.StringVar(value='custom_dic')
+
         # Create GUI
         self.create_gui()
 
@@ -135,34 +138,73 @@ class DICQualityInspector:
         canvas_frame.grid_rowconfigure(0, weight=1)
         canvas_frame.grid_columnconfigure(0, weight=1)
 
-        # Image processing buttons
+        # Image processing buttons (REPLACE this entire section)
         process_frame = tk.Frame(left_panel, bg='#34495e')
         process_frame.pack(pady=10)
 
-        original_btn = tk.Button(process_frame, text="Original",
+        # First row of buttons - keep your existing buttons
+        button_row1 = tk.Frame(process_frame, bg='#34495e')
+        button_row1.pack()
+
+        original_btn = tk.Button(button_row1, text="Original",
                                  bg='#95a5a6', fg='white', padx=10,
                                  command=lambda: self.image_display.show_original())
         original_btn.pack(side='left', padx=2)
 
-        edges_btn = tk.Button(process_frame, text="Edges",
+        edges_btn = tk.Button(button_row1, text="Edges",
                               bg='#95a5a6', fg='white', padx=10,
                               command=lambda: self.image_display.show_edges())
         edges_btn.pack(side='left', padx=2)
 
-        gradient_btn = tk.Button(process_frame, text="Gradient",
+        gradient_btn = tk.Button(button_row1, text="Gradient",
                                  bg='#95a5a6', fg='white', padx=10,
                                  command=lambda: self.image_display.show_gradient())
         gradient_btn.pack(side='left', padx=2)
 
-        reset_display_btn = tk.Button(process_frame, text="Reset",
+        reset_display_btn = tk.Button(button_row1, text="🔄 Full Reset",
                                       bg='#e74c3c', fg='white', padx=10,
                                       command=self.full_reset)
         reset_display_btn.pack(side='left', padx=2)
 
-        # Quality map button
-        self.quality_map_btn = tk.Button(process_frame, text="Quality Map",
+        # Quality map button - keep this
+        self.quality_map_btn = tk.Button(button_row1, text="Quality Map",
                                          bg='#2ecc71', fg='white', padx=10)
         self.quality_map_btn.pack(side='left', padx=2)
+
+        # ADD THIS: Second row for spectrum selection
+        spectrum_row = tk.Frame(process_frame, bg='#34495e')
+        spectrum_row.pack(pady=5)
+
+        # Spectrum selection label
+        spectrum_label = tk.Label(spectrum_row, text="Color Spectrum:",
+                                  font=('Arial', 10), fg='#ecf0f1', bg='#34495e')
+        spectrum_label.pack(side='left', padx=5)
+
+        # Spectrum selection dropdown
+        spectrum_options = [
+            'custom_dic',
+            'smooth_rainbow',
+            'thermal',
+            'viridis_like',
+            'opencv_jet',
+            'opencv_viridis',
+            'opencv_plasma',
+            'opencv_inferno'
+        ]
+
+        self.spectrum_combo = ttk.Combobox(spectrum_row,
+                                           textvariable=self.selected_spectrum,
+                                           values=spectrum_options,
+                                           state='readonly',
+                                           width=15,
+                                           font=('Arial', 9))
+        self.spectrum_combo.pack(side='left', padx=5)
+
+        # Bind selection change event
+        self.spectrum_combo.bind('<<ComboboxSelected>>', self.on_spectrum_changed)
+
+        # Set default selection
+        self.spectrum_combo.set('custom_dic')
 
         # IMPROVED COLOR LEGEND - More readable with outlines
         legend_frame = tk.Frame(left_panel, bg='#34495e')
@@ -346,17 +388,31 @@ class DICQualityInspector:
         screenshot_window.update()
 
     def _analyze_worker(self):
-        """Worker thread for analysis - FIXED with proper variable scoping"""
+        """Worker thread for analysis - UPDATED with spectrum support"""
         try:
-            # Always analyze full image for proper quality map alignment
-            print("Generating quality map from full image...")
-            quality_map, visualization = generate_quality_map(self.original_image)
+            # Get selected spectrum type
+            spectrum_type = getattr(self, 'selected_spectrum', None)
+            if spectrum_type:
+                spectrum_type = spectrum_type.get()
+            else:
+                spectrum_type = 'custom_dic'  # Default
+
+            print(f"Generating quality map with {spectrum_type} spectrum...")
+
+            # Import the updated generate_quality_map function
+            from analysis.quality_map.map_generator import generate_quality_map
+
+            # Generate quality map with selected spectrum
+            quality_map, visualization = generate_quality_map(
+                self.original_image,
+                colormap=spectrum_type
+            )
 
             # Store quality map data in image display for overlay
             self.image_display.quality_map_data = quality_map
             self.image_display.quality_visualization = visualization
             print(
-                f"Quality map generated: shape {quality_map.shape}, range {quality_map.min():.3f}-{quality_map.max():.3f}")
+                f"Quality map generated with {spectrum_type}: shape {quality_map.shape}, range {quality_map.min():.3f}-{quality_map.max():.3f}")
 
             # FIXED: Initialize variables before conditional blocks
             roi_quality_scores = None
@@ -415,10 +471,12 @@ class DICQualityInspector:
                     'max_quality': float(np.max(quality_data_for_stats) * 100),
                     'median_quality': float(np.median(quality_data_for_stats) * 100)
                 },
-                'analysis_method': 'ROI-based' if use_roi_calculation else 'Full image'
+                'analysis_method': 'ROI-based' if use_roi_calculation else 'Full image',
+                'spectrum_used': spectrum_type
             }
 
-            print(f"Analysis complete. Overall score: {average_quality:.1f} ({analysis_results['analysis_method']})")
+            print(
+                f"Analysis complete. Overall score: {average_quality:.1f} ({analysis_results['analysis_method']}) with {spectrum_type}")
 
             # Call completion handler on UI thread
             self.root.after(0, lambda: self._on_analysis_complete(analysis_results))
@@ -515,10 +573,38 @@ class DICQualityInspector:
 
     def _auto_show_quality_map(self):
         """Automatically show quality map after analysis"""
+        print("DEBUG: _auto_show_quality_map called")
+
         if hasattr(self.image_display, 'quality_map_data') and self.image_display.quality_map_data is not None:
+            print("DEBUG: Quality map data found, attempting to show")
+
             # Only auto-show if not already showing
             if not getattr(self.image_display, 'showing_quality_overlay', False):
-                self.image_display.toggle_quality_map_overlay()
+                print("DEBUG: Quality overlay not currently showing, toggling on")
+
+                # Set the flag first
+                self.image_display.showing_quality_overlay = True
+
+                # Change button appearance
+                if hasattr(self, 'quality_map_btn'):
+                    self.quality_map_btn.config(bg='#e74c3c')  # Red when active
+
+                # Show the quality map with spectrum
+                try:
+                    self.image_display.show_quality_map_with_spectrum()
+                    print("DEBUG: Quality map auto-displayed successfully")
+                except Exception as e:
+                    print(f"DEBUG: Error auto-showing quality map: {e}")
+                    # Try fallback method
+                    try:
+                        self.image_display.show_quality_map_fallback()
+                        print("DEBUG: Fallback quality map display succeeded")
+                    except Exception as e2:
+                        print(f"DEBUG: Fallback also failed: {e2}")
+            else:
+                print("DEBUG: Quality overlay already showing")
+        else:
+            print("DEBUG: No quality map data available for auto-show")
 
     def _on_analysis_error(self, error_msg):
         """Handle analysis error"""
@@ -531,6 +617,30 @@ class DICQualityInspector:
             self.state_manager.update_state("roi_selected")
         else:
             self.state_manager.update_state("image_loaded")
+
+    def _on_analysis_complete(self, analysis_results):
+        """Handle analysis completion - simplified version"""
+        print("DEBUG: _on_analysis_complete called")
+
+        # Store results
+        self.analysis_results = analysis_results
+
+        # Get overall score (same as average quality)
+        score = analysis_results.get('overall_score', 0)
+
+        # Update results display
+        self._update_results_display()
+
+        # Update state to analysis_complete
+        self.state_manager.update_state("analysis_complete", score=score)
+
+        # Enable quality map button
+        self.quality_map_btn.config(state='normal')
+
+        print("DEBUG: Quality map button enabled, scheduling auto-show")
+
+        # Auto-show quality map after a brief delay
+        self.root.after(500, self._auto_show_quality_map)
 
     def _update_results_display(self):
         """FIXED: Complete results display with all metrics"""
@@ -819,6 +929,126 @@ class DICQualityInspector:
             return "Challenging for DIC", "#e74c3c"  # Red
         else:
             return "Poor for DIC", "#8e44ad"  # Purple
+
+    def create_spectrum_selection_ui(self, process_frame):
+        """Add spectrum selection dropdown to the processing frame"""
+
+        # Create spectrum selection frame
+        spectrum_frame = tk.Frame(process_frame, bg='#34495e')
+        spectrum_frame.pack(side='right', padx=10)
+
+        # Spectrum selection label
+        spectrum_label = tk.Label(spectrum_frame, text="Color Spectrum:",
+                                  font=('Arial', 9), fg='#ecf0f1', bg='#34495e')
+        spectrum_label.pack()
+
+        # Spectrum selection dropdown
+        spectrum_options = [
+            ('Custom DIC', 'custom_dic'),
+            ('Smooth Rainbow', 'smooth_rainbow'),
+            ('Thermal', 'thermal'),
+            ('Viridis-like', 'viridis_like'),
+            ('OpenCV Jet', 'opencv_jet'),
+            ('OpenCV Viridis', 'opencv_viridis'),
+            ('OpenCV Plasma', 'opencv_plasma'),
+            ('OpenCV Inferno', 'opencv_inferno')
+        ]
+
+        self.spectrum_combo = ttk.Combobox(spectrum_frame,
+                                           textvariable=self.selected_spectrum,
+                                           values=[opt[1] for opt in spectrum_options],
+                                           state='readonly',
+                                           width=12,
+                                           font=('Arial', 8))
+
+        # Set display values
+        display_values = [opt[0] for opt in spectrum_options]
+        self.spectrum_combo['values'] = [opt[1] for opt in spectrum_options]
+
+        # Custom display mapping
+        self.spectrum_display_map = {opt[1]: opt[0] for opt in spectrum_options}
+        self.spectrum_value_map = {opt[0]: opt[1] for opt in spectrum_options}
+
+        self.spectrum_combo.pack(pady=2)
+
+        # Bind selection change event
+        self.spectrum_combo.bind('<<ComboboxSelected>>', self.on_spectrum_changed)
+
+    def on_spectrum_changed(self, event=None):
+        """Handle spectrum selection change"""
+        if not hasattr(self, 'image_display') or not hasattr(self.image_display, 'quality_map_data'):
+            return
+
+        if (self.image_display.quality_map_data is not None and
+                hasattr(self.image_display, 'showing_quality_overlay') and
+                self.image_display.showing_quality_overlay):
+            spectrum_type = self.selected_spectrum.get()
+            print(f"Spectrum changed to: {spectrum_type}")
+
+            # Update the quality map visualization with new spectrum
+            self.update_quality_map_with_spectrum()
+
+            # Update status
+            display_name = spectrum_type.replace('_', ' ').title()
+            self.status_var.set(f"Updated quality map with {display_name} spectrum")
+
+    def update_quality_map_with_spectrum(self):
+        """Update quality map visualization with selected spectrum"""
+        if not hasattr(self.image_display, 'quality_map_data') or self.image_display.quality_map_data is None:
+            print("No quality map data available")
+            return
+
+        # Store current view state to maintain positioning
+        current_zoom = self.image_display.zoom_level
+        visible_x = self.image_display.canvas.xview()
+        visible_y = self.image_display.canvas.yview()
+
+        # Get selected spectrum type
+        spectrum_type = self.selected_spectrum.get()
+        print(f"Updating quality map with spectrum: {spectrum_type}")
+
+        # Generate new visualization with selected spectrum
+        try:
+            from analysis.utils.image_processing import create_quality_map_visualization
+
+            roi_coords = self.roi_handler.roi_coords if hasattr(self, 'roi_handler') else None
+
+            visualization = create_quality_map_visualization(
+                self.original_image.copy(),
+                self.image_display.quality_map_data,
+                roi_coords,
+                display_scale=1.0,
+                spectrum_type=spectrum_type
+            )
+
+            # Convert to PIL and display
+            from PIL import Image
+            visualization_pil = Image.fromarray(visualization)
+
+            # Set flag to prevent recursion during display
+            self.image_display._updating_quality_map = True
+
+            # Display with preserved view
+            self.image_display.display_image(visualization_pil, preserve_view=True)
+
+            # Clear the flag
+            self.image_display._updating_quality_map = False
+
+            # Restore exact view state
+            self.image_display.zoom_level = current_zoom
+            if visible_x and visible_y:
+                self.image_display.canvas.xview_moveto(visible_x[0])
+                self.image_display.canvas.yview_moveto(visible_y[0])
+
+            # Update state
+            self.image_display.showing_quality_overlay = True
+
+            print(f"Successfully updated quality map with {spectrum_type} spectrum")
+
+        except Exception as e:
+            print(f"Error updating quality map with spectrum: {e}")
+            import traceback
+            traceback.print_exc()
 
     def full_reset(self):
         """Complete application reset - everything back to initial state"""

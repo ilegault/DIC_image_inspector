@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import logging
 from PIL import Image
-from tkinter import messagebox
 
 logger = logging.getLogger(__name__)
 
@@ -97,104 +96,95 @@ def convert_roi_coords_to_image_space(roi_coords, display_scale):
     return [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
 
 
-def create_quality_map_visualization(original_image, quality_map_data, roi_coords=None, display_scale=1.0):
+def create_quality_map_visualization(original_image, quality_map_data, roi_coords=None, display_scale=1.0,
+                                     spectrum_type='custom_dic'):
     """
-    FIXED: Create quality map visualization for the image
+    FIXED: Create quality map visualization with proper spectrum support
 
-    The issue was that ROI polygons were being handled incorrectly, causing the
-    quality map to only show in a small region instead of the full ROI area.
+    Args:
+        original_image: Original image array
+        quality_map_data: Quality map data (0-1 normalized)
+        roi_coords: ROI coordinates (optional polygon points)
+        display_scale: Display scale factor (for coordinate conversion)
+        spectrum_type: Color spectrum type to use
+
+    Returns:
+        numpy.ndarray: RGB image with quality overlay
     """
     if quality_map_data is None or original_image is None:
+        print("No quality map data or original image provided")
         return original_image
 
-    # Ensure both images are valid numpy arrays
+    # Validate inputs
     if not isinstance(original_image, np.ndarray) or not isinstance(quality_map_data, np.ndarray):
         print(f"Invalid input types: original_image={type(original_image)}, quality_map_data={type(quality_map_data)}")
         return original_image
 
     result = original_image.copy()
 
-    # DEBUG: Print dimensions for troubleshooting
-    print(f"DEBUG: original_image shape: {original_image.shape}")
-    print(f"DEBUG: quality_map_data shape: {quality_map_data.shape}")
-    print(f"DEBUG: roi_coords type: {type(roi_coords)}")
-    if roi_coords:
-        print(f"DEBUG: roi_coords length: {len(roi_coords)}")
+    print(f"Creating quality map visualization:")
+    print(f"  Spectrum type: {spectrum_type}")
+    print(f"  Original image shape: {original_image.shape}")
+    print(f"  Quality map shape: {quality_map_data.shape}")
+    print(f"  Quality range: {quality_map_data.min():.4f} - {quality_map_data.max():.4f}")
 
-    # Handle ROI visualization
+    # Handle ROI-specific visualization
     if roi_coords and isinstance(roi_coords, (list, tuple)) and len(roi_coords) >= 3:
-        print("DEBUG: Processing polygon ROI")
-
-        # Ensure ROI coords are in image space (not canvas space)
-        h, w = result.shape[:2]
-        max_x = max(pt[0] for pt in roi_coords)
-        max_y = max(pt[1] for pt in roi_coords)
-
-        # If any point is outside image, convert from canvas to image space
-        if max_x > w or max_y > h:
-            if display_scale is None or display_scale == 0:
-                display_scale = 1.0
-            roi_coords_img = [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
-            print(f"DEBUG: Converted ROI coords from canvas to image space")
-        else:
-            roi_coords_img = [(int(round(x)), int(round(y))) for (x, y) in roi_coords]
-
-        # Create mask for ROI - this is the key fix!
-        mask = np.zeros(result.shape[:2], dtype=np.uint8)
-        pts = np.array(roi_coords_img, dtype=np.int32)
-        cv2.fillPoly(mask, [pts], 255)
-
-        print(f"DEBUG: ROI mask created, non-zero pixels: {np.sum(mask > 0)}")
-
-        # FIXED: Apply quality map colors to the ENTIRE quality map, then mask the result
-        # This ensures we get the correct colors throughout the ROI
-
-        # Normalize quality map for coloring
-        min_val, max_val = np.min(quality_map_data), np.max(quality_map_data)
-        if max_val > min_val:
-            normalized_map = ((quality_map_data - min_val) / (max_val - min_val)).astype(float)
-        else:
-            normalized_map = np.zeros_like(quality_map_data, dtype=float)
-
-        print(f"DEBUG: Normalized quality map range: {normalized_map.min():.4f} - {normalized_map.max():.4f}")
-
-        # Apply DIC colormap using the same function as the main visualization
-        colored_map = _apply_dic_colormap_for_roi(normalized_map)
-
-        print(f"DEBUG: Colored map shape: {colored_map.shape}")
-
-        # Resize colored map to match original image dimensions if needed
-        if colored_map.shape[:2] != result.shape[:2]:
-            colored_map = cv2.resize(colored_map, (result.shape[1], result.shape[0]))
-            print(f"DEBUG: Resized colored map to: {colored_map.shape}")
-
-        # Create blended result - ONLY in the ROI area
-        blended = result.copy()
-        mask_bool = mask > 0
-
-        if np.any(mask_bool):
-            print(f"DEBUG: Applying quality colors to {np.sum(mask_bool)} pixels")
-            # Blend colors only in ROI region
-            blended[mask_bool] = cv2.addWeighted(
-                result[mask_bool].astype(np.uint8), 0.3,
-                colored_map[mask_bool].astype(np.uint8), 0.7, 0
-            )
-        else:
-            print("DEBUG: WARNING - No pixels in ROI mask!")
-
-        result = blended
-
+        print("Processing polygon ROI visualization")
+        return _create_roi_quality_visualization(result, quality_map_data, roi_coords, display_scale, spectrum_type)
     else:
-        # No ROI selected, apply to entire image
-        print("DEBUG: No ROI, applying to entire image")
-        try:
-            from analysis.quality_map.map_generator import visualize_quality_map
-            result = visualize_quality_map(result, quality_map_data)
-        except Exception as e:
-            print(f"Error in full image visualization: {e}")
-            result = original_image
+        # No ROI - apply to entire image
+        print("Processing full image visualization")
+        return _create_full_image_quality_visualization(result, quality_map_data, spectrum_type)
 
-    return result
+def _create_full_image_quality_visualization(original_image, quality_map_data, spectrum_type):
+    """Create quality visualization for full image"""
+    try:
+        # Use the main visualization function from map_generator
+        from analysis.quality_map.map_generator import _create_quality_visualization
+        result = _create_quality_visualization(original_image, quality_map_data, spectrum_type, alpha=0.7)
+        print(f"Created full image visualization with {spectrum_type}")
+        return result
+    except ImportError as e:
+        print(f"Import error for full image visualization: {e}")
+        # Fallback to basic visualization
+        return _create_basic_full_image_visualization(original_image, quality_map_data)
+    except Exception as e:
+        print(f"Error in full image visualization: {e}")
+        return original_image
+
+
+def _apply_spectrum_for_roi(quality_map, spectrum_type):
+    """Apply selected spectrum for ROI visualization"""
+
+    # Import the spectrum functions from map_generator
+    from analysis.quality_map.map_generator import (
+        _create_smooth_rainbow_spectrum,
+        _create_thermal_spectrum,
+        _create_viridis_like_spectrum,
+        _create_custom_dic_spectrum,
+        _create_opencv_spectrum
+    )
+
+    if spectrum_type == 'smooth_rainbow':
+        return _create_smooth_rainbow_spectrum(quality_map)
+    elif spectrum_type == 'thermal':
+        return _create_thermal_spectrum(quality_map)
+    elif spectrum_type == 'viridis_like':
+        return _create_viridis_like_spectrum(quality_map)
+    elif spectrum_type == 'custom_dic':
+        return _create_custom_dic_spectrum(quality_map)
+    elif spectrum_type == 'opencv_jet':
+        return _create_opencv_spectrum(quality_map, cv2.COLORMAP_JET)
+    elif spectrum_type == 'opencv_viridis':
+        return _create_opencv_spectrum(quality_map, cv2.COLORMAP_VIRIDIS)
+    elif spectrum_type == 'opencv_plasma':
+        return _create_opencv_spectrum(quality_map, cv2.COLORMAP_PLASMA)
+    elif spectrum_type == 'opencv_inferno':
+        return _create_opencv_spectrum(quality_map, cv2.COLORMAP_INFERNO)
+    else:
+        # Default to custom DIC spectrum
+        return _create_custom_dic_spectrum(quality_map)
 
 
 def _apply_dic_colormap_for_roi(quality_map):
@@ -297,3 +287,129 @@ def create_gradient_visualization(image, roi_coords=None):
     elif gradient_vis_colored.shape[2] == 3:
         gradient_vis_colored = cv2.cvtColor(gradient_vis_colored, cv2.COLOR_BGR2RGB)
     return gradient_vis_colored
+
+
+def _create_roi_quality_visualization(original_image, quality_map_data, roi_coords, display_scale, spectrum_type):
+    """Create quality visualization for ROI region only"""
+    h, w = original_image.shape[:2]
+
+    print(f"Creating ROI visualization: image {h}x{w}, {len(roi_coords)} ROI points")
+
+    # Convert ROI coordinates to image space if needed
+    max_x = max(pt[0] for pt in roi_coords)
+    max_y = max(pt[1] for pt in roi_coords)
+
+    if max_x > w or max_y > h:
+        # Convert from canvas space to image space
+        if display_scale is None or display_scale == 0:
+            display_scale = 1.0
+        roi_coords_img = [(int(round(x / display_scale)), int(round(y / display_scale))) for (x, y) in roi_coords]
+        print(f"Converted ROI coords from canvas to image space (scale: {display_scale})")
+    else:
+        roi_coords_img = [(int(round(x)), int(round(y))) for (x, y) in roi_coords]
+
+    # Clamp coordinates to image bounds
+    roi_coords_img = [(max(0, min(w - 1, x)), max(0, min(h - 1, y))) for (x, y) in roi_coords_img]
+
+    print(f"ROI coords in image space: {roi_coords_img[:2]}...{roi_coords_img[-2:] if len(roi_coords_img) > 2 else []}")
+
+    # Create mask for ROI
+    mask = np.zeros((h, w), dtype=np.uint8)
+    pts = np.array(roi_coords_img, dtype=np.int32)
+    cv2.fillPoly(mask, [pts], 255)
+
+    roi_pixel_count = np.sum(mask > 0)
+    print(f"ROI mask created: {roi_pixel_count} pixels")
+
+    if roi_pixel_count == 0:
+        print("WARNING: ROI mask is empty!")
+        return original_image
+
+    # Normalize quality map data
+    min_val, max_val = np.min(quality_map_data), np.max(quality_map_data)
+    if max_val > min_val:
+        normalized_map = ((quality_map_data - min_val) / (max_val - min_val)).astype(float)
+    else:
+        normalized_map = np.zeros_like(quality_map_data, dtype=float)
+
+    print(f"Normalized quality map: {normalized_map.min():.4f} - {normalized_map.max():.4f}")
+
+    # Apply spectrum colormap to the full quality map
+    try:
+        from analysis.quality_map.map_generator import _apply_dic_colormap
+        colored_map = _apply_dic_colormap(normalized_map, spectrum_type)
+        print(f"Applied {spectrum_type} colormap successfully")
+    except ImportError as e:
+        print(f"Import error for colormap: {e}")
+        # Fallback to basic colormap
+        colored_map = _apply_basic_colormap(normalized_map)
+
+    # Resize colored map to match original image if needed
+    if colored_map.shape[:2] != (h, w):
+        colored_map = cv2.resize(colored_map, (w, h))
+        print(f"Resized colored map to match image: {colored_map.shape}")
+
+    # Apply colored overlay only to ROI region
+    result = original_image.copy()
+    mask_bool = mask > 0
+
+    if np.any(mask_bool):
+        # Blend colors only in ROI area with proper alpha blending
+        alpha = 0.7  # Overlay strength
+        result[mask_bool] = cv2.addWeighted(
+            original_image[mask_bool].astype(np.uint8), 1 - alpha,
+            colored_map[mask_bool].astype(np.uint8), alpha, 0
+        )
+        print(f"Applied {spectrum_type} overlay to {np.sum(mask_bool)} ROI pixels")
+
+    return result
+
+
+def _apply_basic_colormap(quality_map):
+    """Basic fallback colormap if imports fail"""
+    print("Using basic fallback colormap")
+    h, w = quality_map.shape
+    colored = np.zeros((h, w, 3), dtype=np.uint8)
+
+    # Simple red to blue progression
+    normalized = np.clip(quality_map, 0, 1)
+
+    # Red component (high when quality is low)
+    colored[:, :, 0] = ((1 - normalized) * 255).astype(np.uint8)
+
+    # Green component (peak in middle)
+    green_mask = (normalized > 0.3) & (normalized < 0.7)
+    colored[green_mask, 1] = 255
+
+    # Blue component (high when quality is high)
+    colored[:, :, 2] = (normalized * 255).astype(np.uint8)
+
+    return colored
+
+
+def _create_basic_full_image_visualization(original_image, quality_map_data):
+    """Basic fallback for full image visualization"""
+    print("Using basic fallback full image visualization")
+
+    # Apply basic colormap
+    colored_map = _apply_basic_colormap(quality_map_data)
+
+    # Resize if needed
+    if colored_map.shape[:2] != original_image.shape[:2]:
+        colored_map = cv2.resize(colored_map, (original_image.shape[1], original_image.shape[0]))
+
+    # Blend with original
+    result = cv2.addWeighted(original_image, 0.3, colored_map, 0.7, 0)
+
+    return result
+
+
+def create_quality_map_visualization_with_spectrum(original_image, quality_map_data, roi_coords=None,
+                                                   display_scale=1.0, spectrum_type='custom_dic'):
+    """
+    Wrapper function for spectrum-aware quality map visualization
+    """
+    return create_quality_map_visualization(
+        original_image, quality_map_data, roi_coords, display_scale, spectrum_type
+    )
+
