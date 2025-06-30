@@ -1,29 +1,26 @@
-import tkinter as tk
-import numpy as np
-from PIL import Image, ImageTk, ImageDraw
+# ui/dynamic_legend.py - Fixed layout management
 
+import tkinter as tk
 
 class DynamicLegend:
-    """Dynamic legend that updates based on selected color spectrum"""
+    """Dynamic legend that updates based on selected color spectrum with stable layout"""
 
     def __init__(self, parent_frame):
         self.parent_frame = parent_frame
         self.legend_frame = None
         self.current_spectrum = 'custom_dic'
 
-        # Spectrum definitions with their color mappings
+        # UPDATED: Spectrum definitions with fresh Black→Red→Blue DIC spectrum
         self.spectrum_definitions = {
             'custom_dic': {
-                'name': 'Custom DIC',
+                'name': 'Custom DIC (Black→Red→Blue)',
                 'colors': [
-                    (32, 0, 0, "Critical"),
-                    (128, 0, 0, "Very Poor"),
-                    (255, 0, 0, "Poor"),
-                    (255, 127, 0, "Challenging"),
-                    (255, 255, 0, "Acceptable"),
-                    (127, 255, 0, "Good"),
-                    (0, 255, 0, "Very Good"),
-                    (0, 127, 255, "Excellent")
+                    (0, 0, 0, "Critical (0-75%): Black - Not suitable for DIC"),
+                    (120, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
+                    (255, 80, 0, "Good (80-85%): Orange - Acceptable for DIC"),
+                    (255, 200, 0, "Very Good (85-90%): Yellow - Good for DIC"),
+                    (120, 255, 180, "Excellent (90-95%): Cyan - Excellent for DIC"),
+                    (0, 140, 255, "Perfect (95-100%): Blue - Ideal for DIC")
                 ]
             },
             'smooth_rainbow': {
@@ -109,10 +106,10 @@ class DynamicLegend:
                 ]
             }
         }
-        print(f"DynamicLegend initialized with {len(self.spectrum_definitions)} spectrum definitions")
+        print(f"DynamicLegend initialized with updated custom_dic spectrum")
 
     def create_legend(self, spectrum_type='custom_dic'):
-        """FIXED: Create or update the legend for the specified spectrum with proper error handling"""
+        """FIXED: Create legend with stable layout that doesn't affect canvas size"""
         try:
             print(f"DynamicLegend.create_legend called with spectrum_type: {spectrum_type}")
 
@@ -127,26 +124,26 @@ class DynamicLegend:
                 print(f"WARNING: Unknown spectrum type '{spectrum_type}', using 'custom_dic'")
                 spectrum_type = 'custom_dic'
 
-            # Create new legend frame
-            print("Creating new legend frame")
-            self.legend_frame = tk.Frame(self.parent_frame, bg='#34495e', relief='raised', bd=2)
+            # FIXED: Create new legend frame with stable dimensions
+            print("Creating new legend frame with fixed height")
+            self.legend_frame = tk.Frame(self.parent_frame, bg='#34495e', relief='raised', bd=1)
 
             # Get spectrum definition
             spectrum_def = self.spectrum_definitions[spectrum_type]
             print(f"Using spectrum: {spectrum_def['name']} with {len(spectrum_def['colors'])} colors")
 
-            # Title
+            # Title - smaller and more compact
             legend_title = tk.Label(self.legend_frame,
-                                    text=f"Quality Map Legend - {spectrum_def['name']}:",
-                                    font=('Arial', 11, 'bold'),
+                                    text=f"Quality Legend - {spectrum_def['name']}:",
+                                    font=('Arial', 9, 'bold'),
                                     fg='#ecf0f1', bg='#34495e')
-            legend_title.pack(pady=5)
+            legend_title.pack(pady=(2, 1))
 
-            # Color items frame
+            # FIXED: Color items frame with controlled height
             legend_items_frame = tk.Frame(self.legend_frame, bg='#34495e')
-            legend_items_frame.pack(pady=5)
+            legend_items_frame.pack(pady=2, expand=True, fill='both')
 
-            # Create color items
+            # Create color items - more compact
             items_created = 0
             for r, g, b, label in spectrum_def['colors']:
                 try:
@@ -157,17 +154,17 @@ class DynamicLegend:
                     brightness = (r * 0.299 + g * 0.587 + b * 0.114)
                     text_color = "white" if brightness < 128 else "black"
 
-                    # Create legend item
+                    # FIXED: Create more compact legend item
                     legend_item = tk.Label(legend_items_frame,
-                                           text=f"  {label}  ",
+                                           text=f"  {label.split(':')[0]}  ",  # Only first part of label
                                            bg=bg_color,
                                            fg=text_color,
-                                           font=('Arial', 9, 'bold'),
+                                           font=('Arial', 8, 'bold'),
                                            relief='raised',
                                            bd=1,
-                                           padx=8,
-                                           pady=2)
-                    legend_item.pack(side='left', padx=2)
+                                           padx=4,
+                                           pady=1)
+                    legend_item.pack(side='left', padx=1, expand=True, fill='both')
                     items_created += 1
 
                 except Exception as e:
@@ -179,7 +176,7 @@ class DynamicLegend:
             # Store current spectrum
             self.current_spectrum = spectrum_type
 
-            # Show the legend immediately
+            # FIXED: Show the legend with controlled layout
             self.show_legend()
 
             print(f"DynamicLegend created successfully for {spectrum_def['name']}")
@@ -191,25 +188,14 @@ class DynamicLegend:
             traceback.print_exc()
             return False
 
-    def update_legend(self, spectrum_type):
-        """FIXED: Update the legend to match the new spectrum type"""
-        print(f"DynamicLegend.update_legend called: {spectrum_type} (current: {self.current_spectrum})")
-
-        if spectrum_type != self.current_spectrum:
-            success = self.create_legend(spectrum_type)
-            if success:
-                print(f"Legend updated successfully to {spectrum_type}")
-            else:
-                print(f"Failed to update legend to {spectrum_type}")
-        else:
-            print(f"Legend already showing {spectrum_type}, no update needed")
-
     def show_legend(self):
-        """FIXED: Show the legend with proper error handling"""
+        """FIXED: Show the legend without affecting parent layout"""
         try:
             if self.legend_frame:
-                print("Showing dynamic legend")
-                self.legend_frame.pack(pady=5, fill='x')
+                print("Showing dynamic legend with controlled layout")
+                # Use expand=True and fill='both' to use available space efficiently
+                self.legend_frame.pack(expand=True, fill='both')
+
                 # Force update to ensure visibility
                 self.parent_frame.update_idletasks()
                 print("Dynamic legend is now visible")
@@ -229,6 +215,19 @@ class DynamicLegend:
                 print("No legend frame to hide")
         except Exception as e:
             print(f"ERROR hiding legend: {e}")
+
+    def update_legend(self, spectrum_type):
+        """FIXED: Update the legend to match the new spectrum type"""
+        print(f"DynamicLegend.update_legend called: {spectrum_type} (current: {self.current_spectrum})")
+
+        if spectrum_type != self.current_spectrum:
+            success = self.create_legend(spectrum_type)
+            if success:
+                print(f"Legend updated successfully to {spectrum_type}")
+            else:
+                print(f"Failed to update legend to {spectrum_type}")
+        else:
+            print(f"Legend already showing {spectrum_type}, no update needed")
 
     def destroy_legend(self):
         """FIXED: Completely remove the legend"""

@@ -11,7 +11,6 @@ from ui.roi_handler import ROIHandler
 from ui.file_operations import FileOperations
 from ui.button_state_manager import ButtonStateManager
 from analysis.core.subset_analyzer import determine_optimal_subset_size
-from ui.dynamic_legend import DynamicLegend
 
 
 class DICQualityInspector:
@@ -245,23 +244,26 @@ class DICQualityInspector:
         status_bar.pack(side='bottom', fill='x')
 
     def create_gui_dynamic_legend_section(self):
-        """FIXED: Proper dynamic legend initialization"""
+        """FIXED: Proper dynamic legend initialization with stable layout"""
 
-        # Dynamic legend container (MUST be created BEFORE DynamicLegend instance)
-        print("Creating legend container frame")
-        self.legend_container = tk.Frame(self.left_panel, bg='#34495e')
-        self.legend_container.pack(pady=5, fill='x')  # IMPORTANT: pack it initially
+        # FIXED: Dynamic legend container with fixed height to prevent layout shifts
+        print("Creating legend container frame with fixed dimensions")
+        self.legend_container = tk.Frame(self.left_panel, bg='#34495e', height=60)
+        self.legend_container.pack(pady=5, fill='x')
+
+        # CRITICAL: Prevent the legend container from resizing based on its contents
+        self.legend_container.pack_propagate(False)
+
+        print("Legend container configured with pack_propagate(False) to prevent resizing")
 
         # Initialize dynamic legend system AFTER container is created and packed
         print("Initializing DynamicLegend")
-        from ui.dynamic_legend import DynamicLegend  # Make sure import is available
+        from ui.dynamic_legend import DynamicLegend
         self.dynamic_legend = DynamicLegend(self.legend_container)
 
         # Verify initialization
         if self.dynamic_legend:
             print("DynamicLegend initialized successfully")
-
-            # CRITICAL: Store reference to prevent garbage collection
             print(f"DynamicLegend object ID: {id(self.dynamic_legend)}")
 
             # Test that the object methods work
@@ -897,53 +899,12 @@ class DICQualityInspector:
             'accuracy': accuracy
         }
 
-    def _generate_recommendations(self, score):
-        """
-        UPDATED: Generate recommendations based on the new realistic scoring
-
-        Args:
-            score: Overall quality score (0-100)
-        """
-        recommendations = []
-
-        if score >= 75:
-            recommendations.append("Excellent pattern! Proceed with DIC analysis using recommended parameters.")
-            recommendations.append("Consider using sub-pixel interpolation for maximum accuracy.")
-            recommendations.append("Pattern has optimal gradient content and speckle morphology.")
-        elif score >= 60:
-            recommendations.append("Very good pattern quality. DIC analysis should work excellently.")
-            recommendations.append("Use standard DIC parameters with confidence.")
-            recommendations.append("Monitor correlation quality during analysis for best results.")
-        elif score >= 45:
-            recommendations.append("Good pattern for DIC analysis with proper setup.")
-            recommendations.append("Use recommended subset sizes and overlap settings.")
-            recommendations.append("Consider slightly larger subset sizes if correlation issues occur.")
-        elif score >= 30:
-            recommendations.append("Acceptable pattern for DIC analysis with careful setup.")
-            recommendations.append("Use larger subset sizes (increase by 20-30%) for better correlation.")
-            recommendations.append("Monitor correlation quality closely during analysis.")
-            recommendations.append("Consider post-processing filtering if needed.")
-        elif score >= 15:
-            recommendations.append("Challenging but workable pattern for DIC analysis.")
-            recommendations.append("Use larger subset sizes and stricter correlation criteria.")
-            recommendations.append("Expect some areas to have poor correlation - filter results carefully.")
-            recommendations.append("Consider pattern enhancement if critical accuracy is needed.")
-        else:
-            recommendations.append("Poor pattern quality - DIC will have significant limitations.")
-            recommendations.append("Strong recommendation to improve or reapply speckle pattern.")
-            recommendations.append("If proceeding: use maximum subset sizes and very strict filtering.")
-            recommendations.append("Consider alternative measurement techniques if high accuracy needed.")
-
-        # Add general recommendations
-        recommendations.append("Save quality map and parameters for repeatability.")
-        if score < 60:
-            recommendations.append("Document pattern limitations in analysis report.")
-
-        return recommendations
-
     def get_quality_assessment_text(self, score):
         """
-        FIXED: Realistic quality thresholds based on DIC research
+        UPDATED: Quality thresholds that adapt to selected spectrum
+
+        For custom_dic (strict DIC-only): Only excellent+ patterns are acceptable
+        For other spectrums: Use the original realistic thresholds
 
         Args:
             score: Quality score from 0.0 to 1.0
@@ -951,21 +912,132 @@ class DICQualityInspector:
         Returns:
             tuple: (description_text, color_hex)
         """
+        # Check if we're using the strict DIC-only spectrum
+        current_spectrum = self.selected_spectrum.get() if hasattr(self, 'selected_spectrum') else 'custom_dic'
+
         # Convert 0-1 score to percentage for thresholds
         score_percent = score * 100
 
-        if score_percent >= 75:
-            return "Excellent for DIC", "#27ae60"  # Green
-        elif score_percent >= 60:
-            return "Very Good for DIC", "#2ecc71"  # Light Green
-        elif score_percent >= 45:
-            return "Good for DIC", "#f39c12"  # Orange
-        elif score_percent >= 30:
-            return "Acceptable for DIC", "#e67e22"  # Dark Orange
-        elif score_percent >= 15:
-            return "Challenging for DIC", "#e74c3c"  # Red
+        if current_spectrum == 'custom_dic':
+            # STRICT DIC-ONLY THRESHOLDS with Black→Red→Blue color scheme
+            if score_percent >= 95:
+                return "Perfect for DIC", "#008cff"  # Blue
+            elif score_percent >= 90:
+                return "Excellent for DIC", "#78ffb4"  # Cyan
+            elif score_percent >= 85:
+                return "Very Good for DIC", "#ffc800"  # Yellow
+            elif score_percent >= 80:
+                return "Good for DIC", "#ff5000"  # Orange
+            elif score_percent >= 75:
+                return "Minimum for DIC", "#780000"  # Red
+            else:
+                return "CRITICAL - Not suitable for DIC", "#000000"  # Black
         else:
-            return "Poor for DIC", "#8e44ad"  # Purple
+            # ORIGINAL REALISTIC THRESHOLDS for other spectrums
+            if score_percent >= 75:
+                return "Excellent for DIC", "#27ae60"  # Green
+            elif score_percent >= 60:
+                return "Very Good for DIC", "#2ecc71"  # Light Green
+            elif score_percent >= 45:
+                return "Good for DIC", "#f39c12"  # Orange
+            elif score_percent >= 30:
+                return "Acceptable for DIC", "#e67e22"  # Dark Orange
+            elif score_percent >= 15:
+                return "Challenging for DIC", "#e74c3c"  # Red
+            else:
+                return "Poor for DIC", "#8e44ad"  # Purple
+
+    def _generate_recommendations(self, score):
+        """
+        UPDATED: Generate recommendations that adapt to selected spectrum
+
+        Args:
+            score: Overall quality score (0-100)
+        """
+        # Check if we're using the strict DIC-only spectrum
+        current_spectrum = self.selected_spectrum.get() if hasattr(self, 'selected_spectrum') else 'custom_dic'
+
+        recommendations = []
+
+        if current_spectrum == 'custom_dic':
+            # STRICT DIC-ONLY RECOMMENDATIONS
+            if score >= 95:
+                recommendations.append("🔵 PERFECT pattern! Ideal for high-precision DIC analysis.")
+                recommendations.append("Use finest correlation parameters for maximum accuracy.")
+                recommendations.append("Consider this as a reference pattern for other setups.")
+                recommendations.append("Expected accuracy: ±0.001-0.005 pixels")
+
+            elif score >= 90:
+                recommendations.append("🔷 EXCELLENT pattern quality for precision DIC work.")
+                recommendations.append("Use standard DIC parameters with confidence.")
+                recommendations.append("Expect sub-pixel accuracy in correlation results.")
+                recommendations.append("Expected accuracy: ±0.005-0.01 pixels")
+
+            elif score >= 85:
+                recommendations.append("🟡 VERY GOOD pattern for DIC analysis.")
+                recommendations.append("Use recommended DIC parameters - good correlation expected.")
+                recommendations.append("Suitable for most strain measurement applications.")
+                recommendations.append("Expected accuracy: ±0.01-0.02 pixels")
+
+            elif score >= 80:
+                recommendations.append("🟠 GOOD pattern quality for DIC applications.")
+                recommendations.append("Acceptable correlation reliability with standard parameters.")
+                recommendations.append("Monitor correlation quality during analysis.")
+                recommendations.append("Expected accuracy: ±0.02-0.03 pixels")
+
+            elif score >= 75:
+                recommendations.append("🔴 MINIMUM pattern - threshold for DIC analysis.")
+                recommendations.append("Use larger subset sizes (increase by 30-50%) for better correlation.")
+                recommendations.append("Monitor correlation quality very closely during analysis.")
+                recommendations.append("Strong recommendation to improve pattern if possible.")
+                recommendations.append("Expected accuracy: ±0.03-0.05 pixels")
+
+            else:
+                recommendations.append("⚫ CRITICAL: Pattern NOT suitable for DIC analysis.")
+                recommendations.append("🚨 MANDATORY recommendation to reapply or enhance speckle pattern.")
+                recommendations.append("Current pattern will result in correlation failure and unreliable results.")
+                recommendations.append("Consider alternative measurement techniques.")
+                recommendations.append("❌ Do not proceed with DIC analysis using this pattern.")
+
+        else:
+            # ORIGINAL REALISTIC RECOMMENDATIONS for other spectrums
+            if score >= 75:
+                recommendations.append("Excellent pattern! Proceed with DIC analysis using recommended parameters.")
+                recommendations.append("Consider using sub-pixel interpolation for maximum accuracy.")
+                recommendations.append("Pattern has optimal gradient content and speckle morphology.")
+            elif score >= 60:
+                recommendations.append("Very good pattern quality. DIC analysis should work excellently.")
+                recommendations.append("Use standard DIC parameters with confidence.")
+                recommendations.append("Monitor correlation quality during analysis for best results.")
+            elif score >= 45:
+                recommendations.append("Good pattern for DIC analysis with proper setup.")
+                recommendations.append("Use recommended subset sizes and overlap settings.")
+                recommendations.append("Consider slightly larger subset sizes if correlation issues occur.")
+            elif score >= 30:
+                recommendations.append("Acceptable pattern for DIC analysis with careful setup.")
+                recommendations.append("Use larger subset sizes (increase by 20-30%) for better correlation.")
+                recommendations.append("Monitor correlation quality closely during analysis.")
+                recommendations.append("Consider post-processing filtering if needed.")
+            elif score >= 15:
+                recommendations.append("Challenging but workable pattern for DIC analysis.")
+                recommendations.append("Use larger subset sizes and stricter correlation criteria.")
+                recommendations.append("Expect some areas to have poor correlation - filter results carefully.")
+                recommendations.append("Consider pattern enhancement if critical accuracy is needed.")
+            else:
+                recommendations.append("Poor pattern quality - DIC will have significant limitations.")
+                recommendations.append("Strong recommendation to improve or reapply speckle pattern.")
+                recommendations.append("If proceeding: use maximum subset sizes and very strict filtering.")
+                recommendations.append("Consider alternative measurement techniques if high accuracy needed.")
+
+        # Add spectrum-specific note
+        if current_spectrum == 'custom_dic':
+            recommendations.append("📊 Note: Using strict DIC-only quality assessment.")
+            recommendations.append("Only patterns rated 75%+ are considered suitable for DIC work.")
+        else:
+            recommendations.append(f"📊 Note: Using {current_spectrum.replace('_', ' ').title()} spectrum assessment.")
+            recommendations.append("More lenient thresholds - suitable for general pattern evaluation.")
+
+        return recommendations
 
     def create_spectrum_selection_ui(self, process_frame):
         """Add spectrum selection dropdown to the processing frame"""

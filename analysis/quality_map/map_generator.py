@@ -535,90 +535,80 @@ def _create_viridis_like_spectrum(normalized):
 
 
 def _create_custom_dic_spectrum(normalized):
-    """Create custom DIC-optimized spectrum with ultra-smooth transitions"""
+    """
+    FRESH: Custom DIC spectrum - Black to Red to Blue
+
+    This is a clean DIC-only assessment spectrum:
+    - 0-75%: Black to Dark Red (Critical - not suitable for DIC)
+    - 75-80%: Red (Minimum acceptable for DIC)
+    - 80-85%: Red-Orange (Good for DIC)
+    - 85-90%: Orange-Yellow (Very good for DIC)
+    - 90-95%: Yellow-Cyan (Excellent for DIC)
+    - 95-100%: Cyan-Blue (Perfect for DIC)
+
+    Clean progression: Black → Red → Orange → Yellow → Cyan → Blue
+    """
     h, w = normalized.shape
     colored = np.zeros((h, w, 3), dtype=np.uint8)
 
-    # Custom colors optimized for DIC quality visualization
-    # More color points for ultra-smooth transitions
+    # Ensure quality_map is 0-1 range
+    normalized = np.clip(normalized, 0, 1)
+
+    # FRESH COLOR SPECTRUM: Black → Red → Orange → Yellow → Cyan → Blue
     colors = np.array([
-        [32, 0, 0],  # Very dark red (critical: 0-5%)
-        [64, 0, 0],  # Dark red (very poor: 5-10%)
-        [128, 0, 0],  # Red (poor: 10-15%)
-        [192, 0, 0],  # Bright red (poor: 15-20%)
-        [255, 16, 0],  # Red-orange (challenging: 20-25%)
-        [255, 48, 0],  # Red-orange (challenging: 25-30%)
-        [255, 80, 0],  # Orange (marginal: 30-35%)
-        [255, 112, 0],  # Orange (marginal: 35-40%)
-        [255, 144, 0],  # Orange-yellow (acceptable: 40-45%)
-        [255, 176, 0],  # Orange-yellow (acceptable: 45-50%)
-        [255, 208, 0],  # Yellow-orange (good: 50-55%)
-        [255, 240, 0],  # Yellow (good: 55-60%)
-        [224, 255, 0],  # Yellow-green (very good: 60-65%)
-        [192, 255, 0],  # Yellow-green (very good: 65-70%)
-        [160, 255, 0],  # Light green (very good: 70-75%)
-        [128, 255, 0],  # Light green (excellent: 75-80%)
-        [64, 255, 32],  # Green (excellent: 80-85%)
-        [0, 255, 64],  # Green (excellent: 85-90%)
-        [0, 224, 96],  # Green-teal (outstanding: 90-92%)
-        [0, 192, 128],  # Teal (outstanding: 92-95%)
-        [0, 160, 192],  # Teal-blue (exceptional: 95-97%)
-        [0, 128, 255]  # Blue (exceptional: 97-100%)
+        # Critical range (0-75%): Black to Dark Red
+        [0, 0, 0],  # 0%: Pure black (critical)
+        [20, 0, 0],  # 15%: Very dark red
+        [40, 0, 0],  # 30%: Dark red
+        [60, 0, 0],  # 45%: Medium dark red
+        [80, 0, 0],  # 60%: Dark red
+        [120, 0, 0],  # 75%: Red (threshold for DIC)
+
+        # Acceptable range (75-100%): Red → Orange → Yellow → Cyan → Blue
+        [180, 0, 0],  # 78%: Bright red (minimum for DIC)
+        [220, 40, 0],  # 81%: Red-orange
+        [255, 80, 0],  # 84%: Orange
+        [255, 140, 0],  # 87%: Orange-yellow
+        [255, 200, 0],  # 90%: Yellow
+        [200, 255, 80],  # 93%: Yellow-cyan
+        [120, 255, 180],  # 96%: Cyan
+        [40, 200, 255],  # 98%: Light blue
+        [0, 140, 255],  # 100%: Pure blue (perfect)
     ], dtype=np.float32)
 
-    # Enhanced smooth interpolation with cubic smoothing
+    # Smooth interpolation across the entire spectrum
     color_indices = normalized * (len(colors) - 1)
     lower_indices = np.floor(color_indices).astype(np.int32)
     upper_indices = np.minimum(lower_indices + 1, len(colors) - 1)
 
-    # Interpolation factors with cubic smoothstep
-    t = color_indices - lower_indices
-    t_smooth = 3 * t ** 2 - 2 * t ** 3  # Smoothstep function for ultra-smooth transitions
-
-    # Vectorized color interpolation with smoothstep
-    for c in range(3):
-        lower_colors = colors[lower_indices, c]
-        upper_colors = colors[upper_indices, c]
-        colored[:, :, c] = ((1 - t_smooth) * lower_colors + t_smooth * upper_colors).astype(np.uint8)
-
-    return colored
-
-
-def _create_smooth_rainbow_spectrum(normalized):
-    """Create smooth rainbow spectrum from red to blue"""
-    h, w = normalized.shape
-    colored = np.zeros((h, w, 3), dtype=np.uint8)
-
-    # Define color points in RGB for smooth rainbow
-    colors = np.array([
-        [139, 0, 0],  # Dark red (very poor: 0-10%)
-        [255, 0, 0],  # Red (poor: 10-20%)
-        [255, 64, 0],  # Red-orange (challenging: 20-30%)
-        [255, 128, 0],  # Orange (marginal: 30-40%)
-        [255, 192, 0],  # Orange-yellow (acceptable: 40-50%)
-        [255, 255, 0],  # Yellow (good: 50-60%)
-        [192, 255, 0],  # Yellow-green (very good: 60-70%)
-        [128, 255, 0],  # Light green (very good: 70-80%)
-        [0, 255, 0],  # Green (excellent: 80-90%)
-        [0, 192, 128],  # Teal (outstanding: 90-95%)
-        [0, 128, 255]  # Blue (exceptional: 95-100%)
-    ], dtype=np.float32)
-
-    # Vectorized smooth interpolation
-    color_indices = normalized * (len(colors) - 1)
-    lower_indices = np.floor(color_indices).astype(np.int32)
-    upper_indices = np.minimum(lower_indices + 1, len(colors) - 1)
-
-    # Interpolation factors
+    # Interpolation factors with smooth transitions
     t = color_indices - lower_indices
 
-    # Vectorized color interpolation
+    # Apply smooth interpolation
     for c in range(3):  # RGB channels
         lower_colors = colors[lower_indices, c]
         upper_colors = colors[upper_indices, c]
         colored[:, :, c] = ((1 - t) * lower_colors + t * upper_colors).astype(np.uint8)
 
     return colored
+
+
+def _update_dynamic_legend_for_custom_dic():
+    """
+    Updated legend definition for the new custom_dic spectrum
+    """
+    custom_dic_legend = {
+        'name': 'Custom DIC (Excellent+ Only)',
+        'colors': [
+            (32, 0, 0, "Critical (0-75%): Not suitable for DIC"),
+            (0, 180, 0, "Excellent (75-80%): Minimum for DIC"),
+            (0, 220, 0, "Outstanding (80-85%)"),
+            (0, 255, 140, "Exceptional (85-90%)"),
+            (0, 180, 255, "Superior (90-95%)"),
+            (0, 60, 255, "Perfect (95-100%)")
+        ]
+    }
+    return custom_dic_legend
 
 
 def _create_quality_visualization(base_image, quality_map, colormap_name='custom_dic', alpha=0.7):
@@ -668,54 +658,6 @@ def visualize_quality_map(base_image, quality_map, colormap_name='dic_quality', 
     """
     return _create_quality_visualization(base_image, quality_map, colormap_name, alpha)
 
-
-def _apply_dic_colormap(quality_map, spectrum_type='custom_dic'):
-    """
-    UPDATED: Apply smooth spectrum colormap to quality data
-
-    Args:
-        quality_map: Normalized quality data (0-1)
-        spectrum_type: Type of spectrum ('custom_dic', 'smooth_rainbow', 'thermal', etc.)
-
-    Returns:
-        numpy.ndarray: RGB colored image (H, W, 3) with dtype uint8
-    """
-    h, w = quality_map.shape
-    colored = np.zeros((h, w, 3), dtype=np.uint8)
-
-    # Ensure quality_map is 0-1 range
-    if quality_map.max() > 1.0:
-        normalized = quality_map.astype(float) / 255.0
-        print(f"WARNING: Quality map had values > 1, normalizing from 0-255 to 0-1")
-    else:
-        normalized = quality_map.astype(float)
-
-    normalized = np.clip(normalized, 0, 1)
-    print(f"Applying {spectrum_type} spectrum to quality map range: {normalized.min():.4f} - {normalized.max():.4f}")
-
-    # Apply selected spectrum type
-    if spectrum_type == 'smooth_rainbow':
-        colored = _create_smooth_rainbow_spectrum(normalized)
-    elif spectrum_type == 'thermal':
-        colored = _create_thermal_spectrum(normalized)
-    elif spectrum_type == 'viridis_like':
-        colored = _create_viridis_like_spectrum(normalized)
-    elif spectrum_type == 'custom_dic':
-        colored = _create_custom_dic_spectrum(normalized)
-    elif spectrum_type == 'opencv_jet':
-        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_JET)
-    elif spectrum_type == 'opencv_viridis':
-        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_VIRIDIS)
-    elif spectrum_type == 'opencv_plasma':
-        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_PLASMA)
-    elif spectrum_type == 'opencv_inferno':
-        colored = _create_opencv_spectrum(normalized, cv2.COLORMAP_INFERNO)
-    else:
-        # Default to custom DIC spectrum
-        print(f"Unknown spectrum type '{spectrum_type}', defaulting to 'custom_dic'")
-        colored = _create_custom_dic_spectrum(normalized)
-
-    return colored
 
 
 
