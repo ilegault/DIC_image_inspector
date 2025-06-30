@@ -1,4 +1,4 @@
-# ui/button_state_manager.py
+# ui/button_state_manager.py - UPDATED: Handle new Show Results button
 
 class ButtonStateManager:
     """Manages button states and operation flow for DIC Quality Inspector"""
@@ -43,7 +43,7 @@ class ButtonStateManager:
         """Disable all operation buttons"""
         buttons = [
             'roi_btn', 'analyze_btn', 'quality_map_btn',
-            'save_btn'
+            'show_results_btn', 'save_btn'  # Added new button
         ]
         for btn_name in buttons:
             if hasattr(self.main_window, btn_name):
@@ -55,9 +55,11 @@ class ButtonStateManager:
         self.main_window.load_btn.config(state='normal')
         self.main_window.screenshot_btn.config(state='normal')
 
-        # Reset quality map button appearance
+        # Reset button appearances
         if hasattr(self.main_window, 'quality_map_btn'):
             self.main_window.quality_map_btn.config(bg='#2ecc71')  # Green when inactive
+        if hasattr(self.main_window, 'show_results_btn'):
+            self.main_window.show_results_btn.config(bg='#8e44ad')  # Purple when inactive
 
     def _handle_image_loaded_state(self):
         """Handle state when image is loaded but no ROI selected"""
@@ -74,7 +76,7 @@ class ButtonStateManager:
 
     def _handle_roi_selected_state(self):
         """Handle state when ROI has been selected"""
-        # Enable all relevant buttons except quality map (need analysis first)
+        # Enable all relevant buttons except results/quality map (need analysis first)
         self.main_window.load_btn.config(state='normal')
         self.main_window.screenshot_btn.config(state='normal')
         self.main_window.roi_btn.config(state='normal')
@@ -104,6 +106,7 @@ class ButtonStateManager:
         self.main_window.roi_btn.config(state='normal')
         self.main_window.analyze_btn.config(state='normal', text="🔬 Analyze")
         self.main_window.quality_map_btn.config(state='normal')
+        self.main_window.show_results_btn.config(state='normal')  # Enable results button
         self.main_window.save_btn.config(state='normal')
 
     def _update_status_message(self, state, **kwargs):
@@ -113,7 +116,7 @@ class ButtonStateManager:
             "image_loaded": "Image loaded - Select ROI for targeted analysis or analyze full image",
             "roi_selected": "ROI selected - Ready for analysis",
             "analyzing": "Analysis in progress - Please wait...",
-            "analysis_complete": f"Analysis complete - Overall score: {kwargs.get('score', 'N/A')}/100"
+            "analysis_complete": f"Analysis complete - Overall score: {kwargs.get('score', 'N/A')}/100 - Click 'Show Results' for details"
         }
 
         if state in messages:

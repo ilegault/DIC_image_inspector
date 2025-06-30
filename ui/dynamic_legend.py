@@ -1,4 +1,4 @@
-# ui/dynamic_legend.py - Fixed layout management
+# ui/dynamic_legend.py - CLEANED: Only 4 essential DIC spectrums
 
 import tkinter as tk
 
@@ -10,7 +10,7 @@ class DynamicLegend:
         self.legend_frame = None
         self.current_spectrum = 'custom_dic'
 
-        # UPDATED: Spectrum definitions with fresh Black→Red→Blue DIC spectrum
+        # CLEANED: Only the 4 essential DIC spectrums
         self.spectrum_definitions = {
             'custom_dic': {
                 'name': 'Custom DIC (Black→Red→Blue)',
@@ -23,93 +23,44 @@ class DynamicLegend:
                     (0, 140, 255, "Perfect (95-100%): Blue - Ideal for DIC")
                 ]
             },
-            'smooth_rainbow': {
-                'name': 'Smooth Rainbow',
+            'zeiss_style_dic': {
+                'name': 'ZEISS-Style Pattern Quality (Colorblind-Friendly)',
                 'colors': [
-                    (139, 0, 0, "Very Poor"),
-                    (255, 0, 0, "Poor"),
-                    (255, 127, 0, "Challenging"),
-                    (255, 255, 0, "Acceptable"),
-                    (127, 255, 0, "Good"),
-                    (0, 255, 0, "Very Good"),
-                    (0, 127, 255, "Excellent")
+                    (50, 0, 0, "Unusable (0-70%): No correlation possible"),
+                    (255, 0, 0, "Poor (70-80%): Unreliable correlation"),
+                    (255, 140, 0, "Acceptable (80-85%): Usable with uncertainty"),
+                    (255, 255, 0, "Good (85-90%): Good correlation quality"),
+                    (0, 255, 255, "Very Good (90-95%): Very reliable"),
+                    (0, 100, 255, "Excellent (95-100%): Optimal pattern")
                 ]
             },
-            'thermal': {
-                'name': 'Thermal',
+            'ultra_strict_dic': {
+                'name': 'Ultra-Strict DIC (Focus Quality)',
                 'colors': [
-                    (0, 0, 0, "Very Poor"),
-                    (64, 0, 0, "Poor"),
-                    (128, 0, 0, "Challenging"),
-                    (255, 0, 0, "Acceptable"),
-                    (255, 127, 0, "Good"),
-                    (255, 255, 0, "Very Good"),
-                    (255, 255, 255, "Excellent")
+                    (0, 0, 0, "Critical (0-90%): Black - Completely unsuitable"),
+                    (80, 0, 0, "Poor (90-93%): Dark Red - Major issues"),
+                    (180, 0, 0, "Marginal (93-95%): Red - Barely acceptable"),
+                    (255, 140, 0, "Acceptable (95-97%): Orange - OK for DIC"),
+                    (255, 255, 0, "Good (97-98%): Yellow - Good for DIC"),
+                    (0, 255, 255, "Very Good (98-99%): Cyan - Very good"),
+                    (0, 100, 255, "Perfect (99-100%): Blue - Ideal")
                 ]
             },
-            'viridis_like': {
-                'name': 'Viridis-like',
+            'focus_aware_dic': {
+                'name': 'Focus-Aware DIC',
                 'colors': [
-                    (68, 1, 84, "Very Poor"),
-                    (64, 67, 135, "Poor"),
-                    (41, 120, 142, "Challenging"),
-                    (34, 167, 132, "Acceptable"),
-                    (121, 209, 81, "Good"),
-                    (189, 223, 38, "Very Good"),
-                    (253, 231, 37, "Excellent")
-                ]
-            },
-            'opencv_jet': {
-                'name': 'OpenCV Jet',
-                'colors': [
-                    (0, 0, 128, "Very Poor"),
-                    (0, 0, 255, "Poor"),
-                    (0, 127, 255, "Challenging"),
-                    (0, 255, 255, "Acceptable"),
-                    (127, 255, 127, "Good"),
-                    (255, 255, 0, "Very Good"),
-                    (255, 0, 0, "Excellent")
-                ]
-            },
-            'opencv_viridis': {
-                'name': 'OpenCV Viridis',
-                'colors': [
-                    (68, 1, 84, "Very Poor"),
-                    (59, 82, 139, "Poor"),
-                    (33, 144, 140, "Challenging"),
-                    (93, 201, 99, "Acceptable"),
-                    (253, 231, 37, "Good")
-                ]
-            },
-            'opencv_plasma': {
-                'name': 'OpenCV Plasma',
-                'colors': [
-                    (13, 8, 135, "Very Poor"),
-                    (75, 3, 161, "Poor"),
-                    (125, 3, 168, "Challenging"),
-                    (166, 54, 134, "Acceptable"),
-                    (201, 102, 94, "Good"),
-                    (239, 164, 59, "Very Good"),
-                    (240, 249, 33, "Excellent")
-                ]
-            },
-            'opencv_inferno': {
-                'name': 'OpenCV Inferno',
-                'colors': [
-                    (0, 0, 4, "Very Poor"),
-                    (40, 11, 84, "Poor"),
-                    (101, 21, 110, "Challenging"),
-                    (159, 42, 99, "Acceptable"),
-                    (212, 72, 66, "Good"),
-                    (245, 125, 21, "Very Good"),
-                    (252, 255, 164, "Excellent")
+                    (30, 0, 0, "Out of Focus (0-85%): Black-Red"),
+                    (180, 50, 0, "Soft Focus (85-92%): Red-Orange"),
+                    (255, 180, 0, "Acceptable (92-96%): Orange-Yellow"),
+                    (128, 255, 128, "Good Focus (96-98%): Yellow-Cyan"),
+                    (0, 180, 255, "Excellent (98-100%): Cyan-Blue")
                 ]
             }
         }
-        print(f"DynamicLegend initialized with updated custom_dic spectrum")
+        print(f"DynamicLegend initialized with 4 essential DIC spectrums")
 
     def create_legend(self, spectrum_type='custom_dic'):
-        """FIXED: Create legend with stable layout that doesn't affect canvas size"""
+        """Create legend with stable layout that doesn't affect canvas size"""
         try:
             print(f"DynamicLegend.create_legend called with spectrum_type: {spectrum_type}")
 
@@ -124,7 +75,7 @@ class DynamicLegend:
                 print(f"WARNING: Unknown spectrum type '{spectrum_type}', using 'custom_dic'")
                 spectrum_type = 'custom_dic'
 
-            # FIXED: Create new legend frame with stable dimensions
+            # Create new legend frame with stable dimensions
             print("Creating new legend frame with fixed height")
             self.legend_frame = tk.Frame(self.parent_frame, bg='#34495e', relief='raised', bd=1)
 
@@ -139,7 +90,7 @@ class DynamicLegend:
                                     fg='#ecf0f1', bg='#34495e')
             legend_title.pack(pady=(2, 1))
 
-            # FIXED: Color items frame with controlled height
+            # Color items frame with controlled height
             legend_items_frame = tk.Frame(self.legend_frame, bg='#34495e')
             legend_items_frame.pack(pady=2, expand=True, fill='both')
 
@@ -154,7 +105,7 @@ class DynamicLegend:
                     brightness = (r * 0.299 + g * 0.587 + b * 0.114)
                     text_color = "white" if brightness < 128 else "black"
 
-                    # FIXED: Create more compact legend item
+                    # Create more compact legend item
                     legend_item = tk.Label(legend_items_frame,
                                            text=f"  {label.split(':')[0]}  ",  # Only first part of label
                                            bg=bg_color,
@@ -176,7 +127,7 @@ class DynamicLegend:
             # Store current spectrum
             self.current_spectrum = spectrum_type
 
-            # FIXED: Show the legend with controlled layout
+            # Show the legend with controlled layout
             self.show_legend()
 
             print(f"DynamicLegend created successfully for {spectrum_def['name']}")
@@ -189,7 +140,7 @@ class DynamicLegend:
             return False
 
     def show_legend(self):
-        """FIXED: Show the legend without affecting parent layout"""
+        """Show the legend without affecting parent layout"""
         try:
             if self.legend_frame:
                 print("Showing dynamic legend with controlled layout")
@@ -205,7 +156,7 @@ class DynamicLegend:
             print(f"ERROR showing legend: {e}")
 
     def hide_legend(self):
-        """FIXED: Hide the legend"""
+        """Hide the legend"""
         try:
             if self.legend_frame:
                 print("Hiding dynamic legend")
@@ -217,7 +168,7 @@ class DynamicLegend:
             print(f"ERROR hiding legend: {e}")
 
     def update_legend(self, spectrum_type):
-        """FIXED: Update the legend to match the new spectrum type"""
+        """Update the legend to match the new spectrum type"""
         print(f"DynamicLegend.update_legend called: {spectrum_type} (current: {self.current_spectrum})")
 
         if spectrum_type != self.current_spectrum:
@@ -230,7 +181,7 @@ class DynamicLegend:
             print(f"Legend already showing {spectrum_type}, no update needed")
 
     def destroy_legend(self):
-        """FIXED: Completely remove the legend"""
+        """Completely remove the legend"""
         try:
             if self.legend_frame:
                 print("Destroying dynamic legend")
