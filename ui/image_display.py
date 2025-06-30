@@ -520,16 +520,13 @@ class ImageDisplay:
 
 
     def toggle_quality_map_overlay(self):
-        """Toggle quality map overlay on/off with spectrum support"""
+        """Enhanced toggle with dynamic legend support"""
         print("DEBUG: toggle_quality_map_overlay called")
 
         # Initialize the state if it doesn't exist
         if not hasattr(self, 'showing_quality_overlay'):
             self.showing_quality_overlay = False
             print("DEBUG: Initialized showing_quality_overlay to False")
-
-        # Print current state before toggling
-        print(f"DEBUG: Current state before toggle: showing_quality_overlay = {self.showing_quality_overlay}")
 
         # Toggle the state
         self.showing_quality_overlay = not self.showing_quality_overlay
@@ -545,16 +542,19 @@ class ImageDisplay:
                 self.main_window.analyze_image()  # Will generate quality map
                 return
 
-            print(
-                f"DEBUG: quality_map_data shape: {self.quality_map_data.shape if self.quality_map_data is not None else 'None'}")
-
             # Change button appearance
             if hasattr(self.main_window, 'quality_map_btn'):
-                print("DEBUG: Changing button to active state")
                 self.main_window.quality_map_btn.config(bg='#e74c3c')  # Red when active
 
             # Show quality map overlay with spectrum
             self.show_quality_map_with_spectrum()
+
+            # Show dynamic legend
+            if hasattr(self.main_window, 'dynamic_legend') and self.main_window.dynamic_legend:
+                current_spectrum = self.main_window.selected_spectrum.get()
+                self.main_window.dynamic_legend.update_legend(current_spectrum)
+                self.main_window.dynamic_legend.show_legend()
+
         else:
             print("DEBUG: Should hide quality map and show original")
 
@@ -563,8 +563,11 @@ class ImageDisplay:
 
             # Change button appearance
             if hasattr(self.main_window, 'quality_map_btn'):
-                print("DEBUG: Changing button to inactive state")
                 self.main_window.quality_map_btn.config(bg='#2ecc71')  # Green when inactive
+
+            # Hide dynamic legend
+            if hasattr(self.main_window, 'dynamic_legend') and self.main_window.dynamic_legend:
+                self.main_window.dynamic_legend.hide_legend()
 
 
     def show_quality_map(self):

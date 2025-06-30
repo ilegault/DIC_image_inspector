@@ -9,9 +9,9 @@ import threading
 from ui.image_display import ImageDisplay
 from ui.roi_handler import ROIHandler
 from ui.file_operations import FileOperations
-from analysis.quality_map.map_generator import generate_quality_map
 from ui.button_state_manager import ButtonStateManager
 from analysis.core.subset_analyzer import determine_optimal_subset_size
+from ui.dynamic_legend import DynamicLegend
 
 
 class DICQualityInspector:
@@ -30,7 +30,6 @@ class DICQualityInspector:
         self.roi_start = None
         self.roi_rect = None
 
-        # ADD THIS LINE: Spectrum selection variable
         self.selected_spectrum = tk.StringVar(value='custom_dic')
 
         # Create GUI
@@ -50,6 +49,11 @@ class DICQualityInspector:
         self.quality_map_btn.config(command=self.image_display.toggle_quality_map_overlay)
         self.save_btn.config(command=self.file_operations.save_report)
         self.quality_map_btn.config(state='disabled')
+
+        # Verify dynamic_legend still exists after initialization
+        print(f"Final check - dynamic_legend exists: {hasattr(self, 'dynamic_legend')}")
+        if hasattr(self, 'dynamic_legend'):
+            print(f"Final dynamic_legend object ID: {id(self.dynamic_legend)}")
 
     def create_gui(self):
         # Main title
@@ -111,16 +115,16 @@ class DICQualityInspector:
         main_frame = tk.Frame(self.root, bg='#2c3e50')
         main_frame.pack(fill='both', expand=True, padx=10, pady=5)
 
-        # Left panel - Image display
-        left_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
-        left_panel.pack(side='left', fill='both', expand=True, padx=5)
+        # FIXED: Store left_panel as instance variable
+        self.left_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
+        self.left_panel.pack(side='left', fill='both', expand=True, padx=5)
 
-        img_title = tk.Label(left_panel, text="📸 Image Preview", font=('Arial', 16, 'bold'),
+        img_title = tk.Label(self.left_panel, text="📸 Image Preview", font=('Arial', 16, 'bold'),
                              fg='#ecf0f1', bg='#34495e')
         img_title.pack(pady=10)
 
         # Image canvas with scrollbars
-        canvas_frame = tk.Frame(left_panel, bg='#34495e')
+        canvas_frame = tk.Frame(self.left_panel, bg='#34495e')
         canvas_frame.pack(fill='both', expand=True, padx=10, pady=5)
 
         self.image_canvas = tk.Canvas(canvas_frame, bg='white', width=600, height=400)
@@ -138,8 +142,8 @@ class DICQualityInspector:
         canvas_frame.grid_rowconfigure(0, weight=1)
         canvas_frame.grid_columnconfigure(0, weight=1)
 
-        # Image processing buttons (REPLACE this entire section)
-        process_frame = tk.Frame(left_panel, bg='#34495e')
+        # Image processing buttons
+        process_frame = tk.Frame(self.left_panel, bg='#34495e')
         process_frame.pack(pady=10)
 
         # First row of buttons - keep your existing buttons
@@ -171,7 +175,7 @@ class DICQualityInspector:
                                          bg='#2ecc71', fg='white', padx=10)
         self.quality_map_btn.pack(side='left', padx=2)
 
-        # ADD THIS: Second row for spectrum selection
+        # Spectrum selection row
         spectrum_row = tk.Frame(process_frame, bg='#34495e')
         spectrum_row.pack(pady=5)
 
@@ -206,34 +210,8 @@ class DICQualityInspector:
         # Set default selection
         self.spectrum_combo.set('custom_dic')
 
-        # IMPROVED COLOR LEGEND - More readable with outlines
-        legend_frame = tk.Frame(left_panel, bg='#34495e')
-        legend_frame.pack(pady=5)
-
-        legend_title = tk.Label(legend_frame, text="Quality Map Legend:",
-                                font=('Arial', 10, 'bold'), fg='#ecf0f1', bg='#34495e')
-        legend_title.pack()
-
-        legend_items_frame = tk.Frame(legend_frame, bg='#34495e')
-        legend_items_frame.pack()
-
-        # FIXED: More readable legend with better contrast
-        legend_items = [
-            ("Poor", "#8B0000", "white"),  # Dark red with white text
-            ("Challenging", "#FF0000", "white"),  # Red with white text
-            ("Acceptable", "#FF8C00", "black"),  # Orange with black text
-            ("Good", "#FFD700", "black"),  # Gold with black text
-            ("Very Good", "#32CD32", "black"),  # Lime green with black text
-            ("Excellent", "#0080FF", "white")  # Blue with white text
-        ]
-
-        for text, bg_color, text_color in legend_items:
-            legend_btn = tk.Label(legend_items_frame, text=f"  {text}  ",
-                                  bg=bg_color, fg=text_color,
-                                  font=('Arial', 9, 'bold'),
-                                  relief='raised', bd=1,
-                                  padx=8, pady=2)
-            legend_btn.pack(side='left', padx=2)
+        # FIXED: Call the dynamic legend initialization method
+        self.create_gui_dynamic_legend_section()
 
         # Right panel - Analysis results
         right_panel = tk.Frame(main_frame, bg='#34495e', relief='raised', bd=2)
@@ -265,6 +243,122 @@ class DICQualityInspector:
         status_bar = tk.Label(self.root, textvariable=self.status_var, relief='sunken',
                               anchor='w', bg='#95a5a6', fg='white')
         status_bar.pack(side='bottom', fill='x')
+
+    def create_gui_dynamic_legend_section(self):
+        """FIXED: Proper dynamic legend initialization"""
+
+        # Dynamic legend container (MUST be created BEFORE DynamicLegend instance)
+        print("Creating legend container frame")
+        self.legend_container = tk.Frame(self.left_panel, bg='#34495e')
+        self.legend_container.pack(pady=5, fill='x')  # IMPORTANT: pack it initially
+
+        # Initialize dynamic legend system AFTER container is created and packed
+        print("Initializing DynamicLegend")
+        from ui.dynamic_legend import DynamicLegend  # Make sure import is available
+        self.dynamic_legend = DynamicLegend(self.legend_container)
+
+        # Verify initialization
+        if self.dynamic_legend:
+            print("DynamicLegend initialized successfully")
+
+            # CRITICAL: Store reference to prevent garbage collection
+            print(f"DynamicLegend object ID: {id(self.dynamic_legend)}")
+
+            # Test that the object methods work
+            try:
+                is_visible = self.dynamic_legend.is_visible()
+                print(f"DynamicLegend visibility test: {is_visible}")
+            except Exception as e:
+                print(f"ERROR testing DynamicLegend methods: {e}")
+        else:
+            print("ERROR: DynamicLegend initialization failed")
+
+        print("Initially hiding legend until quality map is shown")
+
+    def _auto_show_quality_map(self):
+        """FIXED: Enhanced auto-show with proper dynamic legend creation and debugging"""
+        print("DEBUG: _auto_show_quality_map_fixed called")
+
+        if hasattr(self.image_display, 'quality_map_data') and self.image_display.quality_map_data is not None:
+            print("DEBUG: Quality map data found, attempting to show")
+
+            # Only auto-show if not already showing
+            if not getattr(self.image_display, 'showing_quality_overlay', False):
+                print("DEBUG: Quality overlay not currently showing, toggling on")
+
+                # Set the flag first
+                self.image_display.showing_quality_overlay = True
+
+                # Change button appearance
+                if hasattr(self, 'quality_map_btn'):
+                    self.quality_map_btn.config(bg='#e74c3c')  # Red when active
+
+                # Show the quality map with spectrum
+                try:
+                    self.image_display.show_quality_map_with_spectrum()
+
+                    # FIXED: Enhanced debugging for dynamic legend
+                    print(f"Checking for dynamic_legend object...")
+                    print(f"hasattr(self, 'dynamic_legend'): {hasattr(self, 'dynamic_legend')}")
+
+                    if hasattr(self, 'dynamic_legend'):
+                        print(f"self.dynamic_legend is not None: {self.dynamic_legend is not None}")
+                        print(f"self.dynamic_legend type: {type(self.dynamic_legend)}")
+                        print(f"self.dynamic_legend object ID: {id(self.dynamic_legend)}")
+
+                    if hasattr(self, 'dynamic_legend') and self.dynamic_legend:
+                        current_spectrum = self.selected_spectrum.get()
+                        print(f"Creating dynamic legend for spectrum: {current_spectrum}")
+
+                        try:
+                            # Create the legend (this also shows it)
+                            success = self.dynamic_legend.create_legend(current_spectrum)
+                            if success:
+                                print("Dynamic legend created and shown successfully")
+                            else:
+                                print("Failed to create dynamic legend - create_legend returned False")
+                        except Exception as legend_error:
+                            print(f"Exception while creating dynamic legend: {legend_error}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        print("WARNING: No dynamic_legend object available")
+                        print("Available attributes:", [attr for attr in dir(self) if 'legend' in attr.lower()])
+
+                    print("DEBUG: Quality map display completed")
+
+                except Exception as e:
+                    print(f"DEBUG: Error auto-showing quality map: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print("DEBUG: Quality overlay already showing")
+        else:
+            print("DEBUG: No quality map data available for auto-show")
+
+    def debug_dynamic_legend_state(self):
+        """Debug method to check dynamic legend object state"""
+        print("=== DYNAMIC LEGEND DEBUG ===")
+        print(f"hasattr(self, 'dynamic_legend'): {hasattr(self, 'dynamic_legend')}")
+
+        if hasattr(self, 'dynamic_legend'):
+            print(f"self.dynamic_legend: {self.dynamic_legend}")
+            print(f"self.dynamic_legend type: {type(self.dynamic_legend)}")
+            print(f"self.dynamic_legend object ID: {id(self.dynamic_legend)}")
+
+            if self.dynamic_legend:
+                try:
+                    print(f"Legend container exists: {self.dynamic_legend.legend_frame}")
+                    print(f"Current spectrum: {self.dynamic_legend.current_spectrum}")
+                    print(f"Is visible: {self.dynamic_legend.is_visible()}")
+                except Exception as e:
+                    print(f"Error accessing dynamic_legend properties: {e}")
+
+        print(f"hasattr(self, 'legend_container'): {hasattr(self, 'legend_container')}")
+        if hasattr(self, 'legend_container'):
+            print(f"legend_container: {self.legend_container}")
+
+        print("=== END DEBUG ===")
 
     def start_screenshot(self):
         """Start screenshot capture process"""
@@ -571,40 +665,7 @@ class DICQualityInspector:
         # Auto-show quality map after a brief delay
         self.root.after(500, self._auto_show_quality_map)
 
-    def _auto_show_quality_map(self):
-        """Automatically show quality map after analysis"""
-        print("DEBUG: _auto_show_quality_map called")
-
-        if hasattr(self.image_display, 'quality_map_data') and self.image_display.quality_map_data is not None:
-            print("DEBUG: Quality map data found, attempting to show")
-
-            # Only auto-show if not already showing
-            if not getattr(self.image_display, 'showing_quality_overlay', False):
-                print("DEBUG: Quality overlay not currently showing, toggling on")
-
-                # Set the flag first
-                self.image_display.showing_quality_overlay = True
-
-                # Change button appearance
-                if hasattr(self, 'quality_map_btn'):
-                    self.quality_map_btn.config(bg='#e74c3c')  # Red when active
-
-                # Show the quality map with spectrum
-                try:
-                    self.image_display.show_quality_map_with_spectrum()
-                    print("DEBUG: Quality map auto-displayed successfully")
-                except Exception as e:
-                    print(f"DEBUG: Error auto-showing quality map: {e}")
-                    # Try fallback method
-                    try:
-                        self.image_display.show_quality_map_fallback()
-                        print("DEBUG: Fallback quality map display succeeded")
-                    except Exception as e2:
-                        print(f"DEBUG: Fallback also failed: {e2}")
-            else:
-                print("DEBUG: Quality overlay already showing")
-        else:
-            print("DEBUG: No quality map data available for auto-show")
+        self.debug_dynamic_legend_state()
 
     def _on_analysis_error(self, error_msg):
         """Handle analysis error"""
@@ -617,30 +678,6 @@ class DICQualityInspector:
             self.state_manager.update_state("roi_selected")
         else:
             self.state_manager.update_state("image_loaded")
-
-    def _on_analysis_complete(self, analysis_results):
-        """Handle analysis completion - simplified version"""
-        print("DEBUG: _on_analysis_complete called")
-
-        # Store results
-        self.analysis_results = analysis_results
-
-        # Get overall score (same as average quality)
-        score = analysis_results.get('overall_score', 0)
-
-        # Update results display
-        self._update_results_display()
-
-        # Update state to analysis_complete
-        self.state_manager.update_state("analysis_complete", score=score)
-
-        # Enable quality map button
-        self.quality_map_btn.config(state='normal')
-
-        print("DEBUG: Quality map button enabled, scheduling auto-show")
-
-        # Auto-show quality map after a brief delay
-        self.root.after(500, self._auto_show_quality_map)
 
     def _update_results_display(self):
         """FIXED: Complete results display with all metrics"""
@@ -975,22 +1012,68 @@ class DICQualityInspector:
         self.spectrum_combo.bind('<<ComboboxSelected>>', self.on_spectrum_changed)
 
     def on_spectrum_changed(self, event=None):
-        """Handle spectrum selection change"""
+        """FIXED: Enhanced spectrum change handler with proper legend update"""
         if not hasattr(self, 'image_display') or not hasattr(self.image_display, 'quality_map_data'):
+            print("No image_display or quality_map_data available")
             return
 
+        spectrum_type = self.selected_spectrum.get()
+        print(f"Spectrum changed to: {spectrum_type}")
+
+        # FIXED: Update the dynamic legend properly
+        if hasattr(self, 'dynamic_legend') and self.dynamic_legend:
+            print(f"Updating dynamic legend to {spectrum_type}")
+
+            # Check if quality map is currently displayed
+            if (hasattr(self.image_display, 'showing_quality_overlay') and
+                    self.image_display.showing_quality_overlay):
+                # Quality map is showing - update legend
+                success = self.dynamic_legend.update_legend(spectrum_type)
+                if success:
+                    print(f"Dynamic legend updated to {spectrum_type}")
+                else:
+                    print(f"Failed to update dynamic legend to {spectrum_type}")
+            else:
+                print("Quality map not currently showing, legend update skipped")
+        else:
+            print("WARNING: No dynamic_legend object available for update")
+
+        # Update quality map visualization if it's currently shown
         if (self.image_display.quality_map_data is not None and
                 hasattr(self.image_display, 'showing_quality_overlay') and
                 self.image_display.showing_quality_overlay):
-            spectrum_type = self.selected_spectrum.get()
-            print(f"Spectrum changed to: {spectrum_type}")
-
             # Update the quality map visualization with new spectrum
             self.update_quality_map_with_spectrum()
 
             # Update status
             display_name = spectrum_type.replace('_', ' ').title()
             self.status_var.set(f"Updated quality map with {display_name} spectrum")
+
+    def test_dynamic_legend(self):
+        """Test method to manually create and show the dynamic legend"""
+        print("=== TESTING DYNAMIC LEGEND ===")
+
+        if hasattr(self, 'dynamic_legend') and self.dynamic_legend:
+            print("Dynamic legend object exists")
+
+            # Test creating legend
+            spectrum_type = self.selected_spectrum.get()
+            print(f"Testing legend creation with spectrum: {spectrum_type}")
+
+            success = self.dynamic_legend.create_legend(spectrum_type)
+            if success:
+                print("Legend creation test: SUCCESS")
+            else:
+                print("Legend creation test: FAILED")
+
+            # Check if visible
+            is_visible = self.dynamic_legend.is_visible()
+            print(f"Legend visibility: {is_visible}")
+
+        else:
+            print("ERROR: No dynamic_legend object found")
+
+        print("=== END TEST ===")
 
     def update_quality_map_with_spectrum(self):
         """Update quality map visualization with selected spectrum"""
@@ -1117,16 +1200,20 @@ class DICQualityInspector:
             tk.Label(reset_msg_frame, text="Load an image to begin analysis",
                      font=('Arial', 12), fg='#bdc3c7', bg='#34495e').pack()
 
-        # 6. RESET STATE MANAGER
+        # 6. Reset dynamic legend
+        if hasattr(self, 'dynamic_legend') and self.dynamic_legend:
+            self.dynamic_legend.destroy_legend()
+
+        # 7. RESET STATE MANAGER
         if hasattr(self, 'state_manager'):
             self.state_manager.current_state = "no_image"
             self.state_manager.analysis_in_progress = False
             self.state_manager.update_state("no_image")
 
-        # 7. RESET STATUS
+        # 8. RESET STATUS
         self.status_var.set("Application reset - Load an image to begin")
 
-        # 8. FORCE UI UPDATE
+        # 9. FORCE UI UPDATE
         self.root.update_idletasks()
 
         print("Full reset complete - ready for new analysis")
@@ -1202,3 +1289,6 @@ class DICQualityInspector:
                                  bg="#3498db", fg="white", font=("Arial", 11, "bold"),
                                  command=help_dialog.destroy, padx=20, pady=5)
         close_button.pack(pady=10)
+
+
+
