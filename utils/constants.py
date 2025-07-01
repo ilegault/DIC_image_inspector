@@ -53,11 +53,11 @@ APP_CONFIG = {
     },
 
     'analysis': {
-        'default_spectrum': 'custom_dic',
+        'default_spectrum': 'optimized',
         'default_facet_size': 19,
         'default_point_distance': 4,
         'quality_thresholds': {
-            'custom_dic': {
+            'optimized': {
                 'perfect': 95,
                 'excellent': 90,
                 'very_good': 85,
@@ -65,7 +65,7 @@ APP_CONFIG = {
                 'minimum': 75,
                 'critical': 0
             },
-            'zeiss_style_dic': {
+            'controlled': {
                 'excellent': 95,
                 'very_good': 90,
                 'good': 85,
@@ -217,7 +217,7 @@ ANALYSIS_CONFIG = {
 
 # Quality assessment thresholds
 QUALITY_THRESHOLDS = {
-    'custom_dic': {
+    'optimized': {
         'perfect': 95.0,
         'excellent': 90.0,
         'very_good': 85.0,
@@ -226,7 +226,7 @@ QUALITY_THRESHOLDS = {
         'critical': 0.0
     },
 
-    'zeiss_style_dic': {
+    'controlled': {
         'excellent': 95.0,
         'very_good': 90.0,
         'good': 85.0,
@@ -238,29 +238,31 @@ QUALITY_THRESHOLDS = {
 
 # Color spectrum definitions
 COLOR_SPECTRUMS = {
-    'custom_dic': {
-        'name': 'Custom DIC (Black→Red→Blue)',
-        'description': 'Strict assessment for DIC applications only',
+
+
+    'optimized': {
+        'name': 'Optimized (Rainbow: Red→Blue)',
+        'description': 'Optimized assessment with strict quality thresholds',
         'colors': [
-            (0, 0, 0, 'Critical (0-75%): Not suitable for DIC'),
-            (120, 0, 0, 'Minimum (75%): Threshold for DIC'),
-            (255, 80, 0, 'Good (80-85%): Acceptable for DIC'),
-            (255, 200, 0, 'Very Good (85-90%): Good for DIC'),
-            (120, 255, 180, 'Excellent (90-95%): Excellent for DIC'),
-            (0, 140, 255, 'Perfect (95-100%): Ideal for DIC')
+            (0, 0, 0, "Critical (0-75%): Black - Not suitable for DIC"),
+            (255, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
+            (255, 127, 0, "Good (80-85%): Orange - Acceptable for DIC"),
+            (255, 255, 0, "Very Good (85-90%): Yellow - Good for DIC"),
+            (0, 255, 0, "Excellent (90-95%): Green - Excellent for DIC"),
+            (0, 0, 255, "Perfect (95-100%): Blue - Ideal for DIC")
         ]
     },
 
-    'zeiss_style_dic': {
-        'name': 'ZEISS-Style Pattern Quality',
-        'description': 'Professional pattern quality assessment (colorblind-friendly)',
+    'controlled': {
+        'name': 'Controlled Pattern Quality (Colorblind-Friendly)',
+        'description': 'Controlled assessment with realistic DIC thresholds',
         'colors': [
-            (50, 0, 0, 'Unusable (0-70%): No correlation possible'),
-            (255, 0, 0, 'Poor (70-80%): Unreliable correlation'),
-            (255, 140, 0, 'Acceptable (80-85%): Usable with uncertainty'),
-            (255, 255, 0, 'Good (85-90%): Good correlation quality'),
-            (0, 255, 255, 'Very Good (90-95%): Very reliable'),
-            (0, 100, 255, 'Excellent (95-100%): Optimal pattern')
+            (50, 0, 0, "Unusable (0-15%): Dark Red - No correlation possible"),
+            (255, 0, 0, "Poor (15-30%): Red - Unreliable correlation"),
+            (255, 140, 0, "Challenging (30-45%): Orange - Difficult correlation"),
+            (255, 255, 0, "Acceptable (45-60%): Yellow - Usable with uncertainty"),
+            (0, 255, 255, "Good (60-75%): Cyan - Good correlation quality"),
+            (0, 100, 255, "Excellent (75-100%): Blue - Optimal pattern")
         ]
     }
 }

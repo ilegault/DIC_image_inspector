@@ -91,7 +91,7 @@ Software: DIC Image Quality Inspector
     def _generate_executive_summary(self, results: Dict) -> str:
         """Generate executive summary section."""
         overall_score = results.get('overall_score', 0)
-        spectrum_used = results.get('spectrum_used', 'custom_dic')
+        spectrum_used = results.get('spectrum_used', 'optimized')
         analysis_method = results.get('analysis_method', 'Full image')
 
         # Get quality assessment

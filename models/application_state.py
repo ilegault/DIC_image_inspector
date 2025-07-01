@@ -44,7 +44,7 @@ class ApplicationState:
         self._quality_map_visible: bool = False
 
         # UI state
-        self._selected_spectrum: str = 'custom_dic'
+        self._selected_spectrum: str = 'optimized'
         self._zeiss_parameters: Dict[str, Any] = {
             'facet_size': 19,
             'point_distance': 4
@@ -263,7 +263,7 @@ class ApplicationState:
         Args:
             spectrum: Spectrum type
         """
-        valid_spectrums = ['custom_dic', 'zeiss_style_dic']
+        valid_spectrums = ['optimized', 'controlled']
 
         if spectrum in valid_spectrums:
             self._selected_spectrum = spectrum
@@ -424,7 +424,7 @@ class ApplicationState:
         self._quality_map_visible = False
 
         # Reset UI state to defaults
-        self._selected_spectrum = 'custom_dic'
+        self._selected_spectrum = 'optimized'
         self._zeiss_parameters = {
             'facet_size': 19,
             'point_distance': 4

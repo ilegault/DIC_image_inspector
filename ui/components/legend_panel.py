@@ -28,14 +28,14 @@ class LegendPanel:
         # Legend definitions for different spectrums
         self.spectrum_definitions = {
             'custom_dic': {
-                'name': 'Custom DIC (Black→Red→Blue)',
+                'name': 'Custom DIC (Rainbow: Red→Blue)',
                 'colors': [
                     (0, 0, 0, "Critical (0-75%): Black - Not suitable for DIC"),
-                    (120, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
-                    (255, 80, 0, "Good (80-85%): Orange - Acceptable for DIC"),
-                    (255, 200, 0, "Very Good (85-90%): Yellow - Good for DIC"),
-                    (120, 255, 180, "Excellent (90-95%): Cyan - Excellent for DIC"),
-                    (0, 140, 255, "Perfect (95-100%): Blue - Ideal for DIC")
+                    (255, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
+                    (255, 127, 0, "Good (80-85%): Orange - Acceptable for DIC"),
+                    (255, 255, 0, "Very Good (85-90%): Yellow - Good for DIC"),
+                    (0, 255, 0, "Excellent (90-95%): Green - Excellent for DIC"),
+                    (0, 0, 255, "Perfect (95-100%): Blue - Ideal for DIC")
                 ]
             },
             'zeiss_style_dic': {
@@ -107,15 +107,15 @@ class LegendPanel:
         Args:
             spectrum_type: Spectrum type to create legend for
         """
-        # Create legend container with fixed height
+        # Create legend container with larger fixed height for full display
         self.legend_frame = tk.Frame(
             self.parent,
             bg=APP_CONFIG['colors']['panel_bg'],
             relief='raised',
-            bd=1,
-            height=80
+            bd=2,
+            height=120
         )
-        self.legend_frame.pack(fill='x', pady=5)
+        self.legend_frame.pack(fill='x', pady=10)
         self.legend_frame.pack_propagate(False)  # Maintain fixed height
 
         # Get spectrum definition
@@ -126,15 +126,15 @@ class LegendPanel:
         title_label = tk.Label(
             self.legend_frame,
             text=title_text,
-            font=('Arial', 10, 'bold'),
+            font=('Arial', 12, 'bold'),
             fg=APP_CONFIG['colors']['text_primary'],
             bg=APP_CONFIG['colors']['panel_bg']
         )
-        title_label.pack(pady=(5, 2))
+        title_label.pack(pady=(8, 5))
 
         # Color items container
         items_container = tk.Frame(self.legend_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        items_container.pack(fill='both', expand=True, pady=2)
+        items_container.pack(fill='both', expand=True, pady=5)
 
         # Create color items
         self._create_color_items(items_container, spectrum_def['colors'])
@@ -159,19 +159,19 @@ class LegendPanel:
                 # Extract short label (before colon)
                 short_label = label.split(':')[0] if ':' in label else label
 
-                # Create legend item
+                # Create legend item with larger, more prominent display
                 item = tk.Label(
                     container,
                     text=f" {short_label} ",
                     bg=bg_color,
                     fg=text_color,
-                    font=('Arial', 8, 'bold'),
+                    font=('Arial', 10, 'bold'),
                     relief='raised',
-                    bd=1,
-                    padx=2,
-                    pady=1
+                    bd=2,
+                    padx=4,
+                    pady=3
                 )
-                item.pack(side='left', padx=1, expand=True, fill='both')
+                item.pack(side='left', padx=2, expand=True, fill='both')
 
         except Exception as e:
             print(f"Error creating color items: {e}")

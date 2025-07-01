@@ -48,6 +48,9 @@ class DICQualityInspector:
 
         # Set initial state
         self._update_ui_state()
+        
+        # Setup window close handler
+        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _setup_window(self):
         """Setup main window properties."""
@@ -433,6 +436,15 @@ class DICQualityInspector:
     def _get_roi_info(self) -> Optional[Dict[str, Any]]:
         """Get ROI information for report."""
         return self.state.get_roi_info()
+
+    def _on_closing(self):
+        """Handle application closing."""
+        try:
+            # Close main window
+            self.root.destroy()
+        except Exception as e:
+            print(f"Error during application closing: {e}")
+            self.root.destroy()
 
 
 def main():

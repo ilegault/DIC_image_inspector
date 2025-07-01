@@ -40,7 +40,7 @@ class ImageAnalyzer:
             self,
             image: np.ndarray,
             roi: Optional[ROIData] = None,
-            spectrum_type: str = 'custom_dic',
+            spectrum_type: str = 'optimized',
             subset_size: Optional[int] = None,
             step_size: Optional[int] = None
     ) -> AnalysisResult:

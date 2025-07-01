@@ -432,6 +432,21 @@ class QualityCalculator:
                 entropy_score * 0.2
             )
             
+            # Apply critical quality checks - if any factor is extremely poor, heavily penalize
+            critical_factors = 0
+            if gradient_score < 0.1:
+                critical_factors += 1
+            if contrast_score < 0.1:
+                critical_factors += 1
+            if entropy_score < 0.1:
+                critical_factors += 1
+            
+            # Apply penalties for critical issues
+            if critical_factors >= 2:
+                quality_score *= 0.1  # Severe penalty for multiple critical issues
+            elif critical_factors == 1:
+                quality_score *= 0.3  # Moderate penalty for single critical issue
+            
             return max(0.0, min(1.0, quality_score))
             
         except Exception as e:
@@ -449,8 +464,17 @@ class QualityCalculator:
         mig = np.mean(gradient_magnitude)
         normalized_mig = mig / 255.0
         
-        # Return score in 0-1 range
-        return min(1.0, normalized_mig * 6)
+        # More strict gradient assessment for DIC
+        # Require higher gradient content for good scores
+        gradient_score = min(1.0, normalized_mig * 4)  # Reduced multiplier for stricter assessment
+        
+        # Penalize regions with very low gradient content
+        if normalized_mig < 0.05:  # Less than 5% of max gradient
+            gradient_score *= 0.3  # Heavy penalty
+        elif normalized_mig < 0.1:  # Less than 10% of max gradient
+            gradient_score *= 0.6  # Moderate penalty
+        
+        return gradient_score
     
     def _calculate_fast_contrast_quality(self, gray: np.ndarray) -> float:
         """Fast contrast quality calculation for subset analysis."""
@@ -460,8 +484,20 @@ class QualityCalculator:
         # RMS contrast
         rms_contrast = std_val / (mean_val + 1e-6)
         
-        # Return score in 0-1 range
-        return min(1.0, rms_contrast / 0.4)
+        # More strict contrast assessment
+        contrast_score = min(1.0, rms_contrast / 0.3)  # Reduced denominator for stricter assessment
+        
+        # Penalize regions with very low contrast
+        if rms_contrast < 0.05:  # Very low contrast
+            contrast_score *= 0.2  # Heavy penalty
+        elif rms_contrast < 0.1:  # Low contrast
+            contrast_score *= 0.5  # Moderate penalty
+        
+        # Also check for over-saturation (too high contrast can be bad for DIC)
+        if rms_contrast > 1.5:  # Very high contrast might indicate noise or artifacts
+            contrast_score *= 0.8
+        
+        return contrast_score
     
     def _calculate_fast_entropy_quality(self, gray: np.ndarray) -> float:
         """Fast entropy quality calculation for subset analysis."""
@@ -475,10 +511,19 @@ class QualityCalculator:
             
         entropy_val = -np.sum(hist * np.log2(hist))
         
+        # More strict entropy assessment
         # Normalize to 0-1 range (max entropy for 32 bins is log2(32) = 5)
-        return min(1.0, entropy_val / 5.0)
+        entropy_score = min(1.0, entropy_val / 4.5)  # Slightly reduced for stricter assessment
+        
+        # Penalize regions with very low entropy (uniform regions)
+        if entropy_val < 1.0:  # Very low information content
+            entropy_score *= 0.2  # Heavy penalty
+        elif entropy_val < 2.0:  # Low information content
+            entropy_score *= 0.5  # Moderate penalty
+        
+        return entropy_score
 
-    def assess_quality_level(self, score: float, spectrum_type: str = 'custom_dic') -> Tuple[str, str]:
+    def assess_quality_level(self, score: float, spectrum_type: str = 'optimized') -> Tuple[str, str]:
         """
         Assess quality level based on score and spectrum type.
 
@@ -490,34 +535,34 @@ class QualityCalculator:
             Tuple of (quality_level, color_hex)
         """
         if spectrum_type == 'custom_dic':
-            # Strict DIC-only assessment
-            if score >= 95:
-                return "Perfect for DIC", "#008cff"
-            elif score >= 90:
-                return "Excellent for DIC", "#78ffb4"
-            elif score >= 85:
-                return "Very Good for DIC", "#ffc800"
-            elif score >= 80:
-                return "Good for DIC", "#ff5000"
-            elif score >= 75:
-                return "Minimum for DIC", "#780000"
+            # Strict DIC-only assessment with realistic thresholds
+            if score >= 75:
+                return "Perfect for DIC", "#0000ff"
+            elif score >= 60:
+                return "Excellent for DIC", "#00ff00"
+            elif score >= 45:
+                return "Very Good for DIC", "#ffff00"
+            elif score >= 30:
+                return "Good for DIC", "#ff7f00"
+            elif score >= 15:
+                return "Minimum for DIC", "#ff0000"
             else:
                 return "CRITICAL - Not suitable for DIC", "#000000"
 
         elif spectrum_type == 'zeiss_style_dic':
-            # More realistic thresholds
+            # ZEISS-style realistic thresholds
             if score >= 75:
-                return "Excellent for DIC", "#27ae60"
+                return "Excellent for DIC", "#0064ff"
             elif score >= 60:
-                return "Very Good for DIC", "#2ecc71"
+                return "Good for DIC", "#00ffff"
             elif score >= 45:
-                return "Good for DIC", "#f39c12"
+                return "Acceptable for DIC", "#ffff00"
             elif score >= 30:
-                return "Acceptable for DIC", "#e67e22"
+                return "Challenging for DIC", "#ff8c00"
             elif score >= 15:
-                return "Challenging for DIC", "#e74c3c"
+                return "Poor for DIC", "#ff0000"
             else:
-                return "Poor for DIC", "#8e44ad"
+                return "Unusable for DIC", "#320000"
 
         else:
             # Default to custom_dic thresholds

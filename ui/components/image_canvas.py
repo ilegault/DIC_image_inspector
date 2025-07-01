@@ -106,9 +106,7 @@ class ImageCanvas:
 
         # Processing buttons
         processing_buttons = [
-            ("Original", self.show_original, '#95a5a6'),
-            ("Edges", self.show_edges, '#95a5a6'),
-            ("Gradient", self.show_gradient, '#95a5a6')
+            ("Original", self.show_original, '#95a5a6')
         ]
 
         for text, command, color in processing_buttons:
@@ -244,6 +242,17 @@ class ImageCanvas:
             # Store offset for coordinate calculations
             self.image_offset_x = x_pos
             self.image_offset_y = y_pos
+            
+            # Also store on canvas for ROI selector access
+            self.canvas.image_offset_x = x_pos
+            self.canvas.image_offset_y = y_pos
+            
+            # Debug for large original images
+            if hasattr(self, 'original_image') and self.original_image is not None:
+                orig_h, orig_w = self.original_image.shape[:2]
+                if max(orig_w, orig_h) > 1000:
+                    print(f"DEBUG: Image centered - Canvas: {canvas_width}x{canvas_height}, "
+                          f"Display: {img_width}x{img_height}, Offset: ({x_pos}, {y_pos})")
         else:
             # Image is larger - enable scrolling
             self.canvas.configure(scrollregion=(0, 0, img_width, img_height))
@@ -254,6 +263,17 @@ class ImageCanvas:
             # No offset when scrolling
             self.image_offset_x = 0
             self.image_offset_y = 0
+            
+            # Also store on canvas for ROI selector access
+            self.canvas.image_offset_x = 0
+            self.canvas.image_offset_y = 0
+            
+            # Debug for large original images
+            if hasattr(self, 'original_image') and self.original_image is not None:
+                orig_h, orig_w = self.original_image.shape[:2]
+                if max(orig_w, orig_h) > 1000:
+                    print(f"DEBUG: Image scrollable - Canvas: {canvas_width}x{canvas_height}, "
+                          f"Display: {img_width}x{img_height}, Scroll region: {img_width}x{img_height}")
 
     def _on_mousewheel(self, event):
         """Handle mouse wheel zoom."""
@@ -503,29 +523,36 @@ class ImageCanvas:
 
     def get_image_coordinates(self, canvas_x: int, canvas_y: int) -> Tuple[int, int]:
         """
-        Convert canvas coordinates to image coordinates.
+        Convert canvas coordinates to original image coordinates.
 
         Args:
             canvas_x: Canvas X coordinate
             canvas_y: Canvas Y coordinate
 
         Returns:
-            Tuple of (image_x, image_y) coordinates
+            Tuple of (image_x, image_y) coordinates in original image space
         """
-        # Convert canvas coordinates to image coordinates
+        # Convert canvas coordinates to scrollable canvas coordinates
         canvas_x = self.canvas.canvasx(canvas_x)
         canvas_y = self.canvas.canvasy(canvas_y)
 
-        # Account for image offset
+        # Account for image offset (when image is centered on canvas)
         offset_x = getattr(self, 'image_offset_x', 0)
         offset_y = getattr(self, 'image_offset_y', 0)
 
         canvas_x -= offset_x
         canvas_y -= offset_y
 
-        # Convert to image coordinates using display scale
-        display_scale = getattr(self.canvas, 'display_scale', self.display_scale * self.zoom_level)
-        image_x = canvas_x / display_scale
-        image_y = canvas_y / display_scale
+        # Convert directly to original image coordinates
+        # The canvas shows the image scaled by (display_scale * zoom_level)
+        # So to get original coordinates, we divide by the total scaling
+        total_scale = self.display_scale * self.zoom_level
+        
+        # Ensure we don't divide by zero
+        if total_scale <= 0:
+            total_scale = 1.0
+            
+        original_image_x = canvas_x / total_scale
+        original_image_y = canvas_y / total_scale
 
-        return int(image_x), int(image_y)
+        return int(round(original_image_x)), int(round(original_image_y))

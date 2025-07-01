@@ -30,8 +30,8 @@ class ControlPanel:
 
         # UI elements
         self.buttons = {}
-        self.spectrum_var = tk.StringVar(value='custom_dic')
-        self.zeiss_params = {
+        self.spectrum_var = tk.StringVar(value='optimized')
+        self.control_params = {
             'facet_size': tk.StringVar(value='19'),
             'point_distance': tk.StringVar(value='4')
         }
@@ -126,8 +126,8 @@ class ControlPanel:
         spectrum_label.pack(side='left', padx=5)
 
         spectrum_options = [
-            'custom_dic',
-            'zeiss_style_dic'
+            'optimized',
+            'controlled'
         ]
 
         self.spectrum_combo = ttk.Combobox(
@@ -141,26 +141,26 @@ class ControlPanel:
         self.spectrum_combo.pack(side='left', padx=5)
         self.spectrum_combo.bind('<<ComboboxSelected>>', self._on_spectrum_changed)
 
-        # ZEISS parameters (initially hidden)
-        self._create_zeiss_parameters(spectrum_frame)
+        # Control parameters (initially hidden)
+        self._create_control_parameters(spectrum_frame)
 
-    def _create_zeiss_parameters(self, parent):
-        """Create ZEISS-specific parameter controls."""
-        self.zeiss_frame = tk.Frame(parent, bg=APP_CONFIG['colors']['panel_bg'])
+    def _create_control_parameters(self, parent):
+        """Create control-specific parameter controls."""
+        self.control_frame = tk.Frame(parent, bg=APP_CONFIG['colors']['panel_bg'])
 
         # Title
-        zeiss_title = tk.Label(
-            self.zeiss_frame,
-            text="📐 ZEISS Parameters:",
+        control_title = tk.Label(
+            self.control_frame,
+            text="📐 Control Parameters:",
             font=('Arial', 10, 'bold'),
             fg='#3498db',
             bg=APP_CONFIG['colors']['panel_bg']
         )
-        zeiss_title.pack(side='left', padx=5)
+        control_title.pack(side='left', padx=5)
 
         # Facet size
         tk.Label(
-            self.zeiss_frame,
+            self.control_frame,
             text="Facet:",
             font=('Arial', 9),
             fg=APP_CONFIG['colors']['text_secondary'],
@@ -168,18 +168,18 @@ class ControlPanel:
         ).pack(side='left', padx=(15, 2))
 
         facet_spinbox = tk.Spinbox(
-            self.zeiss_frame,
+            self.control_frame,
             from_=11,
             to=51,
             increment=2,
-            textvariable=self.zeiss_params['facet_size'],
+            textvariable=self.control_params['facet_size'],
             width=4,
             font=('Arial', 8)
         )
         facet_spinbox.pack(side='left', padx=2)
 
         tk.Label(
-            self.zeiss_frame,
+            self.control_frame,
             text="px",
             font=('Arial', 8),
             fg=APP_CONFIG['colors']['text_muted'],
@@ -188,7 +188,7 @@ class ControlPanel:
 
         # Point distance
         tk.Label(
-            self.zeiss_frame,
+            self.control_frame,
             text="Step:",
             font=('Arial', 9),
             fg=APP_CONFIG['colors']['text_secondary'],
@@ -196,18 +196,18 @@ class ControlPanel:
         ).pack(side='left', padx=(10, 2))
 
         step_spinbox = tk.Spinbox(
-            self.zeiss_frame,
+            self.control_frame,
             from_=2,
             to=20,
             increment=1,
-            textvariable=self.zeiss_params['point_distance'],
+            textvariable=self.control_params['point_distance'],
             width=4,
             font=('Arial', 8)
         )
         step_spinbox.pack(side='left', padx=2)
 
         tk.Label(
-            self.zeiss_frame,
+            self.control_frame,
             text="px",
             font=('Arial', 8),
             fg=APP_CONFIG['colors']['text_muted'],
@@ -216,7 +216,7 @@ class ControlPanel:
 
         # Info label
         tk.Label(
-            self.zeiss_frame,
+            self.control_frame,
             text="(Smaller values = higher density, slower analysis)",
             font=('Arial', 8),
             fg=APP_CONFIG['colors']['text_muted'],
@@ -246,11 +246,11 @@ class ControlPanel:
         """Handle spectrum selection change."""
         spectrum_type = self.spectrum_var.get()
 
-        # Show/hide ZEISS parameters
-        if spectrum_type == 'zeiss_style_dic':
-            self.zeiss_frame.pack(after=self.spectrum_combo, pady=2, fill='x')
+        # Show/hide control parameters
+        if spectrum_type == 'controlled':
+            self.control_frame.pack(after=self.spectrum_combo, pady=2, fill='x')
         else:
-            self.zeiss_frame.pack_forget()
+            self.control_frame.pack_forget()
 
         # Notify parent
         self._execute_callback('spectrum_changed')
@@ -328,11 +328,11 @@ class ControlPanel:
         """Get currently selected spectrum type."""
         return self.spectrum_var.get()
 
-    def get_zeiss_parameters(self) -> Dict[str, Any]:
-        """Get ZEISS analysis parameters."""
+    def get_control_parameters(self) -> Dict[str, Any]:
+        """Get control analysis parameters."""
         return {
-            'facet_size': int(self.zeiss_params['facet_size'].get()),
-            'point_distance': int(self.zeiss_params['point_distance'].get())
+            'facet_size': int(self.control_params['facet_size'].get()),
+            'point_distance': int(self.control_params['point_distance'].get())
         }
 
     def set_quality_map_active(self, active: bool):

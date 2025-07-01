@@ -187,38 +187,33 @@ class ROISelector:
 
     def _canvas_to_image_coords(self, canvas_x: int, canvas_y: int) -> Tuple[float, float]:
         """
-        Convert canvas coordinates to image coordinates.
+        Convert canvas coordinates to original image coordinates.
 
         Args:
             canvas_x: Canvas X coordinate
             canvas_y: Canvas Y coordinate
 
         Returns:
-            Tuple of (image_x, image_y) coordinates
+            Tuple of (image_x, image_y) coordinates in original image space
         """
         # Get canvas-relative coordinates
         canvas_x = self.canvas.canvasx(canvas_x)
         canvas_y = self.canvas.canvasy(canvas_y)
 
-        # Get display scale and offset from canvas or parent
+        # Get display scale and offset from canvas
         display_scale = getattr(self.canvas, 'display_scale', 1.0)
         offset_x = getattr(self.canvas, 'image_offset_x', 0)
         offset_y = getattr(self.canvas, 'image_offset_y', 0)
-
-        # If canvas doesn't have offset, try to get from parent
-        if offset_x == 0 and offset_y == 0:
-            parent = self.canvas.master
-            while parent and not hasattr(parent, 'image_offset_x'):
-                parent = parent.master
-            if parent:
-                offset_x = getattr(parent, 'image_offset_x', 0)
-                offset_y = getattr(parent, 'image_offset_y', 0)
 
         # Adjust for image offset
         canvas_x -= offset_x
         canvas_y -= offset_y
 
-        # Convert to image coordinates
+        # Convert to original image coordinates
+        # The display_scale represents the total scaling from original to canvas
+        if display_scale <= 0:
+            display_scale = 1.0
+            
         image_x = canvas_x / display_scale
         image_y = canvas_y / display_scale
 
@@ -226,30 +221,25 @@ class ROISelector:
 
     def _image_to_canvas_coords(self, image_x: float, image_y: float) -> Tuple[float, float]:
         """
-        Convert image coordinates to canvas coordinates.
+        Convert original image coordinates to canvas coordinates.
 
         Args:
-            image_x: Image X coordinate
-            image_y: Image Y coordinate
+            image_x: Original image X coordinate
+            image_y: Original image Y coordinate
 
         Returns:
             Tuple of (canvas_x, canvas_y) coordinates
         """
-        # Get display scale and offset
+        # Get display scale and offset from canvas
         display_scale = getattr(self.canvas, 'display_scale', 1.0)
         offset_x = getattr(self.canvas, 'image_offset_x', 0)
         offset_y = getattr(self.canvas, 'image_offset_y', 0)
 
-        # If canvas doesn't have offset, try to get from parent
-        if offset_x == 0 and offset_y == 0:
-            parent = self.canvas.master
-            while parent and not hasattr(parent, 'image_offset_x'):
-                parent = parent.master
-            if parent:
-                offset_x = getattr(parent, 'image_offset_x', 0)
-                offset_y = getattr(parent, 'image_offset_y', 0)
-
-        # Convert to canvas coordinates
+        # Convert from original image coordinates to canvas coordinates
+        # Apply the total scaling and add offset
+        if display_scale <= 0:
+            display_scale = 1.0
+            
         canvas_x = image_x * display_scale + offset_x
         canvas_y = image_y * display_scale + offset_y
 

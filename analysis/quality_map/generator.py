@@ -172,48 +172,78 @@ class QualityMapGenerator:
             grad_y = cv2.Sobel(subset, cv2.CV_64F, 0, 1, ksize=3)
             gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
 
-            # 1. Gradient content analysis (50% weight)
+            # 1. Gradient content analysis (50% weight) - More strict
             mean_gradient = np.mean(gradient_magnitude)
             gradient_std = np.std(gradient_magnitude)
 
-            # Normalize gradient metrics
-            gradient_score = min(1.0, mean_gradient / 50.0)
+            # More strict gradient normalization for DIC
+            gradient_score = min(1.0, mean_gradient / 40.0)  # Reduced threshold for stricter assessment
+            
+            # Heavy penalty for very low gradient regions
+            if mean_gradient < 5.0:  # Very low gradient
+                gradient_score *= 0.1  # Heavy penalty
+            elif mean_gradient < 10.0:  # Low gradient
+                gradient_score *= 0.3  # Moderate penalty
 
-            # Gradient distribution quality
+            # Gradient distribution quality - more strict requirements
             gradient_cv = gradient_std / (mean_gradient + 1e-6)
-            if 0.5 <= gradient_cv <= 2.0:
+            if 0.8 <= gradient_cv <= 1.5:  # Narrower optimal range
                 distribution_bonus = 1.0
-            elif 0.3 <= gradient_cv <= 3.0:
-                distribution_bonus = 0.8
+            elif 0.5 <= gradient_cv <= 2.0:  # Acceptable range
+                distribution_bonus = 0.7
+            elif 0.3 <= gradient_cv <= 3.0:  # Poor range
+                distribution_bonus = 0.4
             else:
-                distribution_bonus = 0.6
+                distribution_bonus = 0.2  # Very poor
 
             gradient_quality = gradient_score * distribution_bonus
 
-            # 2. Pattern uniqueness (25% weight)
+            # 2. Pattern uniqueness (25% weight) - More strict
             mean_intensity = np.mean(subset)
             intensity_std = np.std(subset)
             contrast_ratio = intensity_std / (mean_intensity + 1e-6)
 
+            # More strict contrast assessment
+            contrast_score = min(1.0, contrast_ratio * 1.5)  # Reduced multiplier
+            
+            # Heavy penalty for very low contrast regions
+            if contrast_ratio < 0.05:  # Very low contrast
+                contrast_score *= 0.1
+            elif contrast_ratio < 0.1:  # Low contrast
+                contrast_score *= 0.3
+
             # Pattern complexity using simplified LBP
             complexity_score = self._calculate_pattern_complexity(subset)
 
-            uniqueness_quality = min(1.0, contrast_ratio * 2.0) * 0.7 + complexity_score * 0.3
+            uniqueness_quality = contrast_score * 0.7 + complexity_score * 0.3
 
-            # 3. Noise resistance (15% weight)
+            # 3. Noise resistance (15% weight) - More strict
             if subset.shape[0] > 3 and subset.shape[1] > 3:
                 smoothed = cv2.GaussianBlur(subset, (3, 3), 0.5)
                 noise = subset.astype(float) - smoothed.astype(float)
                 noise_std = np.std(noise)
                 signal_std = np.std(smoothed)
                 snr = signal_std / (noise_std + 1e-6)
-                noise_quality = min(1.0, snr / 20.0)
+                noise_quality = min(1.0, snr / 15.0)  # More strict SNR requirement
+                
+                # Heavy penalty for very noisy regions
+                if snr < 5.0:  # Very low SNR
+                    noise_quality *= 0.2
+                elif snr < 10.0:  # Low SNR
+                    noise_quality *= 0.5
             else:
-                noise_quality = 0.5
+                noise_quality = 0.3  # Lower default for small regions
 
-            # 4. Focus quality (10% weight)
+            # 4. Focus quality (10% weight) - More strict
             laplacian = cv2.Laplacian(subset, cv2.CV_64F)
-            focus_score = min(1.0, np.var(laplacian) / 1000.0)
+            laplacian_var = np.var(laplacian)
+            focus_score = min(1.0, laplacian_var / 800.0)  # More strict threshold
+            
+            # Heavy penalty for very blurry regions
+            if laplacian_var < 50.0:  # Very low focus
+                focus_score *= 0.1
+            elif laplacian_var < 100.0:  # Low focus
+                focus_score *= 0.3
 
             # Combine all factors (ZEISS-style weighting)
             overall_quality = (
@@ -222,6 +252,23 @@ class QualityMapGenerator:
                     noise_quality * 0.15 +
                     focus_score * 0.10
             )
+            
+            # Apply critical quality checks - if any factor is extremely poor, heavily penalize
+            critical_factors = []
+            if gradient_quality < 0.1:
+                critical_factors.append("gradient")
+            if uniqueness_quality < 0.1:
+                critical_factors.append("contrast")
+            if noise_quality < 0.1:
+                critical_factors.append("noise")
+            if focus_score < 0.1:
+                critical_factors.append("focus")
+            
+            # If multiple critical factors, apply severe penalty
+            if len(critical_factors) >= 2:
+                overall_quality *= 0.1  # Severe penalty for multiple critical issues
+            elif len(critical_factors) == 1:
+                overall_quality *= 0.3  # Moderate penalty for single critical issue
 
             return max(0.0, min(1.0, overall_quality))
 
@@ -272,6 +319,12 @@ class QualityMapGenerator:
         # Get ROI bounding box to minimize computation area
         x1, y1, x2, y2 = roi.get_bounding_box()
         
+        # Debug output for large images
+        if max(w, h) > 1000:
+            logger.info(f"DEBUG: Large image ROI processing - Image size: {w}x{h}")
+            logger.info(f"DEBUG: ROI bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+            logger.info(f"DEBUG: ROI coordinates: {roi.coordinates[:3]}...")  # Show first 3 points
+        
         # Clamp to image bounds
         x1, x2 = max(0, x1), min(w, x2)
         y1, y2 = max(0, y1), min(h, y2)
@@ -281,6 +334,9 @@ class QualityMapGenerator:
         roi_h, roi_w = roi_region.shape
         
         logger.info(f"ROI analysis region: {roi_w}x{roi_h} (vs full image {w}x{h})")
+        
+        if max(w, h) > 1000:
+            logger.info(f"DEBUG: Clamped bounding box: ({x1}, {y1}) to ({x2}, {y2})")
         
         # Determine optimal parameters for ROI region
         if subset_size is None:
@@ -292,10 +348,16 @@ class QualityMapGenerator:
         logger.info(f"ROI analysis using subset_size={subset_size}, step_size={step_size}")
         
         # Create adjusted ROI coordinates for the extracted region
+        adjusted_coords = [(x - x1, y - y1) for x, y in roi.coordinates]
         adjusted_roi = ROIData(
-            coordinates=[(x - x1, y - y1) for x, y in roi.coordinates],
+            coordinates=adjusted_coords,
             roi_type=roi.roi_type
         )
+        
+        if max(w, h) > 1000:
+            logger.info(f"DEBUG: Original ROI coords (first 3): {roi.coordinates[:3]}")
+            logger.info(f"DEBUG: Adjusted ROI coords (first 3): {adjusted_coords[:3]}")
+            logger.info(f"DEBUG: Offset applied: ({x1}, {y1})")
         
         # Create mask for the ROI within the extracted region
         roi_mask = adjusted_roi.create_mask(roi_region.shape)
