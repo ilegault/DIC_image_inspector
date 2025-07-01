@@ -1,0 +1,524 @@
+# core/quality_calculator.py - Quality Metrics Calculator
+
+import cv2
+import numpy as np
+from typing import Dict, Tuple, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class QualityCalculator:
+    """
+    Calculates comprehensive quality metrics for DIC analysis.
+
+    This class orchestrates various quality analysis algorithms and combines
+    them into a unified quality score suitable for DIC applications.
+    """
+
+    def __init__(self):
+        """Initialize the quality calculator with default weights."""
+        # Quality metric weights (must sum to 1.0)
+        self.weights = {
+            'gradient': 0.40,  # Gradient content (most important for DIC)
+            'contrast': 0.25,  # Contrast quality
+            'entropy': 0.20,  # Information content
+            'pattern': 0.10,  # Pattern complexity
+            'noise': 0.05  # Noise level
+        }
+
+        # Validate weights
+        if abs(sum(self.weights.values()) - 1.0) > 1e-6:
+            logger.warning(f"Quality weights don't sum to 1.0: {sum(self.weights.values())}")
+
+    def calculate_quality_score(self, image: np.ndarray, roi_coords: Optional[list] = None) -> Dict:
+        """
+        Calculate comprehensive quality score for an image or ROI.
+
+        Args:
+            image: Input image as numpy array
+            roi_coords: Optional ROI coordinates for focused analysis
+
+        Returns:
+            Dict containing quality score and detailed metrics
+        """
+        # Convert to grayscale if needed
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image.copy()
+
+        # Apply ROI mask if provided
+        analysis_region = self._apply_roi_mask(gray, roi_coords)
+
+        # Calculate individual quality metrics
+        gradient_metrics = self._calculate_gradient_quality(analysis_region)
+        contrast_metrics = self._calculate_contrast_quality(analysis_region)
+        entropy_metrics = self._calculate_entropy_quality(analysis_region)
+        pattern_metrics = self._calculate_pattern_quality(analysis_region)
+        noise_metrics = self._calculate_noise_quality(analysis_region)
+
+        # Combine metrics using weighted average
+        overall_score = (
+                gradient_metrics['score'] * self.weights['gradient'] +
+                contrast_metrics['score'] * self.weights['contrast'] +
+                entropy_metrics['score'] * self.weights['entropy'] +
+                pattern_metrics['score'] * self.weights['pattern'] +
+                noise_metrics['score'] * self.weights['noise']
+        )
+
+        # Convert to 0-100 scale
+        overall_score = max(0.0, min(100.0, overall_score * 100))
+
+        return {
+            'overall_score': round(overall_score, 1),
+            'quality_normalized': overall_score / 100.0,
+            'gradient_metrics': gradient_metrics,
+            'contrast_metrics': contrast_metrics,
+            'entropy_metrics': entropy_metrics,
+            'pattern_metrics': pattern_metrics,
+            'noise_metrics': noise_metrics,
+            'weights_used': self.weights.copy(),
+            'analysis_method': 'ROI-based' if roi_coords else 'Full image'
+        }
+
+    def _apply_roi_mask(self, gray: np.ndarray, roi_coords: Optional[list]) -> np.ndarray:
+        """Apply ROI mask to image if coordinates provided."""
+        if not roi_coords or len(roi_coords) < 3:
+            return gray
+
+        try:
+            # Create mask for polygon ROI
+            mask = np.zeros(gray.shape[:2], dtype=np.uint8)
+            pts = np.array(roi_coords, dtype=np.int32)
+
+            # Validate and clamp coordinates
+            h, w = gray.shape[:2]
+            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
+            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
+
+            cv2.fillPoly(mask, [pts], 255)
+
+            # Apply mask
+            masked_image = cv2.bitwise_and(gray, gray, mask=mask)
+            return masked_image
+
+        except Exception as e:
+            logger.warning(f"Failed to apply ROI mask: {e}")
+            return gray
+
+    def _calculate_gradient_quality(self, gray: np.ndarray) -> Dict:
+        """Calculate gradient-based quality metrics."""
+        # Calculate gradients using Sobel operator
+        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+
+        # Sum of Squared Gradients (SSG) - key DIC metric
+        ssg = np.sum(gradient_magnitude ** 2)
+        normalized_ssg = ssg / (gray.size * 255 ** 2)
+
+        # Mean Intensity Gradient (MIG)
+        mig = np.mean(gradient_magnitude)
+        normalized_mig = mig / 255.0
+
+        # Gradient distribution analysis
+        gradient_mean = np.mean(gradient_magnitude)
+        gradient_std = np.std(gradient_magnitude)
+        gradient_cv = gradient_std / (gradient_mean + 1e-6)
+
+        # Calculate gradient score
+        mig_score = min(1.0, normalized_mig * 6)
+        ssg_score = min(1.0, normalized_ssg * 200)
+
+        # Distribution quality bonus
+        if 0.5 <= gradient_cv <= 2.0:
+            distribution_bonus = 1.0
+        elif 0.3 <= gradient_cv <= 3.0:
+            distribution_bonus = 0.9
+        else:
+            distribution_bonus = 0.8
+
+        # Combined gradient score
+        gradient_score = (mig_score * 0.7 + ssg_score * 0.3) * distribution_bonus
+
+        return {
+            'score': gradient_score,
+            'ssg': ssg,
+            'normalized_ssg': normalized_ssg,
+            'mig': mig,
+            'normalized_mig': normalized_mig,
+            'gradient_cv': gradient_cv,
+            'distribution_bonus': distribution_bonus
+        }
+
+    def _calculate_contrast_quality(self, gray: np.ndarray) -> Dict:
+        """Calculate contrast-based quality metrics."""
+        mean_val = np.mean(gray)
+        std_val = np.std(gray)
+        min_val = np.min(gray)
+        max_val = np.max(gray)
+
+        # Multiple contrast measures
+        rms_contrast = std_val / (mean_val + 1e-6)
+        michelson_contrast = (max_val - min_val) / (max_val + min_val + 1e-6)
+        weber_contrast = (max_val - mean_val) / (mean_val + 1e-6)
+
+        # Local contrast analysis
+        if gray.shape[0] > 7 and gray.shape[1] > 7:
+            kernel = np.ones((5, 5)) / 25
+            local_mean = cv2.filter2D(gray.astype(float), -1, kernel)
+            local_contrast = np.std(gray - local_mean) / (np.mean(local_mean) + 1e-6)
+        else:
+            local_contrast = rms_contrast
+
+        # Combined contrast score
+        contrast_score = (
+                min(1.0, rms_contrast / 0.4) * 0.4 +
+                min(1.0, michelson_contrast * 2) * 0.3 +
+                min(1.0, weber_contrast / 0.5) * 0.2 +
+                min(1.0, local_contrast / 0.3) * 0.1
+        )
+
+        return {
+            'score': contrast_score,
+            'rms_contrast': rms_contrast,
+            'michelson_contrast': michelson_contrast,
+            'weber_contrast': weber_contrast,
+            'local_contrast': local_contrast,
+            'mean_intensity': mean_val,
+            'std_intensity': std_val
+        }
+
+    def _calculate_entropy_quality(self, gray: np.ndarray) -> Dict:
+        """Calculate information content (entropy) quality metrics."""
+        from scipy.stats import entropy
+
+        # Shannon entropy
+        hist, _ = np.histogram(gray, bins=64, range=(0, 256), density=True)
+        shannon_entropy = entropy(hist[hist > 0]) if np.any(hist > 0) else 0
+        entropy_score = min(1.0, shannon_entropy / 5.0)
+
+        # Local entropy analysis
+        if gray.shape[0] > 5 and gray.shape[1] > 5:
+            local_entropies = []
+            window_size = min(7, gray.shape[0] // 2, gray.shape[1] // 2)
+            if window_size >= 3:
+                step = max(1, window_size // 2)
+                for i in range(0, gray.shape[0] - window_size + 1, step):
+                    for j in range(0, gray.shape[1] - window_size + 1, step):
+                        window = gray[i:i + window_size, j:j + window_size]
+                        w_hist, _ = np.histogram(window, bins=16, range=(0, 256), density=True)
+                        w_entropy = entropy(w_hist[w_hist > 0]) if np.any(w_hist > 0) else 0
+                        local_entropies.append(w_entropy)
+
+            local_entropy_score = np.mean(local_entropies) / 4.0 if local_entropies else entropy_score
+        else:
+            local_entropy_score = entropy_score
+
+        information_score = entropy_score * 0.6 + min(1.0, local_entropy_score) * 0.4
+
+        return {
+            'score': information_score,
+            'shannon_entropy': shannon_entropy,
+            'local_entropy_avg': np.mean(local_entropies) if 'local_entropies' in locals() and local_entropies else 0,
+            'entropy_normalized': entropy_score,
+            'local_entropy_normalized': local_entropy_score
+        }
+
+    def _calculate_pattern_quality(self, gray: np.ndarray) -> Dict:
+        """Calculate pattern complexity and morphology quality metrics."""
+        # Speckle analysis using adaptive thresholding
+        if gray.shape[0] > 10 and gray.shape[1] > 10:
+            block_size = max(3, min(gray.shape[0] // 3, gray.shape[1] // 3, 15))
+            if block_size % 2 == 0:
+                block_size += 1
+
+            binary = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, 2
+            )
+
+            # Find connected components (speckles)
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+
+            if num_labels > 1:
+                areas = stats[1:, cv2.CC_STAT_AREA]  # Skip background
+
+                # Size-relative speckle filtering
+                min_speckle_area = max(2, int(gray.size * 0.0001))  # 0.01% of image
+                max_speckle_area = int(gray.size * 0.01)  # 1% of image
+
+                valid_areas = areas[(areas >= min_speckle_area) & (areas <= max_speckle_area)]
+
+                if len(valid_areas) > 0:
+                    avg_speckle_diameter = np.sqrt(np.mean(valid_areas) / np.pi) * 2
+                    speckle_density = len(valid_areas) / gray.size * 1e6
+                    coverage = np.sum(valid_areas) / gray.size
+
+                    # Pattern uniformity
+                    pattern_uniformity = max(0.0,
+                                             float(100 * (1 - np.std(valid_areas) / (np.mean(valid_areas) + 1e-6))))
+
+                    # Combined pattern score
+                    if 0.001 <= coverage <= 0.1:  # Good coverage range
+                        coverage_score = 1.0
+                    else:
+                        coverage_score = 0.6
+
+                    if 50 <= speckle_density <= 5000:  # Good density range
+                        density_score = 1.0
+                    else:
+                        density_score = 0.7
+
+                    pattern_score = coverage_score * 0.5 + density_score * 0.3 + (pattern_uniformity / 100) * 0.2
+                else:
+                    avg_speckle_diameter = 0
+                    speckle_density = 0
+                    coverage = 0
+                    pattern_uniformity = 0
+                    pattern_score = 0.3
+            else:
+                avg_speckle_diameter = 0
+                speckle_density = 0
+                coverage = 0
+                pattern_uniformity = 0
+                pattern_score = 0.2
+        else:
+            # Image too small for meaningful speckle analysis
+            avg_speckle_diameter = 0
+            speckle_density = 0
+            coverage = 0
+            pattern_uniformity = 0
+            pattern_score = 0.5
+
+        return {
+            'score': pattern_score,
+            'avg_speckle_diameter': avg_speckle_diameter,
+            'speckle_density': speckle_density,
+            'coverage': coverage,
+            'pattern_uniformity': pattern_uniformity
+        }
+
+    def _calculate_noise_quality(self, gray: np.ndarray) -> Dict:
+        """Calculate noise-related quality metrics."""
+        # Estimate noise using bilateral filtering for better signal/noise separation
+        if gray.shape[0] > 5 and gray.shape[1] > 5:
+            try:
+                # Use bilateral filter for signal estimation
+                denoised = cv2.bilateralFilter(gray, 5, 50, 50)
+            except:
+                # Fallback to Gaussian blur
+                denoised = cv2.GaussianBlur(gray, (5, 5), 1.0)
+        else:
+            # Too small for filtering
+            denoised = gray.copy()
+
+        # Calculate noise
+        noise = gray.astype(float) - denoised.astype(float)
+        noise_std = np.std(noise)
+        signal_std = np.std(denoised)
+        signal_mean = np.mean(denoised)
+
+        # Signal-to-Noise Ratio
+        snr = signal_std / (noise_std + 1e-6)
+        snr_db = 20 * np.log10(snr) if snr > 0 else 0
+
+        # Normalize SNR for quality score (good SNR is typically >20dB)
+        noise_score = min(1.0, snr_db / 30.0) if snr_db > 0 else 0
+
+        return {
+            'score': noise_score,
+            'snr': snr,
+            'snr_db': snr_db,
+            'noise_std': noise_std,
+            'signal_std': signal_std,
+            'signal_mean': signal_mean
+        }
+
+    def set_weights(self, **kwargs) -> None:
+        """
+        Update quality metric weights.
+
+        Args:
+            **kwargs: Weight values for gradient, contrast, entropy, pattern, noise
+        """
+        for key, value in kwargs.items():
+            if key in self.weights:
+                self.weights[key] = value
+            else:
+                logger.warning(f"Unknown weight key: {key}")
+
+        # Normalize weights to sum to 1.0
+        total_weight = sum(self.weights.values())
+        if total_weight > 0:
+            for key in self.weights:
+                self.weights[key] /= total_weight
+
+        logger.info(f"Updated quality weights: {self.weights}")
+
+    def get_weights(self) -> Dict[str, float]:
+        """Get current quality metric weights."""
+        return self.weights.copy()
+
+    def calculate_quality_statistics(self, quality_scores: np.ndarray) -> Dict:
+        """
+        Calculate statistical metrics for a set of quality scores.
+
+        Args:
+            quality_scores: Array of quality scores (0-1 range)
+
+        Returns:
+            Dictionary of statistical metrics
+        """
+        if quality_scores.size == 0:
+            return {
+                'min_quality': 0.0,
+                'max_quality': 0.0,
+                'mean_quality': 0.0,
+                'median_quality': 0.0,
+                'std_quality': 0.0,
+                'percentile_25': 0.0,
+                'percentile_75': 0.0,
+                'quality_range': 0.0
+            }
+
+        # Convert to percentage for reporting
+        scores_percent = quality_scores * 100
+
+        return {
+            'min_quality': float(np.min(scores_percent)),
+            'max_quality': float(np.max(scores_percent)),
+            'mean_quality': float(np.mean(scores_percent)),
+            'median_quality': float(np.median(scores_percent)),
+            'std_quality': float(np.std(scores_percent)),
+            'percentile_25': float(np.percentile(scores_percent, 25)),
+            'percentile_75': float(np.percentile(scores_percent, 75)),
+            'quality_range': float(np.max(scores_percent) - np.min(scores_percent))
+        }
+
+    def calculate_subset_quality(self, subset: np.ndarray) -> float:
+        """
+        Calculate quality score for a subset/patch of an image.
+        
+        This method is optimized for quality map generation where many small
+        subsets need to be analyzed efficiently.
+        
+        Args:
+            subset: Image subset as numpy array (grayscale)
+            
+        Returns:
+            Quality score in range 0-1
+        """
+        try:
+            # Ensure we have a valid subset
+            if subset.size == 0 or subset.shape[0] < 3 or subset.shape[1] < 3:
+                return 0.0
+            
+            # Convert to grayscale if needed
+            if len(subset.shape) == 3:
+                gray = cv2.cvtColor(subset, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = subset.copy()
+            
+            # Calculate simplified quality metrics for efficiency
+            gradient_score = self._calculate_fast_gradient_quality(gray)
+            contrast_score = self._calculate_fast_contrast_quality(gray)
+            entropy_score = self._calculate_fast_entropy_quality(gray)
+            
+            # Weighted combination (simplified from full analysis)
+            quality_score = (
+                gradient_score * 0.5 +  # Gradient is most important for DIC
+                contrast_score * 0.3 +
+                entropy_score * 0.2
+            )
+            
+            return max(0.0, min(1.0, quality_score))
+            
+        except Exception as e:
+            logger.warning(f"Error calculating subset quality: {e}")
+            return 0.0
+    
+    def _calculate_fast_gradient_quality(self, gray: np.ndarray) -> float:
+        """Fast gradient quality calculation for subset analysis."""
+        # Calculate gradients using Sobel operator
+        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+        
+        # Mean Intensity Gradient (MIG) - simplified metric
+        mig = np.mean(gradient_magnitude)
+        normalized_mig = mig / 255.0
+        
+        # Return score in 0-1 range
+        return min(1.0, normalized_mig * 6)
+    
+    def _calculate_fast_contrast_quality(self, gray: np.ndarray) -> float:
+        """Fast contrast quality calculation for subset analysis."""
+        mean_val = np.mean(gray)
+        std_val = np.std(gray)
+        
+        # RMS contrast
+        rms_contrast = std_val / (mean_val + 1e-6)
+        
+        # Return score in 0-1 range
+        return min(1.0, rms_contrast / 0.4)
+    
+    def _calculate_fast_entropy_quality(self, gray: np.ndarray) -> float:
+        """Fast entropy quality calculation for subset analysis."""
+        # Calculate histogram with fewer bins for speed
+        hist, _ = np.histogram(gray, bins=32, range=(0, 256), density=True)
+        
+        # Shannon entropy
+        hist = hist[hist > 0]  # Remove zero bins
+        if len(hist) == 0:
+            return 0.0
+            
+        entropy_val = -np.sum(hist * np.log2(hist))
+        
+        # Normalize to 0-1 range (max entropy for 32 bins is log2(32) = 5)
+        return min(1.0, entropy_val / 5.0)
+
+    def assess_quality_level(self, score: float, spectrum_type: str = 'custom_dic') -> Tuple[str, str]:
+        """
+        Assess quality level based on score and spectrum type.
+
+        Args:
+            score: Quality score (0-100)
+            spectrum_type: Type of quality spectrum being used
+
+        Returns:
+            Tuple of (quality_level, color_hex)
+        """
+        if spectrum_type == 'custom_dic':
+            # Strict DIC-only assessment
+            if score >= 95:
+                return "Perfect for DIC", "#008cff"
+            elif score >= 90:
+                return "Excellent for DIC", "#78ffb4"
+            elif score >= 85:
+                return "Very Good for DIC", "#ffc800"
+            elif score >= 80:
+                return "Good for DIC", "#ff5000"
+            elif score >= 75:
+                return "Minimum for DIC", "#780000"
+            else:
+                return "CRITICAL - Not suitable for DIC", "#000000"
+
+        elif spectrum_type == 'zeiss_style_dic':
+            # More realistic thresholds
+            if score >= 75:
+                return "Excellent for DIC", "#27ae60"
+            elif score >= 60:
+                return "Very Good for DIC", "#2ecc71"
+            elif score >= 45:
+                return "Good for DIC", "#f39c12"
+            elif score >= 30:
+                return "Acceptable for DIC", "#e67e22"
+            elif score >= 15:
+                return "Challenging for DIC", "#e74c3c"
+            else:
+                return "Poor for DIC", "#8e44ad"
+
+        else:
+            # Default to custom_dic thresholds
+            return self.assess_quality_level(score, 'custom_dic')
