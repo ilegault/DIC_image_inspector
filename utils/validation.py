@@ -254,8 +254,8 @@ class ValidationHelper:
             True if spectrum is valid
         """
         valid_spectrums = [
-            'custom_dic',
-            'zeiss_style_dic'
+            'optimized',
+            'controlled'
         ]
 
         return spectrum_type in valid_spectrums

@@ -100,8 +100,8 @@ class DebugQualityMapGenerator:
         print(f"  - Expected analysis points: {expected_points}")
 
         # Generate quality map with debugging
-        if spectrum_type == 'zeiss_style_dic':
-            quality_map, debug_info = self._generate_zeiss_style_map_debug(gray, subset_size, step_size)
+        if spectrum_type == 'controlled':
+            quality_map, debug_info = self._generate_controlled_method_map_debug(gray, subset_size, step_size)
         else:
             quality_map, debug_info = self._generate_standard_map_debug(gray, subset_size, step_size)
 
@@ -201,10 +201,10 @@ class DebugQualityMapGenerator:
         
         return quality_map, debug_info
 
-    def _generate_zeiss_style_map_debug(self, gray: np.ndarray, facet_size: int, point_distance: int) -> Tuple[np.ndarray, Dict]:
-        """Generate ZEISS-style quality map with debugging."""
+    def _generate_controlled_method_map_debug(self, gray: np.ndarray, facet_size: int, point_distance: int) -> Tuple[np.ndarray, Dict]:
+        """Generate controlled method quality map with debugging."""
         h, w = gray.shape
-        print(f"\n--- ZEISS-Style Quality Map Generation ---")
+        print(f"\n--- Controlled Method Quality Map Generation ---")
         print(f"Facet size: {facet_size}, Point distance: {point_distance}")
         
         # Initialize maps
@@ -552,8 +552,8 @@ class DebugQualityMapGenerator:
         print(f"ROI mask coverage: {np.sum(roi_mask > 0)} / {roi_mask.size} pixels ({np.sum(roi_mask > 0)/roi_mask.size*100:.1f}%)")
         
         # Generate quality map for ROI region
-        if spectrum_type == 'zeiss_style_dic':
-            roi_quality_map, debug_info = self._generate_zeiss_style_map_with_mask_debug(roi_region, roi_mask, subset_size, step_size)
+        if spectrum_type == 'controlled':
+            roi_quality_map, debug_info = self._generate_controlled_method_map_with_mask_debug(roi_region, roi_mask, subset_size, step_size)
         else:
             roi_quality_map, debug_info = self._generate_standard_map_with_mask_debug(roi_region, roi_mask, subset_size, step_size)
         
@@ -626,11 +626,11 @@ class DebugQualityMapGenerator:
         
         return quality_map, debug_info
 
-    def _generate_zeiss_style_map_with_mask_debug(self, gray: np.ndarray, roi_mask: np.ndarray, 
+    def _generate_controlled_method_map_with_mask_debug(self, gray: np.ndarray, roi_mask: np.ndarray, 
                                                  facet_size: int, point_distance: int) -> Tuple[np.ndarray, Dict]:
-        """Generate ZEISS-style quality map with ROI mask and debugging."""
+        """Generate controlled method quality map with ROI mask and debugging."""
         h, w = gray.shape
-        print(f"ZEISS map with mask: {gray.shape}, facet={facet_size}, distance={point_distance}")
+        print(f"Controlled method map with mask: {gray.shape}, facet={facet_size}, distance={point_distance}")
         
         quality_map = np.zeros((h, w), dtype=np.float32)
         count_map = np.zeros((h, w), dtype=np.int32)

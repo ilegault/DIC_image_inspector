@@ -74,10 +74,12 @@ class QualityMapGenerator:
 
         logger.info(f"Using subset_size={subset_size}, step_size={step_size}")
 
-        # Handle ZEISS-style analysis
-        if spectrum_type == 'zeiss_style_dic':
-            quality_map = self._generate_zeiss_style_map(gray, subset_size, step_size)
+        # Choose analysis method based on spectrum type
+        if spectrum_type == 'controlled':
+            # Use controlled (high-precision) method
+            quality_map = self._generate_controlled_method_map(gray, subset_size, step_size)
         else:
+            # Use optimized method for 'optimized' and other types
             quality_map = self._generate_standard_map(gray, subset_size, step_size)
 
         # Generate visualization with smooth interpolation
@@ -122,8 +124,8 @@ class QualityMapGenerator:
 
         return np.clip(quality_map, 0, 1)
 
-    def _generate_zeiss_style_map(self, gray: np.ndarray, facet_size: int, point_distance: int) -> np.ndarray:
-        """Generate ZEISS-style high-density quality map."""
+    def _generate_controlled_method_map(self, gray: np.ndarray, facet_size: int, point_distance: int) -> np.ndarray:
+        """Generate controlled method high-density quality map."""
         h, w = gray.shape
 
         # Initialize maps
@@ -176,74 +178,94 @@ class QualityMapGenerator:
             mean_gradient = np.mean(gradient_magnitude)
             gradient_std = np.std(gradient_magnitude)
 
-            # More strict gradient normalization for DIC
-            gradient_score = min(1.0, mean_gradient / 40.0)  # Reduced threshold for stricter assessment
-            
-            # Heavy penalty for very low gradient regions
-            if mean_gradient < 5.0:  # Very low gradient
-                gradient_score *= 0.1  # Heavy penalty
-            elif mean_gradient < 10.0:  # Low gradient
-                gradient_score *= 0.3  # Moderate penalty
+            # More discriminating gradient assessment for ZEISS-style analysis
+            normalized_gradient = mean_gradient / 255.0
+            if normalized_gradient > 0.6:  # Very high gradients (excellent)
+                gradient_score = 1.0
+            elif normalized_gradient > 0.4:  # High gradients (very good)
+                gradient_score = 0.7 + 0.3 * (normalized_gradient - 0.4) / 0.2
+            elif normalized_gradient > 0.2:  # Medium gradients (good)
+                gradient_score = 0.4 + 0.3 * (normalized_gradient - 0.2) / 0.2
+            elif normalized_gradient > 0.1:  # Low gradients (fair)
+                gradient_score = 0.2 + 0.2 * (normalized_gradient - 0.1) / 0.1
+            elif normalized_gradient > 0.05:  # Very low gradients (poor)
+                gradient_score = 0.1 + 0.1 * (normalized_gradient - 0.05) / 0.05
+            else:  # Extremely low gradients (critical)
+                gradient_score = normalized_gradient * 2
 
-            # Gradient distribution quality - more strict requirements
-            gradient_cv = gradient_std / (mean_gradient + 1e-6)
-            if 0.8 <= gradient_cv <= 1.5:  # Narrower optimal range
-                distribution_bonus = 1.0
-            elif 0.5 <= gradient_cv <= 2.0:  # Acceptable range
-                distribution_bonus = 0.7
-            elif 0.3 <= gradient_cv <= 3.0:  # Poor range
-                distribution_bonus = 0.4
+            # Gradient distribution quality - more realistic for artificial patterns
+            if mean_gradient > 0:
+                gradient_cv = gradient_std / mean_gradient
             else:
-                distribution_bonus = 0.2  # Very poor
+                gradient_cv = 0.0
+            if 0.5 <= gradient_cv <= 2.5:  # Wider optimal range for artificial patterns
+                distribution_bonus = 1.0
+            elif 0.3 <= gradient_cv <= 3.5:  # Acceptable range
+                distribution_bonus = 0.8
+            elif 0.2 <= gradient_cv <= 4.0:  # Fair range
+                distribution_bonus = 0.6
+            else:
+                distribution_bonus = 0.4  # Poor but not extremely penalized
 
             gradient_quality = gradient_score * distribution_bonus
 
             # 2. Pattern uniqueness (25% weight) - More strict
             mean_intensity = np.mean(subset)
             intensity_std = np.std(subset)
-            contrast_ratio = intensity_std / (mean_intensity + 1e-6)
+            if mean_intensity > 0:
+                contrast_ratio = intensity_std / mean_intensity
+            else:
+                contrast_ratio = 0.0
 
-            # More strict contrast assessment
-            contrast_score = min(1.0, contrast_ratio * 1.5)  # Reduced multiplier
-            
-            # Heavy penalty for very low contrast regions
-            if contrast_ratio < 0.05:  # Very low contrast
-                contrast_score *= 0.1
-            elif contrast_ratio < 0.1:  # Low contrast
-                contrast_score *= 0.3
+            # More discriminating contrast assessment for ZEISS-style analysis
+            if contrast_ratio > 0.8:  # Very high contrast (excellent)
+                contrast_score = 1.0
+            elif contrast_ratio > 0.5:  # High contrast (very good)
+                contrast_score = 0.7 + 0.3 * (contrast_ratio - 0.5) / 0.3
+            elif contrast_ratio > 0.3:  # Medium contrast (good)
+                contrast_score = 0.4 + 0.3 * (contrast_ratio - 0.3) / 0.2
+            elif contrast_ratio > 0.15:  # Low contrast (fair)
+                contrast_score = 0.2 + 0.2 * (contrast_ratio - 0.15) / 0.15
+            elif contrast_ratio > 0.05:  # Very low contrast (poor)
+                contrast_score = 0.1 + 0.1 * (contrast_ratio - 0.05) / 0.1
+            else:  # Extremely low contrast (critical)
+                contrast_score = contrast_ratio * 2
 
             # Pattern complexity using simplified LBP
             complexity_score = self._calculate_pattern_complexity(subset)
 
             uniqueness_quality = contrast_score * 0.7 + complexity_score * 0.3
 
-            # 3. Noise resistance (15% weight) - More strict
+            # 3. Noise resistance (15% weight) - More realistic for artificial patterns
             if subset.shape[0] > 3 and subset.shape[1] > 3:
                 smoothed = cv2.GaussianBlur(subset, (3, 3), 0.5)
                 noise = subset.astype(float) - smoothed.astype(float)
                 noise_std = np.std(noise)
                 signal_std = np.std(smoothed)
-                snr = signal_std / (noise_std + 1e-6)
-                noise_quality = min(1.0, snr / 15.0)  # More strict SNR requirement
+                if noise_std > 0:
+                    snr = signal_std / noise_std
+                else:
+                    snr = float('inf')  # Perfect signal (no noise)
+                noise_quality = min(1.0, snr / 10.0)  # More realistic SNR requirement
                 
-                # Heavy penalty for very noisy regions
-                if snr < 5.0:  # Very low SNR
-                    noise_quality *= 0.2
-                elif snr < 10.0:  # Low SNR
-                    noise_quality *= 0.5
+                # Less harsh penalties for artificial speckle patterns
+                if snr < 3.0:  # Very low SNR
+                    noise_quality *= 0.4  # Moderate penalty instead of heavy
+                elif snr < 6.0:  # Low SNR
+                    noise_quality *= 0.7  # Light penalty instead of moderate
             else:
-                noise_quality = 0.3  # Lower default for small regions
+                noise_quality = 0.5  # Higher default for small regions
 
-            # 4. Focus quality (10% weight) - More strict
+            # 4. Focus quality (10% weight) - More realistic for artificial patterns
             laplacian = cv2.Laplacian(subset, cv2.CV_64F)
             laplacian_var = np.var(laplacian)
-            focus_score = min(1.0, laplacian_var / 800.0)  # More strict threshold
+            focus_score = min(1.0, laplacian_var / 500.0)  # More realistic threshold
             
-            # Heavy penalty for very blurry regions
-            if laplacian_var < 50.0:  # Very low focus
-                focus_score *= 0.1
-            elif laplacian_var < 100.0:  # Low focus
-                focus_score *= 0.3
+            # Less harsh penalties for artificial speckle patterns
+            if laplacian_var < 20.0:  # Very low focus
+                focus_score *= 0.3  # Moderate penalty instead of heavy
+            elif laplacian_var < 50.0:  # Low focus
+                focus_score *= 0.6  # Light penalty instead of moderate
 
             # Combine all factors (ZEISS-style weighting)
             overall_quality = (
@@ -253,22 +275,24 @@ class QualityMapGenerator:
                     focus_score * 0.10
             )
             
-            # Apply critical quality checks - if any factor is extremely poor, heavily penalize
+            # Apply critical quality checks - more lenient for artificial speckle patterns
             critical_factors = []
-            if gradient_quality < 0.1:
+            if gradient_quality < 0.05:  # Only extremely poor gradients
                 critical_factors.append("gradient")
-            if uniqueness_quality < 0.1:
+            if uniqueness_quality < 0.05:  # Only extremely poor contrast
                 critical_factors.append("contrast")
-            if noise_quality < 0.1:
+            if noise_quality < 0.05:  # Only extremely poor noise
                 critical_factors.append("noise")
-            if focus_score < 0.1:
+            if focus_score < 0.05:  # Only extremely poor focus
                 critical_factors.append("focus")
             
-            # If multiple critical factors, apply severe penalty
-            if len(critical_factors) >= 2:
-                overall_quality *= 0.1  # Severe penalty for multiple critical issues
+            # Apply lighter penalties for critical issues
+            if len(critical_factors) >= 3:
+                overall_quality *= 0.4  # Moderate penalty for multiple critical issues
+            elif len(critical_factors) >= 2:
+                overall_quality *= 0.6  # Light penalty for some critical issues
             elif len(critical_factors) == 1:
-                overall_quality *= 0.3  # Moderate penalty for single critical issue
+                overall_quality *= 0.8  # Very light penalty for single critical issue
 
             return max(0.0, min(1.0, overall_quality))
 
@@ -363,8 +387,8 @@ class QualityMapGenerator:
         roi_mask = adjusted_roi.create_mask(roi_region.shape)
         
         # Generate quality map for the ROI region only
-        if spectrum_type == 'zeiss_style_dic':
-            roi_quality_map = self._generate_zeiss_style_map_with_mask(roi_region, roi_mask, subset_size, step_size)
+        if spectrum_type == 'controlled':
+            roi_quality_map = self._generate_controlled_method_map_with_mask(roi_region, roi_mask, subset_size, step_size)
         else:
             roi_quality_map = self._generate_standard_map_with_mask(roi_region, roi_mask, subset_size, step_size)
         
@@ -434,9 +458,9 @@ class QualityMapGenerator:
         
         return np.clip(quality_map, 0, 1)
     
-    def _generate_zeiss_style_map_with_mask(self, gray: np.ndarray, roi_mask: np.ndarray,
+    def _generate_controlled_method_map_with_mask(self, gray: np.ndarray, roi_mask: np.ndarray,
                                            facet_size: int, point_distance: int) -> np.ndarray:
-        """Generate ZEISS-style quality map only for pixels within the ROI mask."""
+        """Generate controlled method quality map only for pixels within the ROI mask."""
         h, w = gray.shape
         
         # Initialize maps

@@ -224,8 +224,8 @@ class HelpDialog:
 
 ⚙️ ADVANCED FEATURES
 
-• ZEISS-Style Analysis:
-  - Select "zeiss_style_dic" spectrum for professional assessment
+• Controlled Method Analysis:
+  - Select "controlled" spectrum for professional assessment
   - Adjust Facet Size (11-51 pixels) and Step Size (2-20 pixels)
   - Higher density analysis with smaller step sizes
 

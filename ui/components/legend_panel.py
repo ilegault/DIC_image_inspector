@@ -27,8 +27,8 @@ class LegendPanel:
 
         # Legend definitions for different spectrums
         self.spectrum_definitions = {
-            'custom_dic': {
-                'name': 'Custom DIC (Rainbow: Red→Blue)',
+            'optimized': {
+                'name': 'Optimized (Rainbow: Red→Blue)',
                 'colors': [
                     (0, 0, 0, "Critical (0-75%): Black - Not suitable for DIC"),
                     (255, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
@@ -38,8 +38,8 @@ class LegendPanel:
                     (0, 0, 255, "Perfect (95-100%): Blue - Ideal for DIC")
                 ]
             },
-            'zeiss_style_dic': {
-                'name': 'ZEISS-Style Pattern Quality (Colorblind-Friendly)',
+            'controlled': {
+                'name': 'Controlled Pattern Quality (Colorblind-Friendly)',
                 'colors': [
                     (50, 0, 0, "Unusable (0-70%): No correlation possible"),
                     (255, 0, 0, "Poor (70-80%): Unreliable correlation"),
@@ -226,7 +226,7 @@ class LegendPanel:
         """
         if spectrum_name in self.spectrum_definitions:
             # Don't remove built-in spectrums
-            built_in = ['custom_dic', 'zeiss_style_dic']
+            built_in = ['optimized', 'controlled']
             if spectrum_name not in built_in:
                 del self.spectrum_definitions[spectrum_name]
                 print(f"Removed custom spectrum: {spectrum_name}")

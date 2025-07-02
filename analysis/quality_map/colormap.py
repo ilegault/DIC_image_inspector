@@ -31,7 +31,7 @@ class ColormapGenerator:
             RGB colored image
         """
         if spectrum_type not in self.spectrum_definitions:
-            spectrum_type = 'custom_dic'
+            spectrum_type = 'optimized'
 
         spectrum = self.spectrum_definitions[spectrum_type]
         colors = spectrum['colors']
@@ -146,7 +146,7 @@ class ColormapGenerator:
         return blended
 
 
-def apply_dic_colormap(quality_map: np.ndarray, spectrum_type: str = 'custom_dic') -> np.ndarray:
+def apply_dic_colormap(quality_map: np.ndarray, spectrum_type: str = 'optimized') -> np.ndarray:
     """
     Convenience function to apply DIC colormap.
 

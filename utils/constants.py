@@ -218,21 +218,31 @@ ANALYSIS_CONFIG = {
 # Quality assessment thresholds
 QUALITY_THRESHOLDS = {
     'optimized': {
-        'perfect': 95.0,
-        'excellent': 90.0,
-        'very_good': 85.0,
-        'good': 80.0,
-        'minimum': 75.0,
+        'excellent': 80.0,
+        'very_good': 60.0,
+        'good': 40.0,
+        'fair': 25.0,
+        'poor': 10.0,
         'critical': 0.0
     },
 
     'controlled': {
-        'excellent': 95.0,
-        'very_good': 90.0,
-        'good': 85.0,
-        'acceptable': 80.0,
-        'poor': 70.0,
+        'excellent': 75.0,
+        'good': 60.0,
+        'acceptable': 45.0,
+        'challenging': 30.0,
+        'poor': 15.0,
         'unusable': 0.0
+    },
+
+    'custom_dic': {
+        'excellent': 85.0,
+        'very_good': 70.0,
+        'good': 50.0,
+        'fair': 30.0,
+        'poor': 15.0,
+        'very_poor': 5.0,
+        'critical': 0.0
     }
 }
 
@@ -242,14 +252,14 @@ COLOR_SPECTRUMS = {
 
     'optimized': {
         'name': 'Optimized (Rainbow: Red→Blue)',
-        'description': 'Optimized assessment with strict quality thresholds',
+        'description': 'Optimized assessment with realistic DIC thresholds',
         'colors': [
-            (0, 0, 0, "Critical (0-75%): Black - Not suitable for DIC"),
-            (255, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
-            (255, 127, 0, "Good (80-85%): Orange - Acceptable for DIC"),
-            (255, 255, 0, "Very Good (85-90%): Yellow - Good for DIC"),
-            (0, 255, 0, "Excellent (90-95%): Green - Excellent for DIC"),
-            (0, 0, 255, "Perfect (95-100%): Blue - Ideal for DIC")
+            (0, 0, 0, "Critical (0-10%): Black - Not suitable for DIC"),
+            (255, 0, 0, "Poor (10-25%): Red - Unreliable for DIC"),
+            (255, 127, 0, "Fair (25-40%): Orange - Challenging for DIC"),
+            (255, 255, 0, "Good (40-60%): Yellow - Acceptable for DIC"),
+            (0, 255, 0, "Very Good (60-80%): Green - Good for DIC"),
+            (0, 0, 255, "Excellent (80-100%): Blue - Ideal for DIC")
         ]
     },
 
@@ -263,6 +273,20 @@ COLOR_SPECTRUMS = {
             (255, 255, 0, "Acceptable (45-60%): Yellow - Usable with uncertainty"),
             (0, 255, 255, "Good (60-75%): Cyan - Good correlation quality"),
             (0, 100, 255, "Excellent (75-100%): Blue - Optimal pattern")
+        ]
+    },
+
+    'custom_dic': {
+        'name': 'Custom DIC (Artificial Speckle Optimized)',
+        'description': 'Optimized for artificial speckle patterns and manufactured surfaces',
+        'colors': [
+            (0, 0, 0, "Critical (0-5%): Black - Not suitable for DIC"),
+            (128, 0, 0, "Very Poor (5-15%): Dark Red - Unreliable correlation"),
+            (255, 0, 0, "Poor (15-30%): Red - Poor correlation"),
+            (255, 127, 0, "Fair (30-50%): Orange - Challenging but usable"),
+            (255, 255, 0, "Good (50-70%): Yellow - Good for DIC"),
+            (0, 255, 0, "Very Good (70-85%): Green - Very good for DIC"),
+            (0, 0, 255, "Excellent (85-100%): Blue - Ideal for DIC")
         ]
     }
 }
