@@ -81,6 +81,7 @@ class DICQualityInspector:
                 'save_report': self.save_report,
                 'show_help': self.show_help,
                 'reset_application': self.reset_application,
+                'reset_display_results': self.reset_display_results,
                 'spectrum_changed': self.on_spectrum_changed
             }
         )
@@ -382,12 +383,34 @@ class DICQualityInspector:
             messagebox.showerror("Help Error", f"Failed to show help: {str(e)}")
 
     def reset_application(self):
-        """Handle application reset request."""
+        """Handle full application reset request."""
         self.state.reset()
         self.image_canvas.clear()
         self.roi_selector.clear()
         self.legend_panel.hide_legend()
         self.control_panel.update_roi_info("ROI: Not Selected (analyzing full image)")
+
+    def reset_display_results(self):
+        """Handle reset display/results request - keeps loaded image."""
+        if not self.state.has_image():
+            # No image loaded, perform full reset
+            self.reset_application()
+            return
+        
+        # Store current image for redisplay
+        current_image = self.state.get_image()
+        
+        # Reset state (keeps image)
+        self.state.reset_display_and_results()
+        
+        # Clear UI components but redisplay the image
+        self.roi_selector.clear()
+        self.legend_panel.hide_legend()
+        self.control_panel.update_roi_info("ROI: Not Selected (analyzing full image)")
+        
+        # Redisplay the original image (without any overlays)
+        if current_image is not None:
+            self.image_canvas.display_image(current_image)
 
     def on_spectrum_changed(self):
         """Handle spectrum selection change."""

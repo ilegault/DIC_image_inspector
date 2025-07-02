@@ -413,8 +413,8 @@ class ApplicationState:
         return summary
 
     def reset(self):
-        """Reset all application state."""
-        print("Resetting application state")
+        """Reset all application state completely."""
+        print("Resetting application state completely")
 
         # Clear all state
         self._image = None
@@ -438,6 +438,42 @@ class ApplicationState:
         self._notify_observers('roi', None)
         self._notify_observers('analysis_result', None)
         self._notify_observers('application_state', 'no_image')
+        self._notify_observers('analysis_progress', False)
+        self._notify_observers('quality_map_visibility', False)
+        self._notify_observers('spectrum', self._selected_spectrum)
+
+    def reset_display_and_results(self):
+        """Reset display and analysis results while keeping the loaded image."""
+        print("Resetting display and results (keeping image)")
+
+        if not self.has_image():
+            print("No image loaded - performing full reset instead")
+            self.reset()
+            return
+
+        # Store current image data
+        current_image = self._image
+
+        # Clear analysis-related state
+        self._roi = None
+        self._analysis_result = None
+        self._analysis_in_progress = False
+        self._quality_map_visible = False
+
+        # Reset UI state to defaults
+        self._selected_spectrum = 'optimized'
+        self._zeiss_parameters = {
+            'facet_size': 19,
+            'point_distance': 4
+        }
+
+        # Set application state back to image loaded
+        self._application_state = 'image_loaded'
+
+        # Notify observers (image stays the same, so we don't notify image observers)
+        self._notify_observers('roi', None)
+        self._notify_observers('analysis_result', None)
+        self._notify_observers('application_state', 'image_loaded')
         self._notify_observers('analysis_progress', False)
         self._notify_observers('quality_map_visibility', False)
         self._notify_observers('spectrum', self._selected_spectrum)

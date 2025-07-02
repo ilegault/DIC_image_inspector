@@ -101,24 +101,8 @@ class ImageCanvas:
 
     def _create_processing_controls(self):
         """Create image processing control buttons."""
-        process_frame = tk.Frame(self.image_panel, bg=APP_CONFIG['colors']['panel_bg'])
-        process_frame.pack(pady=10)
-
-        # Processing buttons
-        processing_buttons = [
-            ("Original", self.show_original, '#95a5a6')
-        ]
-
-        for text, command, color in processing_buttons:
-            btn = tk.Button(
-                process_frame,
-                text=text,
-                bg=color,
-                fg='white',
-                padx=10,
-                command=command
-            )
-            btn.pack(side='left', padx=2)
+        # Processing controls removed - functionality moved to main control panel
+        pass
 
     def _bind_events(self):
         """Bind mouse and keyboard events."""

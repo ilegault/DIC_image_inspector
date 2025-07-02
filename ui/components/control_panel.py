@@ -93,7 +93,8 @@ class ControlPanel:
             ('results_btn', "📊 Show Results", '#8e44ad', 'show_results'),
             ('save_btn', "💾 Save Report", '#7f8c8d', 'save_report'),
             ('help_btn', "❓ Help", '#6c7b7f', 'show_help'),
-            ('reset_btn', "🔄 Reset", '#e74c3c', 'reset_application')
+            ('reset_display_btn', "🔄 Reset Display", '#f39c12', 'reset_display_results'),
+            ('reset_btn', "🔄 Full Reset", '#e74c3c', 'reset_application')
         ]
 
         for btn_id, text, color, callback_key in secondary_buttons:
@@ -267,28 +268,28 @@ class ControlPanel:
         # Define button states for each application state
         state_configs = {
             'no_image': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn'],
-                'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn'],
+                'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn'],
                 'special': {}
             },
             'image_loaded': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
                 'special': {'roi_btn': {'bg': '#9b59b6', 'text': '🎯 Select ROI'}}
             },
             'roi_selected': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
                 'special': {'roi_btn': {'bg': '#9b59b6', 'text': '🎯 New ROI'}}
             },
             'analyzing': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn'],
-                'disabled': ['roi_btn', 'quality_map_btn', 'results_btn', 'save_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn'],
+                'disabled': ['roi_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn'],
                 'special': {'analyze_btn': {'state': 'disabled', 'text': '🔬 Analyzing...'}}
             },
             'analysis_complete': {
                 'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn',
-                            'save_btn', 'help_btn', 'reset_btn'],
+                            'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn'],
                 'disabled': [],
                 'special': {
                     'analyze_btn': {'text': '🔬 Analyze'},
