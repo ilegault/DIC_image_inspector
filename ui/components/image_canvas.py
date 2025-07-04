@@ -220,51 +220,63 @@ class ImageCanvas:
         img_width = self.photo.width()
         img_height = self.photo.height()
 
-        # Determine positioning strategy
+        # Calculate positioning for proper centering
         if img_width <= canvas_width and img_height <= canvas_height:
-            # Image fits - center it
-            x_pos = (canvas_width - img_width) // 2
-            y_pos = (canvas_height - img_height) // 2
-
-            # Set scroll region to canvas size
+            # Image fits entirely in canvas - center it directly
+            center_x = (canvas_width - img_width) // 2
+            center_y = (canvas_height - img_height) // 2
+            
+            # Set scroll region to canvas size for proper centering
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
-
-            # Place image at center
-            self.image_item = self.canvas.create_image(x_pos, y_pos, anchor='nw', image=self.photo)
-
-            # Store offset for coordinate calculations
-            self.image_offset_x = x_pos
-            self.image_offset_y = y_pos
+            self.image_item = self.canvas.create_image(center_x, center_y, anchor='nw', image=self.photo)
             
-            # Also store on canvas for ROI selector access
-            self.canvas.image_offset_x = x_pos
-            self.canvas.image_offset_y = y_pos
+            # Store offset for other components
+            self.image_offset_x = center_x
+            self.image_offset_y = center_y
+            self.canvas.image_offset_x = center_x
+            self.canvas.image_offset_y = center_y
             
-            # Debug for large original images
-            if hasattr(self, 'original_image') and self.original_image is not None:
-                orig_h, orig_w = self.original_image.shape[:2]
-                if max(orig_w, orig_h) > 1000:
-                    print(f"DEBUG: Image centered - Canvas: {canvas_width}x{canvas_height}, "
-                          f"Display: {img_width}x{img_height}, Offset: ({x_pos}, {y_pos})")
+            # No scrolling needed - image is centered
+            self.canvas.xview_moveto(0.0)
+            self.canvas.yview_moveto(0.0)
+            
         else:
-            # Image is larger - enable scrolling
+            # Image is larger than canvas - use scroll region approach
             self.canvas.configure(scrollregion=(0, 0, img_width, img_height))
-
-            # Place image at origin
             self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
-
-            # No offset when scrolling
+            
+            # No offset when using scroll regions
             self.image_offset_x = 0
             self.image_offset_y = 0
-            
-            # Also store on canvas for ROI selector access
             self.canvas.image_offset_x = 0
             self.canvas.image_offset_y = 0
             
-            # Debug for large original images
-            if hasattr(self, 'original_image') and self.original_image is not None:
-                orig_h, orig_w = self.original_image.shape[:2]
-                if max(orig_w, orig_h) > 1000:
+            # Center the view on the image
+            if img_width > canvas_width:
+                # Image is wider - center horizontally
+                center_ratio_x = 0.5
+            else:
+                # Image fits horizontally - no horizontal scrolling needed
+                center_ratio_x = 0.0
+                
+            if img_height > canvas_height:
+                # Image is taller - center vertically
+                center_ratio_y = 0.5
+            else:
+                # Image fits vertically - no vertical scrolling needed
+                center_ratio_y = 0.0
+            
+            self.canvas.xview_moveto(center_ratio_x)
+            self.canvas.yview_moveto(center_ratio_y)
+
+        # Debug for large original images
+        if hasattr(self, 'original_image') and self.original_image is not None:
+            orig_h, orig_w = self.original_image.shape[:2]
+            if max(orig_w, orig_h) > 1000:
+                if img_width <= canvas_width and img_height <= canvas_height:
+                    print(f"DEBUG: Image centered directly - Canvas: {canvas_width}x{canvas_height}, "
+                          f"Display: {img_width}x{img_height}, Position: ({center_x}, {center_y})")
+                else:
                     print(f"DEBUG: Image scrollable - Canvas: {canvas_width}x{canvas_height}, "
                           f"Display: {img_width}x{img_height}, Scroll region: {img_width}x{img_height}")
 
@@ -298,15 +310,20 @@ class ImageCanvas:
         if not self.displayed_image:
             return
 
-        # Get current scroll position
-        old_x_view = self.canvas.xview()
-        old_y_view = self.canvas.yview()
+        # Get current scroll position and canvas dimensions
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
         
-        # Calculate old image dimensions
+        # Use reasonable defaults if canvas not rendered yet
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 500
+        
+        # Calculate old and new image dimensions
         old_width = int(self.displayed_image.width * old_zoom)
         old_height = int(self.displayed_image.height * old_zoom)
         
-        # Calculate new image dimensions
         base_width = self.displayed_image.width
         base_height = self.displayed_image.height
         new_width = int(base_width * self.zoom_level)
@@ -328,40 +345,32 @@ class ImageCanvas:
         if self.image_item:
             self.canvas.delete(self.image_item)
         
-        # Get canvas dimensions
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        
-        # Use reasonable defaults if canvas not rendered yet
-        if canvas_width <= 1:
-            canvas_width = 800
-        if canvas_height <= 1:
-            canvas_height = 500
-        
-        # Use the same positioning strategy as _position_and_display_image
+        # Handle positioning based on image size relative to canvas
         if new_width <= canvas_width and new_height <= canvas_height:
-            # Image fits - center it using absolute positioning
-            x_pos = (canvas_width - new_width) // 2
-            y_pos = (canvas_height - new_height) // 2
+            # Image fits entirely in canvas - center it directly
+            center_x = (canvas_width - new_width) // 2
+            center_y = (canvas_height - new_height) // 2
             
-            # Set scroll region to canvas size
+            # Set scroll region to canvas size for proper centering
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
+            self.image_item = self.canvas.create_image(center_x, center_y, anchor='nw', image=self.photo)
             
-            # Place image at center
-            self.image_item = self.canvas.create_image(x_pos, y_pos, anchor='nw', image=self.photo)
+            # Store offset for other components
+            self.image_offset_x = center_x
+            self.image_offset_y = center_y
+            self.canvas.image_offset_x = center_x
+            self.canvas.image_offset_y = center_y
             
-            # Store offset for coordinate calculations
-            self.image_offset_x = x_pos
-            self.image_offset_y = y_pos
-            self.canvas.image_offset_x = x_pos
-            self.canvas.image_offset_y = y_pos
+            # No scrolling needed - image is centered
+            self.canvas.xview_moveto(0.0)
+            self.canvas.yview_moveto(0.0)
             
         else:
-            # Image is larger - use scrolling with zoom centering
+            # Image is larger than canvas - use scroll region approach
             self.canvas.configure(scrollregion=(0, 0, new_width, new_height))
             self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
             
-            # No offset when scrolling
+            # No offset when using scroll regions
             self.image_offset_x = 0
             self.image_offset_y = 0
             self.canvas.image_offset_x = 0
@@ -369,25 +378,57 @@ class ImageCanvas:
             
             # Calculate zoom center adjustment for scrollable images
             if old_width > 0 and old_height > 0:
+                # Adjust mouse coordinates if they were relative to a centered small image
+                if hasattr(self, 'image_offset_x') and hasattr(self, 'image_offset_y'):
+                    adjusted_mouse_x = mouse_x - getattr(self, 'image_offset_x', 0)
+                    adjusted_mouse_y = mouse_y - getattr(self, 'image_offset_y', 0)
+                else:
+                    adjusted_mouse_x = mouse_x
+                    adjusted_mouse_y = mouse_y
+                
                 # Calculate the relative position of the mouse in the old image
-                rel_x = mouse_x / old_width if old_width > 0 else 0.5
-                rel_y = mouse_y / old_height if old_height > 0 else 0.5
+                rel_x = adjusted_mouse_x / old_width if old_width > 0 else 0.5
+                rel_y = adjusted_mouse_y / old_height if old_height > 0 else 0.5
+                
+                # Clamp relative positions to valid range
+                rel_x = max(0, min(1, rel_x))
+                rel_y = max(0, min(1, rel_y))
                 
                 # Calculate where that same relative position should be in the new image
                 new_mouse_x = rel_x * new_width
                 new_mouse_y = rel_y * new_height
                 
                 # Calculate the desired scroll position to keep the zoom point centered
-                desired_x = (new_mouse_x - canvas_width / 2) / new_width if new_width > 0 else 0
-                desired_y = (new_mouse_y - canvas_height / 2) / new_height if new_height > 0 else 0
+                if new_width > canvas_width:
+                    # Image is wider than canvas - calculate scroll position
+                    desired_x = (new_mouse_x - canvas_width / 2) / new_width
+                    desired_x = max(0, min(1, desired_x))
+                else:
+                    # Image fits horizontally - center it
+                    desired_x = 0.5
                 
-                # Clamp to valid scroll range
-                desired_x = max(0, min(1, desired_x))
-                desired_y = max(0, min(1, desired_y))
+                if new_height > canvas_height:
+                    # Image is taller than canvas - calculate scroll position  
+                    desired_y = (new_mouse_y - canvas_height / 2) / new_height
+                    desired_y = max(0, min(1, desired_y))
+                else:
+                    # Image fits vertically - center it
+                    desired_y = 0.5
                 
                 # Apply the new scroll position
                 self.canvas.xview_moveto(desired_x)
                 self.canvas.yview_moveto(desired_y)
+            else:
+                # No old dimensions - center the image
+                if new_width > canvas_width:
+                    self.canvas.xview_moveto(0.5)
+                else:
+                    self.canvas.xview_moveto(0.0)
+                    
+                if new_height > canvas_height:
+                    self.canvas.yview_moveto(0.5)
+                else:
+                    self.canvas.yview_moveto(0.0)
 
         # Update display scale
         self.canvas.display_scale = self.display_scale * self.zoom_level
