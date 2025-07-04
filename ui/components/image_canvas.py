@@ -16,14 +16,16 @@ class ImageCanvas:
     Follows single responsibility principle - only image display concerns.
     """
 
-    def __init__(self, parent: tk.Widget):
+    def __init__(self, parent: tk.Widget, callbacks: dict = None):
         """
         Initialize image canvas.
 
         Args:
             parent: Parent widget
+            callbacks: Dictionary of callback functions
         """
         self.parent = parent
+        self.callbacks = callbacks or {}
 
         # Display state
         self.displayed_image = None
@@ -115,6 +117,13 @@ class ImageCanvas:
         self.canvas.bind("<Control-Button-1>", self._start_pan)
         self.canvas.bind("<Control-B1-Motion>", self._pan_image)
         self.canvas.bind("<ButtonRelease-1>", self._end_pan)
+
+        # Keyboard zoom shortcuts
+        self.canvas.bind("<Control-plus>", self._zoom_in_keyboard)
+        self.canvas.bind("<Control-equal>", self._zoom_in_keyboard)  # For keyboards without numpad
+        self.canvas.bind("<Control-minus>", self._zoom_out_keyboard)
+        self.canvas.bind("<Control-0>", self._zoom_fit)
+        self.canvas.bind("<Control-1>", self._zoom_actual)
 
         # Key events
         self.canvas.bind("<KeyRelease-Control_L>", self._reset_cursor)
@@ -264,8 +273,10 @@ class ImageCanvas:
         if not self.displayed_image:
             return "break"
 
-        # Store old zoom level
+        # Store old zoom level and mouse position
         old_zoom = self.zoom_level
+        mouse_x = self.canvas.canvasx(event.x)
+        mouse_y = self.canvas.canvasy(event.y)
 
         # Calculate new zoom level
         if event.num == 5 or event.delta < 0:  # Zoom out
@@ -275,16 +286,27 @@ class ImageCanvas:
         else:
             return "break"
 
-        # Apply zoom
-        self._apply_zoom(old_zoom)
+        # Apply zoom centered on mouse position
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        
+        # Notify zoom change
+        self._notify_zoom_changed()
         return "break"
 
-    def _apply_zoom(self, old_zoom: float):
-        """Apply zoom transformation."""
+    def _apply_zoom_at_point(self, old_zoom: float, mouse_x: float, mouse_y: float):
+        """Apply zoom transformation centered at a specific point."""
         if not self.displayed_image:
             return
 
-        # Calculate new image size
+        # Get current scroll position
+        old_x_view = self.canvas.xview()
+        old_y_view = self.canvas.yview()
+        
+        # Calculate old image dimensions
+        old_width = int(self.displayed_image.width * old_zoom)
+        old_height = int(self.displayed_image.height * old_zoom)
+        
+        # Calculate new image dimensions
         base_width = self.displayed_image.width
         base_height = self.displayed_image.height
         new_width = int(base_width * self.zoom_level)
@@ -302,15 +324,78 @@ class ImageCanvas:
         # Update photo
         self.photo = ImageTk.PhotoImage(resized_image)
 
-        # Update canvas
-        self.canvas.delete(self.image_item)
-        self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
-
-        # Update scroll region
-        self.canvas.configure(scrollregion=(0, 0, new_width, new_height))
+        # Update canvas and position image properly
+        if self.image_item:
+            self.canvas.delete(self.image_item)
+        
+        # Get canvas dimensions
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        # Use reasonable defaults if canvas not rendered yet
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 500
+        
+        # Use the same positioning strategy as _position_and_display_image
+        if new_width <= canvas_width and new_height <= canvas_height:
+            # Image fits - center it using absolute positioning
+            x_pos = (canvas_width - new_width) // 2
+            y_pos = (canvas_height - new_height) // 2
+            
+            # Set scroll region to canvas size
+            self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
+            
+            # Place image at center
+            self.image_item = self.canvas.create_image(x_pos, y_pos, anchor='nw', image=self.photo)
+            
+            # Store offset for coordinate calculations
+            self.image_offset_x = x_pos
+            self.image_offset_y = y_pos
+            self.canvas.image_offset_x = x_pos
+            self.canvas.image_offset_y = y_pos
+            
+        else:
+            # Image is larger - use scrolling with zoom centering
+            self.canvas.configure(scrollregion=(0, 0, new_width, new_height))
+            self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+            
+            # No offset when scrolling
+            self.image_offset_x = 0
+            self.image_offset_y = 0
+            self.canvas.image_offset_x = 0
+            self.canvas.image_offset_y = 0
+            
+            # Calculate zoom center adjustment for scrollable images
+            if old_width > 0 and old_height > 0:
+                # Calculate the relative position of the mouse in the old image
+                rel_x = mouse_x / old_width if old_width > 0 else 0.5
+                rel_y = mouse_y / old_height if old_height > 0 else 0.5
+                
+                # Calculate where that same relative position should be in the new image
+                new_mouse_x = rel_x * new_width
+                new_mouse_y = rel_y * new_height
+                
+                # Calculate the desired scroll position to keep the zoom point centered
+                desired_x = (new_mouse_x - canvas_width / 2) / new_width if new_width > 0 else 0
+                desired_y = (new_mouse_y - canvas_height / 2) / new_height if new_height > 0 else 0
+                
+                # Clamp to valid scroll range
+                desired_x = max(0, min(1, desired_x))
+                desired_y = max(0, min(1, desired_y))
+                
+                # Apply the new scroll position
+                self.canvas.xview_moveto(desired_x)
+                self.canvas.yview_moveto(desired_y)
 
         # Update display scale
         self.canvas.display_scale = self.display_scale * self.zoom_level
+
+    def _notify_zoom_changed(self):
+        """Notify that zoom level has changed."""
+        if 'zoom_changed' in self.callbacks:
+            self.callbacks['zoom_changed'](self.zoom_level)
 
     def _start_pan(self, event):
         """Start panning operation."""
@@ -359,6 +444,218 @@ class ImageCanvas:
         if not (event.state & 0x0004):  # Ctrl not pressed
             self.panning = False
             self.canvas.config(cursor="")
+
+    def _zoom_in_keyboard(self, event):
+        """Zoom in using keyboard shortcut."""
+        if not self.displayed_image:
+            return "break"
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = min(5.0, self.zoom_level + 0.2)
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        return "break"
+
+    def _zoom_out_keyboard(self, event):
+        """Zoom out using keyboard shortcut."""
+        if not self.displayed_image:
+            return "break"
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = max(0.1, self.zoom_level - 0.2)
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        return "break"
+
+    def _zoom_fit(self, event):
+        """Fit image to canvas."""
+        if not self.displayed_image:
+            return "break"
+        
+        # Calculate fit zoom level
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        if canvas_width <= 1 or canvas_height <= 1:
+            return "break"
+        
+        img_width = self.displayed_image.width
+        img_height = self.displayed_image.height
+        
+        # Calculate zoom to fit
+        zoom_x = canvas_width / img_width
+        zoom_y = canvas_height / img_height
+        fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = max(0.1, min(5.0, fit_zoom))
+        
+        # Center the zoom
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        return "break"
+
+    def _zoom_actual(self, event):
+        """Zoom to actual size (100%)."""
+        if not self.displayed_image:
+            return "break"
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = 1.0
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        return "break"
+
+    # Public zoom control methods
+    def zoom_in(self):
+        """Zoom in programmatically."""
+        if not self.displayed_image:
+            return
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = min(5.0, self.zoom_level + 0.2)
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        self._notify_zoom_changed()
+
+    def zoom_out(self):
+        """Zoom out programmatically."""
+        if not self.displayed_image:
+            return
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = max(0.1, self.zoom_level - 0.2)
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        self._notify_zoom_changed()
+
+    def zoom_fit(self):
+        """Fit image to canvas programmatically."""
+        if not self.displayed_image:
+            return
+        
+        # Calculate fit zoom level
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        if canvas_width <= 1 or canvas_height <= 1:
+            return
+        
+        img_width = self.displayed_image.width
+        img_height = self.displayed_image.height
+        
+        # Calculate zoom to fit
+        zoom_x = canvas_width / img_width
+        zoom_y = canvas_height / img_height
+        fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = max(0.1, min(5.0, fit_zoom))
+        
+        # Center the zoom
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        self._notify_zoom_changed()
+
+    def zoom_actual(self):
+        """Zoom to actual size (100%) programmatically."""
+        if not self.displayed_image:
+            return
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = 1.0
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        self._notify_zoom_changed()
+
+    def get_zoom_level(self):
+        """Get current zoom level."""
+        return self.zoom_level
+
+    def set_zoom_level(self, zoom_level: float):
+        """Set zoom level programmatically."""
+        if not self.displayed_image:
+            return
+        
+        # Clamp zoom level
+        zoom_level = max(0.1, min(5.0, zoom_level))
+        
+        # Get canvas center for zoom point
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        center_x = canvas_width / 2
+        center_y = canvas_height / 2
+        
+        # Convert to canvas coordinates
+        mouse_x = self.canvas.canvasx(center_x)
+        mouse_y = self.canvas.canvasy(center_y)
+        
+        old_zoom = self.zoom_level
+        self.zoom_level = zoom_level
+        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        self._notify_zoom_changed()
 
     def show_quality_map(self, quality_map_data: np.ndarray, spectrum_type: str):
         """

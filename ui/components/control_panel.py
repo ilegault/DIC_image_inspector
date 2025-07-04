@@ -52,6 +52,7 @@ class ControlPanel:
         # Create sections
         self._create_primary_controls()
         self._create_secondary_controls()
+        self._create_zoom_controls()
         self._create_spectrum_controls()
         self._create_roi_info_section()
 
@@ -110,6 +111,54 @@ class ControlPanel:
             )
             btn.pack(side='left', padx=5)
             self.buttons[btn_id] = btn
+
+    def _create_zoom_controls(self):
+        """Create zoom control buttons."""
+        zoom_frame = tk.Frame(self.control_frame, bg=APP_CONFIG['colors']['panel_bg'])
+        zoom_frame.pack(pady=5)
+
+        # Zoom label
+        zoom_label = tk.Label(
+            zoom_frame,
+            text="🔍 Zoom:",
+            font=('Arial', 10, 'bold'),
+            fg=APP_CONFIG['colors']['text_primary'],
+            bg=APP_CONFIG['colors']['panel_bg']
+        )
+        zoom_label.pack(side='left', padx=5)
+
+        # Zoom buttons configuration
+        zoom_buttons = [
+            ('zoom_in_btn', "➕", '#3498db', 'zoom_in'),
+            ('zoom_out_btn', "➖", '#3498db', 'zoom_out'),
+            ('zoom_fit_btn', "⬜ Fit", '#2ecc71', 'zoom_fit'),
+            ('zoom_actual_btn', "1:1", '#e67e22', 'zoom_actual')
+        ]
+
+        for btn_id, text, color, callback_key in zoom_buttons:
+            btn = tk.Button(
+                zoom_frame,
+                text=text,
+                bg=color,
+                fg='white',
+                font=('Arial', 10, 'bold'),
+                padx=10,
+                pady=3,
+                command=lambda k=callback_key: self._execute_callback(k)
+            )
+            btn.pack(side='left', padx=2)
+            self.buttons[btn_id] = btn
+
+        # Zoom level display
+        self.zoom_level_var = tk.StringVar(value="100%")
+        zoom_level_label = tk.Label(
+            zoom_frame,
+            textvariable=self.zoom_level_var,
+            font=('Arial', 9),
+            fg=APP_CONFIG['colors']['text_secondary'],
+            bg=APP_CONFIG['colors']['panel_bg']
+        )
+        zoom_level_label.pack(side='left', padx=10)
 
     def _create_spectrum_controls(self):
         """Create spectrum selection controls."""
@@ -269,27 +318,32 @@ class ControlPanel:
         state_configs = {
             'no_image': {
                 'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn'],
-                'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn'],
+                'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
                 'special': {}
             },
             'image_loaded': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
                 'special': {'roi_btn': {'bg': '#9b59b6', 'text': '🎯 Select ROI'}}
             },
             'roi_selected': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
                 'special': {'roi_btn': {'bg': '#9b59b6', 'text': '🎯 New ROI'}}
             },
             'analyzing': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
                 'disabled': ['roi_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn'],
                 'special': {'analyze_btn': {'state': 'disabled', 'text': '🔬 Analyzing...'}}
             },
             'analysis_complete': {
                 'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn',
-                            'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn'],
+                            'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
                 'disabled': [],
                 'special': {
                     'analyze_btn': {'text': '🔬 Analyze'},
@@ -348,3 +402,13 @@ class ControlPanel:
                 self.buttons['quality_map_btn'].config(bg='#e74c3c')  # Red when active
             else:
                 self.buttons['quality_map_btn'].config(bg='#2ecc71')  # Green when inactive
+
+    def update_zoom_level(self, zoom_level: float):
+        """
+        Update zoom level display.
+
+        Args:
+            zoom_level: Current zoom level (1.0 = 100%)
+        """
+        percentage = int(zoom_level * 100)
+        self.zoom_level_var.set(f"{percentage}%")

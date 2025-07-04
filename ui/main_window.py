@@ -82,7 +82,11 @@ class DICQualityInspector:
                 'show_help': self.show_help,
                 'reset_application': self.reset_application,
                 'reset_display_results': self.reset_display_results,
-                'spectrum_changed': self.on_spectrum_changed
+                'spectrum_changed': self.on_spectrum_changed,
+                'zoom_in': self.zoom_in,
+                'zoom_out': self.zoom_out,
+                'zoom_fit': self.zoom_fit,
+                'zoom_actual': self.zoom_actual
             }
         )
 
@@ -91,7 +95,12 @@ class DICQualityInspector:
         content_frame.pack(fill='both', expand=True, pady=10)
 
         # Image canvas
-        self.image_canvas = ImageCanvas(content_frame)
+        self.image_canvas = ImageCanvas(
+            content_frame,
+            callbacks={
+                'zoom_changed': self._on_zoom_changed
+            }
+        )
 
         # ROI selector
         self.roi_selector = ROISelector(
@@ -422,6 +431,36 @@ class DICQualityInspector:
             self.image_canvas.show_quality_map(result.quality_map, spectrum_type)
             self.legend_panel.show_legend(spectrum_type)
 
+    # Zoom Control Methods
+    def zoom_in(self):
+        """Handle zoom in request."""
+        self.image_canvas.zoom_in()
+        self._update_zoom_display()
+
+    def zoom_out(self):
+        """Handle zoom out request."""
+        self.image_canvas.zoom_out()
+        self._update_zoom_display()
+
+    def zoom_fit(self):
+        """Handle zoom fit request."""
+        self.image_canvas.zoom_fit()
+        self._update_zoom_display()
+
+    def zoom_actual(self):
+        """Handle zoom to actual size request."""
+        self.image_canvas.zoom_actual()
+        self._update_zoom_display()
+
+    def _update_zoom_display(self):
+        """Update zoom level display in control panel."""
+        zoom_level = self.image_canvas.get_zoom_level()
+        self.control_panel.update_zoom_level(zoom_level)
+
+    def _on_zoom_changed(self, zoom_level: float):
+        """Handle zoom level change from image canvas."""
+        self.control_panel.update_zoom_level(zoom_level)
+
     # State Change Observers
     def _on_analysis_result_changed(self, result: AnalysisResult):
         """Handle analysis result change."""
@@ -432,6 +471,8 @@ class DICQualityInspector:
         if image_data:
             self.image_canvas.display_image(image_data.array)
             self.state.set_application_state('image_loaded')
+            # Update zoom display
+            self._update_zoom_display()
         else:
             self.image_canvas.clear()
         self._update_ui_state()
