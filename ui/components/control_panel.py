@@ -3,7 +3,8 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Callable, Any
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
+from utils.modern_styling import ModernStyleManager
 
 
 class ControlPanel:
@@ -39,15 +40,25 @@ class ControlPanel:
         self._create_panel()
 
     def _create_panel(self):
-        """Create the control panel UI."""
-        # Main control frame
+        """Create the control panel UI with modern styling."""
+        colors = get_theme_colors()
+        
+        # Main control frame with modern card-like appearance
         self.control_frame = tk.Frame(
             self.parent,
-            bg=APP_CONFIG['colors']['panel_bg'],
-            relief='raised',
-            bd=2
+            bg=colors['panel_bg'],
+            relief='flat',
+            bd=0
         )
-        self.control_frame.pack(fill='x', padx=10, pady=5)
+        self.control_frame.pack(fill='x', padx=0, pady=APP_CONFIG['styling']['element_spacing'])
+        
+        # Add padding inside the panel
+        self.inner_frame = tk.Frame(
+            self.control_frame,
+            bg=colors['panel_bg']
+        )
+        self.inner_frame.pack(fill='x', padx=APP_CONFIG['styling']['panel_padding'], 
+                             pady=APP_CONFIG['styling']['panel_padding'])
 
         # Create sections
         self._create_primary_controls()
@@ -56,129 +67,203 @@ class ControlPanel:
         self._create_spectrum_controls()
         self._create_roi_info_section()
 
-    def _create_primary_controls(self):
-        """Create primary control buttons."""
-        primary_frame = tk.Frame(self.control_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        primary_frame.pack(pady=5)
 
-        # Primary buttons configuration
+
+    def _create_primary_controls(self):
+        """Create primary control buttons with modern styling."""
+        colors = get_theme_colors()
+        
+        # Section title
+        title_label = tk.Label(
+            self.inner_frame,
+            text="Primary Controls",
+            font=APP_CONFIG['fonts']['subheading'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
+        )
+        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
+        
+        primary_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
+        primary_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
+
+        # Primary buttons configuration with modern colors
         primary_buttons = [
-            ('load_btn', "📁 Load Image", '#3498db', 'load_image'),
-            ('screenshot_btn', "📸 Screenshot", '#e67e22', 'take_screenshot'),
-            ('roi_btn', "🎯 Select ROI", '#9b59b6', 'select_roi'),
-            ('analyze_btn', "🔬 Analyze", '#27ae60', 'analyze_image')
+            ('load_btn', "📁 Load Image", colors['btn_primary'], 'load_image'),
+            ('screenshot_btn', "📸 Screenshot", colors['btn_warning'], 'take_screenshot'),
+            ('roi_btn', "🎯 Select ROI", colors['purple'], 'select_roi'),
+            ('analyze_btn', "🔬 Analyze", colors['btn_success'], 'analyze_image')
         ]
 
         for btn_id, text, color, callback_key in primary_buttons:
-            btn = tk.Button(
-                primary_frame,
-                text=text,
-                bg=color,
-                fg='white',
-                font=('Arial', 12, 'bold'),
-                padx=20,
-                pady=5,
-                command=lambda k=callback_key: self._execute_callback(k)
+            btn = ModernStyleManager.create_modern_button(
+                primary_frame, text, color, 
+                command=lambda k=callback_key: self._execute_callback(k), 
+                size='normal'  # Smaller buttons for compact layout
             )
-            btn.pack(side='left', padx=5)
+            btn.pack(fill='x', pady=2)  # Stack vertically, full width
             self.buttons[btn_id] = btn
 
     def _create_secondary_controls(self):
-        """Create secondary control buttons."""
-        secondary_frame = tk.Frame(self.control_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        secondary_frame.pack(pady=5)
+        """Create secondary control buttons with modern styling."""
+        colors = get_theme_colors()
+        
+        # Add spacing
+        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
+        spacer.pack(fill='x')
+        
+        # Section title
+        title_label = tk.Label(
+            self.inner_frame,
+            text="Analysis & Results",
+            font=APP_CONFIG['fonts']['subheading'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
+        )
+        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
+        
+        secondary_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
+        secondary_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
 
-        # Secondary buttons configuration
+        # Secondary buttons configuration with modern colors
         secondary_buttons = [
-            ('quality_map_btn', "🗺️ Quality Map", '#2ecc71', 'toggle_quality_map'),
-            ('results_btn', "📊 Show Results", '#8e44ad', 'show_results'),
-            ('save_btn', "💾 Save Report", '#7f8c8d', 'save_report'),
-            ('help_btn', "❓ Help", '#6c7b7f', 'show_help'),
-            ('reset_display_btn', "🔄 Reset Display", '#f39c12', 'reset_display_results'),
-            ('reset_btn', "🔄 Full Reset", '#e74c3c', 'reset_application')
+            ('quality_map_btn', "🗺️ Quality Map", colors['info'], 'toggle_quality_map'),
+            ('results_btn', "📊 Show Results", colors['secondary'], 'show_results'),
+            ('save_btn', "💾 Save Report", colors['btn_secondary'], 'save_report'),
+            ('theme_btn', "🌙 Dark Mode", colors['purple'], 'toggle_theme'),
+            ('help_btn', "❓ Help", colors['btn_secondary'], 'show_help'),
+            ('reset_display_btn', "🔄 Reset Display", colors['btn_warning'], 'reset_display_results'),
+            ('reset_btn', "🔄 Full Reset", colors['btn_danger'], 'reset_application')
         ]
 
-        for btn_id, text, color, callback_key in secondary_buttons:
-            btn = tk.Button(
-                secondary_frame,
-                text=text,
-                bg=color,
-                fg='white',
-                font=('Arial', 12, 'bold'),
-                padx=20,
-                pady=5,
-                command=lambda k=callback_key: self._execute_callback(k)
+        # Split secondary buttons into two columns for compact layout
+        left_col = tk.Frame(secondary_frame, bg=colors['panel_bg'])
+        left_col.pack(side='left', fill='both', expand=True, padx=(0, 5))
+        
+        right_col = tk.Frame(secondary_frame, bg=colors['panel_bg'])
+        right_col.pack(side='right', fill='both', expand=True, padx=(5, 0))
+
+        for i, (btn_id, text, color, callback_key) in enumerate(secondary_buttons):
+            parent_col = left_col if i % 2 == 0 else right_col
+            btn = ModernStyleManager.create_modern_button(
+                parent_col, text, color,
+                command=lambda k=callback_key: self._execute_callback(k),
+                size='small'  # Smaller for compact layout
             )
-            btn.pack(side='left', padx=5)
+            btn.pack(fill='x', pady=1)
             self.buttons[btn_id] = btn
 
     def _create_zoom_controls(self):
-        """Create zoom control buttons."""
-        zoom_frame = tk.Frame(self.control_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        zoom_frame.pack(pady=5)
+        """Create zoom control buttons with modern styling."""
+        colors = get_theme_colors()
+        
+        # Add spacing
+        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
+        spacer.pack(fill='x')
+        
+        # Section title
+        title_label = tk.Label(
+            self.inner_frame,
+            text="Image Navigation",
+            font=APP_CONFIG['fonts']['subheading'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
+        )
+        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
+        
+        zoom_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
+        zoom_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
 
-        # Zoom label
+        # Zoom label with modern styling
         zoom_label = tk.Label(
             zoom_frame,
             text="🔍 Zoom:",
-            font=('Arial', 10, 'bold'),
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            font=APP_CONFIG['fonts']['body_bold'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
         )
-        zoom_label.pack(side='left', padx=5)
+        zoom_label.pack(side='left', padx=(0, APP_CONFIG['styling']['element_spacing']))
 
-        # Zoom buttons configuration
+        # Zoom buttons configuration with modern colors
         zoom_buttons = [
-            ('zoom_in_btn', "➕", '#3498db', 'zoom_in'),
-            ('zoom_out_btn', "➖", '#3498db', 'zoom_out'),
-            ('zoom_fit_btn', "⬜ Fit", '#2ecc71', 'zoom_fit'),
-            ('zoom_actual_btn', "1:1", '#e67e22', 'zoom_actual')
+            ('zoom_in_btn', "➕", colors['btn_primary'], 'zoom_in'),
+            ('zoom_out_btn', "➖", colors['btn_primary'], 'zoom_out'),
+            ('zoom_fit_btn', "⬜ Fit", colors['btn_success'], 'zoom_fit'),
+            ('zoom_actual_btn', "1:1", colors['btn_warning'], 'zoom_actual')
         ]
 
-        for btn_id, text, color, callback_key in zoom_buttons:
-            btn = tk.Button(
-                zoom_frame,
-                text=text,
-                bg=color,
-                fg='white',
-                font=('Arial', 10, 'bold'),
-                padx=10,
-                pady=3,
-                command=lambda k=callback_key: self._execute_callback(k)
+        # Create zoom buttons in a 2x2 grid for compact layout
+        zoom_grid = tk.Frame(zoom_frame, bg=colors['panel_bg'])
+        zoom_grid.pack(fill='x', pady=5)
+        
+        for i, (btn_id, text, color, callback_key) in enumerate(zoom_buttons):
+            row = i // 2
+            col = i % 2
+            btn = ModernStyleManager.create_modern_button(
+                zoom_grid, text, color,
+                command=lambda k=callback_key: self._execute_callback(k),
+                size='small'
             )
-            btn.pack(side='left', padx=2)
+            btn.grid(row=row, column=col, padx=2, pady=1, sticky='ew')
             self.buttons[btn_id] = btn
+        
+        # Configure grid weights
+        zoom_grid.grid_columnconfigure(0, weight=1)
+        zoom_grid.grid_columnconfigure(1, weight=1)
 
-        # Zoom level display
+        # Zoom level display with modern styling
         self.zoom_level_var = tk.StringVar(value="100%")
         zoom_level_label = tk.Label(
             zoom_frame,
             textvariable=self.zoom_level_var,
-            font=('Arial', 9),
-            fg=APP_CONFIG['colors']['text_secondary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            font=APP_CONFIG['fonts']['body_bold'],
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg']
         )
-        zoom_level_label.pack(side='left', padx=10)
+        zoom_level_label.pack(side='left', padx=APP_CONFIG['styling']['element_spacing'])
 
     def _create_spectrum_controls(self):
-        """Create spectrum selection controls."""
-        spectrum_frame = tk.Frame(self.control_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        spectrum_frame.pack(pady=5)
+        """Create spectrum selection controls with modern styling."""
+        colors = get_theme_colors()
+        
+        # Add spacing
+        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
+        spacer.pack(fill='x')
+        
+        # Section title
+        title_label = tk.Label(
+            self.inner_frame,
+            text="Analysis Configuration",
+            font=APP_CONFIG['fonts']['subheading'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
+        )
+        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
+        
+        spectrum_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
+        spectrum_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
 
-        # Spectrum selection
+        # Spectrum selection with modern styling
         spectrum_label = tk.Label(
             spectrum_frame,
-            text="Methods:",
-            font=('Arial', 10),
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            text="Analysis Method:",
+            font=APP_CONFIG['fonts']['body_bold'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
         )
-        spectrum_label.pack(side='left', padx=5)
+        spectrum_label.pack(side='left', padx=(0, APP_CONFIG['styling']['small_spacing']))
 
         spectrum_options = [
             'optimized',
             'controlled'
         ]
+
+        # Style the combobox
+        style = ttk.Style()
+        style.configure('Modern.TCombobox', 
+                       fieldbackground='white',
+                       background=colors['btn_primary'],
+                       borderwidth=1,
+                       relief='flat')
 
         self.spectrum_combo = ttk.Combobox(
             spectrum_frame,
@@ -186,106 +271,165 @@ class ControlPanel:
             values=spectrum_options,
             state='readonly',
             width=15,
-            font=('Arial', 9)
+            font=APP_CONFIG['fonts']['body'],
+            style='Modern.TCombobox'
         )
-        self.spectrum_combo.pack(side='left', padx=5)
+        self.spectrum_combo.pack(side='left', padx=APP_CONFIG['styling']['small_spacing'])
         self.spectrum_combo.bind('<<ComboboxSelected>>', self._on_spectrum_changed)
 
         # Control parameters (initially hidden)
         self._create_control_parameters(spectrum_frame)
 
     def _create_control_parameters(self, parent):
-        """Create control-specific parameter controls."""
-        self.control_frame = tk.Frame(parent, bg=APP_CONFIG['colors']['panel_bg'])
+        """Create control-specific parameter controls with modern styling."""
+        colors = get_theme_colors()
+        
+        # Create a separate frame for control parameters
+        self.control_params_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
+        
+        # Parameters container with subtle background
+        params_container = tk.Frame(
+            self.control_params_frame,
+            bg=colors['hover_bg'],
+            relief='flat',
+            bd=0
+        )
+        params_container.pack(fill='x', padx=10, pady=10)
+        
+        # Inner padding frame
+        self.control_frame = tk.Frame(params_container, bg=colors['hover_bg'])
+        self.control_frame.pack(fill='x', padx=15, pady=10)
 
-        # Title
+        # Title with modern styling
         control_title = tk.Label(
             self.control_frame,
-            text="📐 Control Parameters:",
-            font=('Arial', 10, 'bold'),
-            fg='#3498db',
-            bg=APP_CONFIG['colors']['panel_bg']
+            text="📐 Advanced Parameters",
+            font=APP_CONFIG['fonts']['body_bold'],
+            fg=colors['primary'],
+            bg=colors['hover_bg']
         )
-        control_title.pack(side='left', padx=5)
+        control_title.pack(anchor='w', pady=(0, 8))
+        
+        # Parameters row
+        params_row = tk.Frame(self.control_frame, bg=colors['hover_bg'])
+        params_row.pack(fill='x')
 
-        # Facet size
+        # Facet size with modern styling
+        facet_frame = tk.Frame(params_row, bg=colors['hover_bg'])
+        facet_frame.pack(side='left', padx=(0, 20))
+        
         tk.Label(
-            self.control_frame,
-            text="Facet:",
-            font=('Arial', 9),
-            fg=APP_CONFIG['colors']['text_secondary'],
-            bg=APP_CONFIG['colors']['panel_bg']
-        ).pack(side='left', padx=(15, 2))
+            facet_frame,
+            text="Facet Size:",
+            font=APP_CONFIG['fonts']['small_bold'],
+            fg=colors['text_secondary'],
+            bg=colors['hover_bg']
+        ).pack(side='left', padx=(0, 5))
 
         facet_spinbox = tk.Spinbox(
-            self.control_frame,
+            facet_frame,
             from_=11,
             to=51,
             increment=2,
             textvariable=self.control_params['facet_size'],
             width=4,
-            font=('Arial', 8)
+            font=APP_CONFIG['fonts']['small'],
+            relief='flat',
+            bd=1,
+            bg='white'
         )
         facet_spinbox.pack(side='left', padx=2)
 
         tk.Label(
-            self.control_frame,
+            facet_frame,
             text="px",
-            font=('Arial', 8),
-            fg=APP_CONFIG['colors']['text_muted'],
-            bg=APP_CONFIG['colors']['panel_bg']
-        ).pack(side='left', padx=(0, 10))
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_muted'],
+            bg=colors['hover_bg']
+        ).pack(side='left', padx=(2, 0))
 
-        # Point distance
+        # Point distance with modern styling
+        step_frame = tk.Frame(params_row, bg=colors['hover_bg'])
+        step_frame.pack(side='left', padx=(0, 20))
+        
         tk.Label(
-            self.control_frame,
-            text="Step:",
-            font=('Arial', 9),
-            fg=APP_CONFIG['colors']['text_secondary'],
-            bg=APP_CONFIG['colors']['panel_bg']
-        ).pack(side='left', padx=(10, 2))
+            step_frame,
+            text="Step Size:",
+            font=APP_CONFIG['fonts']['small_bold'],
+            fg=colors['text_secondary'],
+            bg=colors['hover_bg']
+        ).pack(side='left', padx=(0, 5))
 
         step_spinbox = tk.Spinbox(
-            self.control_frame,
+            step_frame,
             from_=2,
             to=20,
             increment=1,
             textvariable=self.control_params['point_distance'],
             width=4,
-            font=('Arial', 8)
+            font=APP_CONFIG['fonts']['small'],
+            relief='flat',
+            bd=1,
+            bg='white'
         )
         step_spinbox.pack(side='left', padx=2)
 
         tk.Label(
-            self.control_frame,
+            step_frame,
             text="px",
-            font=('Arial', 8),
-            fg=APP_CONFIG['colors']['text_muted'],
-            bg=APP_CONFIG['colors']['panel_bg']
-        ).pack(side='left', padx=(0, 10))
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_muted'],
+            bg=colors['hover_bg']
+        ).pack(side='left', padx=(2, 0))
 
-        # Info label
-        tk.Label(
+        # Info label with modern styling
+        info_label = tk.Label(
             self.control_frame,
-            text="(Smaller values = higher density, slower analysis)",
-            font=('Arial', 8),
-            fg=APP_CONFIG['colors']['text_muted'],
-            bg=APP_CONFIG['colors']['panel_bg']
-        ).pack(side='left', padx=5)
+            text="💡 Smaller values provide higher density analysis but slower processing",
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_muted'],
+            bg=colors['hover_bg']
+        )
+        info_label.pack(anchor='w', pady=(8, 0))
 
     def _create_roi_info_section(self):
-        """Create ROI information display."""
-        roi_info_frame = tk.Frame(self.control_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        roi_info_frame.pack(pady=5)
+        """Create ROI information display with modern styling."""
+        colors = get_theme_colors()
+        
+        # Add spacing
+        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
+        spacer.pack(fill='x')
+        
+        # Section title
+        title_label = tk.Label(
+            self.inner_frame,
+            text="Region of Interest",
+            font=APP_CONFIG['fonts']['subheading'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
+        )
+        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
+        
+        # ROI info container with subtle background
+        roi_container = tk.Frame(
+            self.inner_frame,
+            bg=colors['selected_bg'],
+            relief='flat',
+            bd=0
+        )
+        roi_container.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
+        
+        roi_info_frame = tk.Frame(roi_container, bg=colors['selected_bg'])
+        roi_info_frame.pack(fill='x', padx=15, pady=8)
 
         self.roi_info_label = tk.Label(
             roi_info_frame,
-            text="ROI: Not Selected (analyzing full image)",
-            font=('Arial', 10),
-            fg=APP_CONFIG['colors']['text_secondary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            text="🎯 ROI: Not Selected (analyzing full image)",
+            font=APP_CONFIG['fonts']['body'],
+            fg=colors['text_secondary'],
+            bg=colors['selected_bg']
         )
-        self.roi_info_label.pack()
+        self.roi_info_label.pack(anchor='w')
 
     def _execute_callback(self, callback_key: str):
         """Execute callback if it exists."""
@@ -298,9 +442,9 @@ class ControlPanel:
 
         # Show/hide control parameters
         if spectrum_type == 'controlled':
-            self.control_frame.pack(after=self.spectrum_combo, pady=2, fill='x')
+            self.control_params_frame.pack(fill='x', pady=(10, 0))
         else:
-            self.control_frame.pack_forget()
+            self.control_params_frame.pack_forget()
 
         # Notify parent
         self._execute_callback('spectrum_changed')

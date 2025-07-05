@@ -5,7 +5,8 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 import numpy as np
 from typing import Optional, Tuple
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
+from utils.modern_styling import ModernStyleManager
 
 
 class ImageCanvas:
@@ -51,41 +52,66 @@ class ImageCanvas:
         self._bind_events()
 
     def _create_canvas_area(self):
-        """Create the main canvas area with scrollbars."""
-        # Main image panel
+        """Create the main canvas area with modern styling."""
+        colors = get_theme_colors()
+        
+        # Main image panel with modern card-like appearance
         self.image_panel = tk.Frame(
             self.parent,
-            bg=APP_CONFIG['colors']['panel_bg'],
-            relief='raised',
-            bd=2
+            bg=colors['panel_bg'],
+            relief='flat',
+            bd=0
         )
-        self.image_panel.pack(fill='both', expand=True, padx=5)
+        self.image_panel.pack(fill='both', expand=True, padx=0)
 
-        # Title
+        # Title section with modern styling
+        title_frame = tk.Frame(self.image_panel, bg=colors['panel_bg'])
+        title_frame.pack(fill='x', padx=APP_CONFIG['styling']['panel_padding'], 
+                        pady=(APP_CONFIG['styling']['panel_padding'], APP_CONFIG['styling']['small_spacing']))
+        
         img_title = tk.Label(
-            self.image_panel,
+            title_frame,
             text="📸 Image Preview",
-            font=('Arial', 16, 'bold'),
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            font=APP_CONFIG['fonts']['heading'],
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
         )
-        img_title.pack(pady=10)
+        img_title.pack(anchor='w')
 
-        # Canvas frame with scrollbars
-        canvas_frame = tk.Frame(self.image_panel, bg=APP_CONFIG['colors']['panel_bg'])
-        canvas_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        # Canvas frame with modern styling
+        canvas_frame = tk.Frame(self.image_panel, bg=colors['panel_bg'])
+        canvas_frame.pack(fill='both', expand=True, 
+                         padx=APP_CONFIG['styling']['panel_padding'], 
+                         pady=(0, APP_CONFIG['styling']['panel_padding']))
 
-        # Canvas with scrollbars
-        self.canvas = tk.Canvas(
+        # Canvas with modern styling and subtle border
+        canvas_container = tk.Frame(
             canvas_frame,
-            bg='white',
+            bg=colors['panel_border'],
+            relief='flat',
+            bd=1
+        )
+        canvas_container.pack(fill='both', expand=True)
+        
+        # Inner canvas frame
+        inner_canvas_frame = tk.Frame(canvas_container, bg=colors['panel_bg'])
+        inner_canvas_frame.pack(fill='both', expand=True, padx=1, pady=1)
+
+        # Canvas with modern styling
+        self.canvas = tk.Canvas(
+            inner_canvas_frame,
+            bg=colors['canvas_bg'],
             width=800,
             height=500,
-            highlightthickness=0
+            highlightthickness=0,
+            relief='flat',
+            bd=0
         )
 
-        self.v_scrollbar = ttk.Scrollbar(canvas_frame, orient='vertical', command=self.canvas.yview)
-        self.h_scrollbar = ttk.Scrollbar(canvas_frame, orient='horizontal', command=self.canvas.xview)
+        # Use modern styled scrollbars
+        self.v_scrollbar, self.h_scrollbar = ModernStyleManager.apply_modern_scrollbars(
+            self.canvas, inner_canvas_frame
+        )
 
         self.canvas.configure(
             yscrollcommand=self.v_scrollbar.set,
@@ -98,8 +124,8 @@ class ImageCanvas:
         self.h_scrollbar.grid(row=1, column=0, sticky='ew')
 
         # Configure grid weights
-        canvas_frame.grid_rowconfigure(0, weight=1)
-        canvas_frame.grid_columnconfigure(0, weight=1)
+        inner_canvas_frame.grid_rowconfigure(0, weight=1)
+        inner_canvas_frame.grid_columnconfigure(0, weight=1)
 
     def _create_processing_controls(self):
         """Create image processing control buttons."""

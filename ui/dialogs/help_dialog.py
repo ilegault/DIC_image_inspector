@@ -2,7 +2,7 @@
 
 import tkinter as tk
 from tkinter import ttk
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
 
 
 class HelpDialog:

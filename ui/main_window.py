@@ -1,7 +1,7 @@
 # ui/main_window.py - Clean Architecture Implementation
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 import threading
 from typing import Optional, Dict, Any
 
@@ -18,7 +18,8 @@ from ui.components.results_popup import ResultsPopup
 from ui.dialogs.help_dialog import HelpDialog
 from ui.dialogs.screenshot_dialog import ScreenshotDialog
 from utils.file_operations import FileOperationsManager
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
+from utils.modern_styling import apply_modern_theme, get_style_manager, toggle_theme, ModernStyleManager
 
 
 class DICQualityInspector:
@@ -30,8 +31,12 @@ class DICQualityInspector:
     """
 
     def __init__(self, root: tk.Tk):
-        """Initialize the main window with clean architecture."""
+        """Initialize the main window with modern clean architecture."""
         self.root = root
+
+        # Apply modern theme first
+        apply_modern_theme()
+        self.style_manager = get_style_manager()
 
         # Initialize services (business logic)
         self.analyzer = ImageAnalyzer()
@@ -53,24 +58,52 @@ class DICQualityInspector:
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _setup_window(self):
-        """Setup main window properties."""
+        """Setup main window properties with modern styling."""
         self.root.title("DIC Image Quality Inspector v2.0 - Clean Architecture")
-        self.root.geometry("1200x800")
-        self.root.configure(bg=APP_CONFIG['colors']['background'])
-        self.root.minsize(800, 600)
+        self.root.geometry("1400x900")  # Larger default size
+        colors = get_theme_colors()
+        self.root.configure(bg=colors['background'])
+        self.root.minsize(1000, 700)  # Larger minimum size
+        
+        # Modern window styling
+        try:
+            # Try to set modern window appearance on Windows
+            self.root.tk.call('tk', 'scaling', 1.0)
+        except:
+            pass
 
     def _create_ui_components(self):
-        """Create and arrange UI components."""
-        # Main container
-        main_container = tk.Frame(self.root, bg=APP_CONFIG['colors']['background'])
-        main_container.pack(fill='both', expand=True, padx=10, pady=10)
+        """Create and arrange UI components with image-focused layout."""
+        # Main container with modern styling
+        colors = get_theme_colors()
+        main_container = tk.Frame(
+            self.root, 
+            bg=colors['background']
+        )
+        main_container.pack(fill='both', expand=True, padx=15, pady=15)
 
-        # Title
+        # Title section (compact)
         self._create_title_section(main_container)
 
-        # Control panel
-        self.control_panel = ControlPanel(
+        # Create horizontal layout: controls on left, image on right
+        content_container = tk.Frame(
             main_container,
+            bg=colors['background']
+        )
+        content_container.pack(fill='both', expand=True, pady=APP_CONFIG['styling']['section_spacing'])
+
+        # Left panel for controls (fixed width, compact)
+        left_panel = tk.Frame(
+            content_container,
+            bg=colors['background'],
+            width=350  # Fixed width for controls
+        )
+        left_panel.pack(side='left', fill='y', padx=(0, 15))
+        left_panel.pack_propagate(False)  # Maintain fixed width
+
+        # Control panel (compact version)
+        self.control_panel = ControlPanel(
+            left_panel,
             callbacks={
                 'load_image': self.load_image,
                 'take_screenshot': self.take_screenshot,
@@ -86,17 +119,24 @@ class DICQualityInspector:
                 'zoom_in': self.zoom_in,
                 'zoom_out': self.zoom_out,
                 'zoom_fit': self.zoom_fit,
-                'zoom_actual': self.zoom_actual
+                'zoom_actual': self.zoom_actual,
+                'toggle_theme': self.toggle_theme
             }
         )
 
-        # Main content area
-        content_frame = tk.Frame(main_container, bg=APP_CONFIG['colors']['background'])
-        content_frame.pack(fill='both', expand=True, pady=10)
+        # Legend panel in left panel
+        self.legend_panel = LegendPanel(left_panel)
 
-        # Image canvas
+        # Right panel for image (takes remaining space)
+        right_panel = tk.Frame(
+            content_container,
+            bg=colors['background']
+        )
+        right_panel.pack(side='right', fill='both', expand=True)
+
+        # Image canvas (now much larger)
         self.image_canvas = ImageCanvas(
-            content_frame,
+            right_panel,
             callbacks={
                 'zoom_changed': self._on_zoom_changed
             }
@@ -111,38 +151,91 @@ class DICQualityInspector:
             }
         )
 
-        # Legend panel
-        self.legend_panel = LegendPanel(content_frame)
-
         # Status bar
         self._create_status_bar()
 
     def _create_title_section(self, parent):
-        """Create application title section."""
-        title_frame = tk.Frame(parent, bg=APP_CONFIG['colors']['background'])
-        title_frame.pack(pady=10)
+        """Create compact application title section."""
+        colors = get_theme_colors()
+        
+        # Compact title container
+        title_container = tk.Frame(
+            parent, 
+            bg=colors['panel_bg'],
+            relief='flat',
+            bd=0
+        )
+        title_container.pack(fill='x', pady=(0, 10))
+        
+        # Horizontal layout for compact title
+        title_frame = tk.Frame(title_container, bg=colors['panel_bg'])
+        title_frame.pack(fill='x', padx=15, pady=10)
 
+        # Compact title
         title_label = tk.Label(
             title_frame,
-            text="🔍 DIC Image Quality Inspector v2.0",
-            font=('Arial', 24, 'bold'),
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['background']
+            text="🔬 DIC Image Quality Inspector v2.0",
+            font=APP_CONFIG['fonts']['heading'],  # Smaller font
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
         )
-        title_label.pack()
+        title_label.pack(side='left')
+        
+        # Compact subtitle on same line
+        subtitle_label = tk.Label(
+            title_frame,
+            text="• Professional Digital Image Correlation Analysis",
+            font=APP_CONFIG['fonts']['body'],
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg']
+        )
+        subtitle_label.pack(side='left', padx=(10, 0))
+        
+        # Theme toggle button on the right
+        theme_btn = ModernStyleManager.create_modern_button(
+            title_frame,
+            "🌙" if APP_CONFIG['theme'] == 'light' else "☀️",
+            colors['btn_secondary'],
+            command=self.toggle_theme,
+            size='small'
+        )
+        theme_btn.pack(side='right')
 
     def _create_status_bar(self):
-        """Create status bar."""
+        """Create modern status bar."""
+        colors = get_theme_colors()
+        
+        # Status bar container
+        status_container = tk.Frame(
+            self.root,
+            bg=colors['panel_bg'],
+            relief='flat',
+            bd=0
+        )
+        status_container.pack(side='bottom', fill='x')
+        
+        # Status bar with modern styling
         self.status_var = tk.StringVar(value="Ready - Load an image to begin analysis")
         status_bar = tk.Label(
-            self.root,
+            status_container,
             textvariable=self.status_var,
-            relief='sunken',
+            relief='flat',
             anchor='w',
-            bg=APP_CONFIG['colors']['status_bar'],
-            fg='white'
+            bg=colors['panel_bg'],
+            fg=colors['text_secondary'],
+            font=APP_CONFIG['fonts']['status'],
+            padx=20,
+            pady=8
         )
-        status_bar.pack(side='bottom', fill='x')
+        status_bar.pack(fill='x')
+        
+        # Add a subtle top border
+        border_frame = tk.Frame(
+            status_container,
+            bg=colors['panel_border'],
+            height=1
+        )
+        border_frame.pack(fill='x', side='top')
 
     def _connect_event_handlers(self):
         """Connect event handlers and observers."""
@@ -460,6 +553,14 @@ class DICQualityInspector:
     def _on_zoom_changed(self, zoom_level: float):
         """Handle zoom level change from image canvas."""
         self.control_panel.update_zoom_level(zoom_level)
+
+    def toggle_theme(self):
+        """Toggle between light and dark themes."""
+        try:
+            # This is a placeholder for now - we'll implement theme switching later
+            messagebox.showinfo("Theme Toggle", "Theme switching will be implemented in the next update!")
+        except Exception as e:
+            print(f"Error toggling theme: {e}")
 
     # State Change Observers
     def _on_analysis_result_changed(self, result: AnalysisResult):

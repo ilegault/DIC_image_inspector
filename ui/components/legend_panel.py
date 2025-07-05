@@ -102,42 +102,60 @@ class LegendPanel:
 
     def _create_legend(self, spectrum_type: str):
         """
-        Create legend UI for specified spectrum.
+        Create legend UI with modern styling.
 
         Args:
             spectrum_type: Spectrum type to create legend for
         """
-        # Create legend container with larger fixed height for full display
+        # Create legend container with modern card-like appearance
         self.legend_frame = tk.Frame(
             self.parent,
             bg=APP_CONFIG['colors']['panel_bg'],
-            relief='raised',
-            bd=2,
-            height=120
+            relief='flat',
+            bd=0,
+            height=140
         )
-        self.legend_frame.pack(fill='x', pady=10)
+        self.legend_frame.pack(fill='x', pady=APP_CONFIG['styling']['element_spacing'])
         self.legend_frame.pack_propagate(False)  # Maintain fixed height
+
+        # Inner container with padding
+        inner_frame = tk.Frame(
+            self.legend_frame,
+            bg=APP_CONFIG['colors']['panel_bg']
+        )
+        inner_frame.pack(fill='both', expand=True, 
+                        padx=APP_CONFIG['styling']['panel_padding'],
+                        pady=APP_CONFIG['styling']['panel_padding'])
 
         # Get spectrum definition
         spectrum_def = self.spectrum_definitions[spectrum_type]
 
-        # Title
-        title_text = f"Quality Legend - {spectrum_def['name']}"
+        # Modern title with icon
+        title_text = f"🎨 Quality Legend - {spectrum_def['name']}"
         title_label = tk.Label(
-            self.legend_frame,
+            inner_frame,
             text=title_text,
-            font=('Arial', 12, 'bold'),
+            font=APP_CONFIG['fonts']['subheading'],
             fg=APP_CONFIG['colors']['text_primary'],
             bg=APP_CONFIG['colors']['panel_bg']
         )
-        title_label.pack(pady=(8, 5))
+        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
 
-        # Color items container
-        items_container = tk.Frame(self.legend_frame, bg=APP_CONFIG['colors']['panel_bg'])
-        items_container.pack(fill='both', expand=True, pady=5)
+        # Color items container with subtle background
+        items_container = tk.Frame(
+            inner_frame, 
+            bg=APP_CONFIG['colors']['hover_bg'],
+            relief='flat',
+            bd=0
+        )
+        items_container.pack(fill='both', expand=True, pady=APP_CONFIG['styling']['small_spacing'])
+
+        # Inner items frame with padding
+        items_inner = tk.Frame(items_container, bg=APP_CONFIG['colors']['hover_bg'])
+        items_inner.pack(fill='both', expand=True, padx=10, pady=8)
 
         # Create color items
-        self._create_color_items(items_container, spectrum_def['colors'])
+        self._create_color_items(items_inner, spectrum_def['colors'])
 
     def _create_color_items(self, container: tk.Widget, colors: List[Tuple[int, int, int, str]]):
         """
@@ -159,19 +177,30 @@ class LegendPanel:
                 # Extract short label (before colon)
                 short_label = label.split(':')[0] if ':' in label else label
 
-                # Create legend item with larger, more prominent display
+                # Create modern legend item with card-like appearance
                 item = tk.Label(
                     container,
                     text=f" {short_label} ",
                     bg=bg_color,
                     fg=text_color,
-                    font=('Arial', 10, 'bold'),
-                    relief='raised',
-                    bd=2,
-                    padx=4,
-                    pady=3
+                    font=APP_CONFIG['fonts']['small_bold'],
+                    relief='flat',
+                    bd=0,
+                    padx=8,
+                    pady=6
                 )
-                item.pack(side='left', padx=2, expand=True, fill='both')
+                item.pack(side='left', padx=3, expand=True, fill='both')
+                
+                # Add subtle hover effect
+                def on_enter(e, item=item, original_bg=bg_color):
+                    # Slightly lighten the color on hover
+                    pass  # Keep original color for now
+                
+                def on_leave(e, item=item, original_bg=bg_color):
+                    item.configure(bg=original_bg)
+                
+                item.bind("<Enter>", on_enter)
+                item.bind("<Leave>", on_leave)
 
         except Exception as e:
             print(f"Error creating color items: {e}")

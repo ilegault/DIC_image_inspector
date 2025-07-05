@@ -12,27 +12,92 @@ APP_AUTHOR = "DIC Analysis Team"
 
 # UI Colors and Themes
 APP_CONFIG = {
+    'theme': 'light',  # Default theme
     'colors': {
-        'background': '#2c3e50',
-        'panel_bg': '#34495e',
-        'text_primary': '#ecf0f1',
-        'text_secondary': '#bdc3c7',
-        'text_muted': '#95a5a6',
-        'status_bar': '#95a5a6',
-        'accent_blue': '#3498db',
-        'accent_green': '#2ecc71',
-        'accent_orange': '#e67e22',
-        'accent_red': '#e74c3c',
-        'accent_purple': '#9b59b6'
+        # Light theme colors
+        'light': {
+            # Modern gradient background scheme
+            'background': '#f8fafc',  # Light gray-blue background
+            'panel_bg': '#ffffff',    # Pure white panels
+            'panel_border': '#e2e8f0', # Subtle border
+            'panel_shadow': '#64748b20', # Subtle shadow
+            
+            # Text colors
+            'text_primary': '#1e293b',   # Dark slate
+            'text_secondary': '#475569', # Medium slate
+            'text_muted': '#94a3b8',     # Light slate
+            'text_accent': '#0f172a',    # Very dark for emphasis
+            
+            # Status and UI elements
+            'status_bar': '#334155',     # Dark slate for status
+            'canvas_bg': '#ffffff',      # White canvas background
+            'hover_bg': '#f1f5f9',       # Light hover background
+            'selected_bg': '#e0e7ff',    # Light blue selection
+        },
+        
+        # Dark theme colors
+        'dark': {
+            # Dark modern background scheme
+            'background': '#0f172a',     # Very dark slate
+            'panel_bg': '#1e293b',       # Dark slate panels
+            'panel_border': '#334155',   # Medium slate border
+            'panel_shadow': '#00000040', # Dark shadow
+            
+            # Text colors (inverted)
+            'text_primary': '#f8fafc',   # Light gray-blue
+            'text_secondary': '#cbd5e1', # Light slate
+            'text_muted': '#64748b',     # Medium slate
+            'text_accent': '#ffffff',    # Pure white for emphasis
+            
+            # Status and UI elements
+            'status_bar': '#cbd5e1',     # Light slate for status
+            'canvas_bg': '#1e293b',      # Dark slate canvas
+            'hover_bg': '#334155',       # Medium slate hover
+            'selected_bg': '#1e40af',    # Dark blue selection
+        },
+        
+        # Modern accent colors (same for both themes)
+        'primary': '#3b82f6',        # Modern blue
+        'secondary': '#6366f1',      # Indigo
+        'success': '#10b981',        # Emerald green
+        'warning': '#f59e0b',        # Amber
+        'danger': '#ef4444',         # Red
+        'info': '#06b6d4',           # Cyan
+        'purple': '#8b5cf6',         # Violet
+        'pink': '#ec4899',           # Pink
+        
+        # Button specific colors
+        'btn_primary': '#3b82f6',
+        'btn_primary_hover': '#2563eb',
+        'btn_secondary': '#6b7280',
+        'btn_secondary_hover': '#4b5563',
+        'btn_success': '#10b981',
+        'btn_success_hover': '#059669',
+        'btn_warning': '#f59e0b',
+        'btn_warning_hover': '#d97706',
+        'btn_danger': '#ef4444',
+        'btn_danger_hover': '#dc2626',
+        
+        # Legacy compatibility (keeping old names for existing code)
+        'accent_blue': '#3b82f6',
+        'accent_green': '#10b981',
+        'accent_orange': '#f59e0b',
+        'accent_red': '#ef4444',
+        'accent_purple': '#8b5cf6'
     },
 
     'fonts': {
-        'title': ('Arial', 24, 'bold'),
-        'heading': ('Arial', 16, 'bold'),
-        'subheading': ('Arial', 12, 'bold'),
-        'body': ('Arial', 10),
-        'small': ('Arial', 8),
-        'monospace': ('Courier New', 10)
+        'title': ('Segoe UI', 28, 'bold'),
+        'heading': ('Segoe UI', 18, 'bold'),
+        'subheading': ('Segoe UI', 14, 'bold'),
+        'body': ('Segoe UI', 11),
+        'body_bold': ('Segoe UI', 11, 'bold'),
+        'small': ('Segoe UI', 9),
+        'small_bold': ('Segoe UI', 9, 'bold'),
+        'button': ('Segoe UI', 10, 'bold'),
+        'button_large': ('Segoe UI', 12, 'bold'),
+        'monospace': ('Consolas', 10),
+        'status': ('Segoe UI', 9)
     },
 
     'display': {
@@ -42,6 +107,37 @@ APP_CONFIG = {
         'min_window_width': 800,
         'min_window_height': 600,
         'default_window_size': (1200, 800)
+    },
+
+    'styling': {
+        # Modern button styling
+        'button_padding_x': 20,
+        'button_padding_y': 8,
+        'button_border_radius': 6,
+        'button_border_width': 0,
+        'button_relief': 'flat',
+        
+        # Panel styling
+        'panel_padding': 15,
+        'panel_border_radius': 8,
+        'panel_relief': 'flat',
+        'panel_border_width': 1,
+        
+        # Spacing
+        'section_spacing': 20,
+        'element_spacing': 10,
+        'small_spacing': 5,
+        
+        # Shadows and effects
+        'shadow_offset': 2,
+        'shadow_blur': 4,
+        'hover_lift': 1,
+        
+        # Modern UI elements
+        'card_elevation': 2,
+        'border_radius': 8,
+        'input_border_radius': 6,
+        'button_hover_lift': 2
     },
 
     'roi': {
@@ -357,6 +453,56 @@ VERSION_INFO = {
     }
 }
 
+
+def get_theme_colors():
+    """Get colors for the current theme."""
+    theme = APP_CONFIG['theme']
+    theme_colors = APP_CONFIG['colors'][theme].copy()
+    
+    # Add common colors that don't change between themes
+    common_colors = {
+        'primary': APP_CONFIG['colors']['primary'],
+        'secondary': APP_CONFIG['colors']['secondary'],
+        'success': APP_CONFIG['colors']['success'],
+        'warning': APP_CONFIG['colors']['warning'],
+        'danger': APP_CONFIG['colors']['danger'],
+        'info': APP_CONFIG['colors']['info'],
+        'purple': APP_CONFIG['colors']['purple'],
+        'pink': APP_CONFIG['colors']['pink'],
+        'btn_primary': APP_CONFIG['colors']['btn_primary'],
+        'btn_primary_hover': APP_CONFIG['colors']['btn_primary_hover'],
+        'btn_secondary': APP_CONFIG['colors']['btn_secondary'],
+        'btn_secondary_hover': APP_CONFIG['colors']['btn_secondary_hover'],
+        'btn_success': APP_CONFIG['colors']['btn_success'],
+        'btn_success_hover': APP_CONFIG['colors']['btn_success_hover'],
+        'btn_warning': APP_CONFIG['colors']['btn_warning'],
+        'btn_warning_hover': APP_CONFIG['colors']['btn_warning_hover'],
+        'btn_danger': APP_CONFIG['colors']['btn_danger'],
+        'btn_danger_hover': APP_CONFIG['colors']['btn_danger_hover'],
+        'accent_blue': APP_CONFIG['colors']['accent_blue'],
+        'accent_green': APP_CONFIG['colors']['accent_green'],
+        'accent_orange': APP_CONFIG['colors']['accent_orange'],
+        'accent_red': APP_CONFIG['colors']['accent_red'],
+        'accent_purple': APP_CONFIG['colors']['accent_purple']
+    }
+    
+    theme_colors.update(common_colors)
+    return theme_colors
+
+
+def set_theme(theme_name):
+    """Set the application theme."""
+    if theme_name in ['light', 'dark']:
+        APP_CONFIG['theme'] = theme_name
+        return True
+    return False
+
+
+def get_current_theme():
+    """Get the current theme name."""
+    return APP_CONFIG['theme']
+
+
 # Export configuration for other modules
 __all__ = [
     'APP_NAME',
@@ -377,5 +523,8 @@ __all__ = [
     'LIMITS',
     'PERFORMANCE',
     'DEBUG',
-    'VERSION_INFO'
+    'VERSION_INFO',
+    'get_theme_colors',
+    'set_theme',
+    'get_current_theme'
 ]
