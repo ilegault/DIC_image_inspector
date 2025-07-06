@@ -1,8 +1,8 @@
-# ui/components/legend_panel.py - Clean Legend Component
+# ui/components/legend_panel.py - Legend Component with Dark Mode
 
 import tkinter as tk
 from typing import Dict, List, Tuple
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
 
 
 class LegendPanel:
@@ -39,7 +39,7 @@ class LegendPanel:
                 ]
             },
             'controlled': {
-                'name': 'Controlled Pattern Quality (Colorblind-Friendly)',
+                'name': 'Controlled Pattern Quality',
                 'colors': [
                     (50, 0, 0, "Unusable (0-70%): No correlation possible"),
                     (255, 0, 0, "Poor (70-80%): Unreliable correlation"),
@@ -47,6 +47,17 @@ class LegendPanel:
                     (255, 255, 0, "Good (85-90%): Good correlation quality"),
                     (0, 255, 255, "Very Good (90-95%): Very reliable"),
                     (0, 100, 255, "Excellent (95-100%): Optimal pattern")
+                ]
+            },
+            'custom_dic': {
+                'name': 'Custom DIC Assessment',
+                'colors': [
+                    (0, 0, 0, "Critical: Not suitable for DIC"),
+                    (255, 0, 0, "Minimum: Threshold for DIC"),
+                    (255, 127, 0, "Good: Acceptable for DIC"),
+                    (255, 255, 0, "Very Good: Good for DIC"),
+                    (0, 255, 0, "Excellent: Excellent for DIC"),
+                    (0, 0, 255, "Perfect: Ideal for DIC")
                 ]
             }
         }
@@ -56,23 +67,16 @@ class LegendPanel:
         Show legend for specified spectrum type.
 
         Args:
-            spectrum_type: Type of spectrum to display legend for
+            spectrum_type: Type of spectrum ('optimized', 'controlled', etc.)
         """
         try:
-            # Hide existing legend
+            # Clear existing legend
             self.hide_legend()
-
-            # Validate spectrum type
-            if spectrum_type not in self.spectrum_definitions:
-                print(f"WARNING: Unknown spectrum type '{spectrum_type}', using 'custom_dic'")
-                spectrum_type = 'custom_dic'
 
             # Create new legend
             self._create_legend(spectrum_type)
             self.current_spectrum = spectrum_type
             self.is_visible = True
-
-            print(f"Legend shown for {spectrum_type}")
 
         except Exception as e:
             print(f"ERROR showing legend: {e}")
@@ -80,19 +84,15 @@ class LegendPanel:
             traceback.print_exc()
 
     def hide_legend(self):
-        """Hide the current legend."""
-        try:
-            if self.legend_frame:
-                self.legend_frame.destroy()
-                self.legend_frame = None
-                self.is_visible = False
-                print("Legend hidden")
-        except Exception as e:
-            print(f"ERROR hiding legend: {e}")
+        """Hide the legend panel."""
+        if self.legend_frame:
+            self.legend_frame.destroy()
+            self.legend_frame = None
+        self.is_visible = False
 
-    def update_legend(self, spectrum_type: str):
+    def update_spectrum(self, spectrum_type: str):
         """
-        Update legend to new spectrum type.
+        Update legend to show different spectrum.
 
         Args:
             spectrum_type: New spectrum type to display
@@ -105,117 +105,186 @@ class LegendPanel:
         Create legend UI with modern styling.
 
         Args:
-            spectrum_type: Spectrum type to create legend for
+            spectrum_type: Type of spectrum to display
         """
-        # Create legend container with modern card-like appearance
-        self.legend_frame = tk.Frame(
-            self.parent,
-            bg=APP_CONFIG['colors']['panel_bg'],
-            relief='flat',
-            bd=0,
-            height=140
-        )
-        self.legend_frame.pack(fill='x', pady=APP_CONFIG['styling']['element_spacing'])
-        self.legend_frame.pack_propagate(False)  # Maintain fixed height
+        if spectrum_type not in self.spectrum_definitions:
+            print(f"Unknown spectrum type: {spectrum_type}")
+            return
 
-        # Inner container with padding
-        inner_frame = tk.Frame(
-            self.legend_frame,
-            bg=APP_CONFIG['colors']['panel_bg']
-        )
-        inner_frame.pack(fill='both', expand=True, 
-                        padx=APP_CONFIG['styling']['panel_padding'],
-                        pady=APP_CONFIG['styling']['panel_padding'])
-
-        # Get spectrum definition
+        colors = get_theme_colors()
         spectrum_def = self.spectrum_definitions[spectrum_type]
 
-        # Modern title with icon
-        title_text = f"🎨 Quality Legend - {spectrum_def['name']}"
-        title_label = tk.Label(
-            inner_frame,
-            text=title_text,
-            font=APP_CONFIG['fonts']['subheading'],
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+        # Create legend container with modern styling
+        self.legend_frame = tk.Frame(
+            self.parent,
+            bg=colors['panel_bg'],
+            relief='flat',
+            bd=0,
+            highlightbackground=colors['panel_border'],
+            highlightthickness=1
         )
-        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
+        self.legend_frame.place(x=10, y=10, width=320, height=240)
 
-        # Color items container with subtle background
-        items_container = tk.Frame(
-            inner_frame, 
-            bg=APP_CONFIG['colors']['hover_bg'],
+        # Skip shadow frame for now - it's causing the color issue
+        # Tkinter doesn't support RGBA colors (colors with transparency)
+
+        # Inner content frame
+        content_frame = tk.Frame(
+            self.legend_frame,
+            bg=colors['panel_bg'],
             relief='flat',
             bd=0
         )
-        items_container.pack(fill='both', expand=True, pady=APP_CONFIG['styling']['small_spacing'])
+        content_frame.place(x=0, y=0, relwidth=1, relheight=1)
 
-        # Inner items frame with padding
-        items_inner = tk.Frame(items_container, bg=APP_CONFIG['colors']['hover_bg'])
-        items_inner.pack(fill='both', expand=True, padx=10, pady=8)
+        # Legend header with theme-appropriate styling
+        header_frame = tk.Frame(
+            content_frame,
+            bg=colors['hover_bg'],
+            height=36
+        )
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
 
-        # Create color items
-        self._create_color_items(items_inner, spectrum_def['colors'])
+        # Title with proper contrast
+        title_label = tk.Label(
+            header_frame,
+            text=f"🎨 {spectrum_def['name']}",
+            font=('Segoe UI', 11, 'bold'),
+            fg=colors['text_primary'],
+            bg=colors['hover_bg']
+        )
+        title_label.pack(side='left', padx=12, pady=8)
 
-    def _create_color_items(self, container: tk.Widget, colors: List[Tuple[int, int, int, str]]):
+        # Close button
+        close_btn = tk.Label(
+            header_frame,
+            text="✕",
+            font=('Segoe UI', 12),
+            fg=colors['text_secondary'],
+            bg=colors['hover_bg'],
+            cursor='hand2'
+        )
+        close_btn.pack(side='right', padx=12)
+        close_btn.bind("<Button-1>", lambda e: self.hide_legend())
+
+        # Add hover effect to close button
+        def on_enter(e):
+            close_btn.config(fg=colors['text_primary'])
+
+        def on_leave(e):
+            close_btn.config(fg=colors['text_secondary'])
+
+        close_btn.bind("<Enter>", on_enter)
+        close_btn.bind("<Leave>", on_leave)
+
+        # Legend content
+        legend_content = tk.Frame(
+            content_frame,
+            bg=colors['panel_bg']
+        )
+        legend_content.pack(fill='both', expand=True, padx=12, pady=8)
+
+        # Create color entries
+        for i, (r, g, b, description) in enumerate(spectrum_def['colors']):
+            entry_frame = tk.Frame(
+                legend_content,
+                bg=colors['panel_bg']
+            )
+            entry_frame.pack(fill='x', pady=2)
+
+            # Color box with border
+            color_container = tk.Frame(
+                entry_frame,
+                bg=colors['panel_border'],
+                relief='flat',
+                bd=0
+            )
+            color_container.pack(side='left', padx=(0, 8))
+
+            color_box = tk.Frame(
+                color_container,
+                bg=f'#{r:02x}{g:02x}{b:02x}',
+                width=20,
+                height=20,
+                relief='flat',
+                bd=0
+            )
+            color_box.pack(padx=1, pady=1)
+
+            # Description with proper contrast
+            desc_parts = description.split(': ', 1)
+            if len(desc_parts) == 2:
+                # Range label
+                range_label = tk.Label(
+                    entry_frame,
+                    text=desc_parts[0] + ':',
+                    font=('Segoe UI', 9, 'bold'),
+                    fg=colors['text_primary'],
+                    bg=colors['panel_bg']
+                )
+                range_label.pack(side='left', padx=(0, 4))
+
+                # Description label
+                desc_label = tk.Label(
+                    entry_frame,
+                    text=desc_parts[1],
+                    font=('Segoe UI', 9),
+                    fg=colors['text_secondary'],
+                    bg=colors['panel_bg'],
+                    wraplength=220,
+                    justify='left'
+                )
+                desc_label.pack(side='left', fill='x', expand=True)
+            else:
+                # Single description
+                desc_label = tk.Label(
+                    entry_frame,
+                    text=description,
+                    font=('Segoe UI', 9),
+                    fg=colors['text_secondary'],
+                    bg=colors['panel_bg'],
+                    wraplength=280,
+                    justify='left'
+                )
+                desc_label.pack(side='left', fill='x', expand=True)
+
+        # Make legend draggable
+        self._make_draggable(self.legend_frame, header_frame)
+
+    def _make_draggable(self, widget, handle):
         """
-        Create color legend items.
+        Make a widget draggable by a handle.
 
         Args:
-            container: Container widget for color items
-            colors: List of (r, g, b, label) tuples
+            widget: Widget to make draggable
+            handle: Handle widget to drag by
         """
-        try:
-            for r, g, b, label in colors:
-                # Convert RGB to hex
-                bg_color = f"#{r:02x}{g:02x}{b:02x}"
 
-                # Determine text color based on brightness
-                brightness = (r * 0.299 + g * 0.587 + b * 0.114)
-                text_color = "white" if brightness < 128 else "black"
+        def start_drag(event):
+            widget.start_x = event.x
+            widget.start_y = event.y
 
-                # Extract short label (before colon)
-                short_label = label.split(':')[0] if ':' in label else label
+        def drag(event):
+            x = widget.winfo_x() + event.x - widget.start_x
+            y = widget.winfo_y() + event.y - widget.start_y
 
-                # Create modern legend item with card-like appearance
-                item = tk.Label(
-                    container,
-                    text=f" {short_label} ",
-                    bg=bg_color,
-                    fg=text_color,
-                    font=APP_CONFIG['fonts']['small_bold'],
-                    relief='flat',
-                    bd=0,
-                    padx=8,
-                    pady=6
-                )
-                item.pack(side='left', padx=3, expand=True, fill='both')
-                
-                # Add subtle hover effect
-                def on_enter(e, item=item, original_bg=bg_color):
-                    # Slightly lighten the color on hover
-                    pass  # Keep original color for now
-                
-                def on_leave(e, item=item, original_bg=bg_color):
-                    item.configure(bg=original_bg)
-                
-                item.bind("<Enter>", on_enter)
-                item.bind("<Leave>", on_leave)
+            # Keep within parent bounds
+            parent_width = self.parent.winfo_width()
+            parent_height = self.parent.winfo_height()
+            widget_width = widget.winfo_width()
+            widget_height = widget.winfo_height()
 
-        except Exception as e:
-            print(f"Error creating color items: {e}")
+            x = max(0, min(x, parent_width - widget_width))
+            y = max(0, min(y, parent_height - widget_height))
 
-    def is_legend_visible(self) -> bool:
-        """Check if legend is currently visible."""
-        return self.is_visible and self.legend_frame is not None
+            widget.place(x=x, y=y)
 
-    def get_current_spectrum(self) -> str:
-        """Get currently displayed spectrum type."""
-        return self.current_spectrum
+        handle.bind("<Button-1>", start_drag)
+        handle.bind("<B1-Motion>", drag)
 
-    def get_available_spectrums(self) -> List[str]:
-        """Get list of available spectrum types."""
-        return list(self.spectrum_definitions.keys())
+        # Change cursor on handle
+        handle.configure(cursor='fleur')
 
     def get_spectrum_info(self, spectrum_type: str) -> Dict:
         """
@@ -232,85 +301,7 @@ class LegendPanel:
         else:
             return {}
 
-    def add_custom_spectrum(self, spectrum_name: str, spectrum_def: Dict):
-        """
-        Add a custom spectrum definition.
-
-        Args:
-            spectrum_name: Name of the custom spectrum
-            spectrum_def: Spectrum definition dictionary
-        """
-        if 'name' in spectrum_def and 'colors' in spectrum_def:
-            self.spectrum_definitions[spectrum_name] = spectrum_def
-            print(f"Added custom spectrum: {spectrum_name}")
-        else:
-            print(f"Invalid spectrum definition for {spectrum_name}")
-
-    def remove_custom_spectrum(self, spectrum_name: str):
-        """
-        Remove a custom spectrum definition.
-
-        Args:
-            spectrum_name: Name of spectrum to remove
-        """
-        if spectrum_name in self.spectrum_definitions:
-            # Don't remove built-in spectrums
-            built_in = ['optimized', 'controlled']
-            if spectrum_name not in built_in:
-                del self.spectrum_definitions[spectrum_name]
-                print(f"Removed custom spectrum: {spectrum_name}")
-            else:
-                print(f"Cannot remove built-in spectrum: {spectrum_name}")
-        else:
-            print(f"Spectrum not found: {spectrum_name}")
-
-    def create_legend_tooltip(self, spectrum_type: str) -> str:
-        """
-        Create detailed tooltip text for a spectrum.
-
-        Args:
-            spectrum_type: Spectrum type to create tooltip for
-
-        Returns:
-            Formatted tooltip text
-        """
-        if spectrum_type not in self.spectrum_definitions:
-            return "Unknown spectrum type"
-
-        spectrum_def = self.spectrum_definitions[spectrum_type]
-        tooltip_lines = [f"Spectrum: {spectrum_def['name']}", ""]
-
-        for r, g, b, label in spectrum_def['colors']:
-            tooltip_lines.append(f"• {label}")
-
-        return "\n".join(tooltip_lines)
-
-    def export_legend_image(self, spectrum_type: str, filename: str):
-        """
-        Export legend as an image file.
-
-        Args:
-            spectrum_type: Spectrum type to export
-            filename: Output filename
-        """
-        try:
-            # This would require additional PIL/image generation code
-            # For now, just provide a placeholder
-            print(f"Legend export for {spectrum_type} to {filename} - Feature not implemented yet")
-
-        except Exception as e:
-            print(f"Error exporting legend: {e}")
-
-    def get_legend_dimensions(self) -> Tuple[int, int]:
-        """
-        Get current legend dimensions.
-
-        Returns:
-            Tuple of (width, height) in pixels
-        """
-        if self.legend_frame:
-            try:
-                return self.legend_frame.winfo_width(), self.legend_frame.winfo_height()
-            except:
-                return (0, 0)
-        return (0, 0)
+    def refresh_theme(self):
+        """Refresh legend with new theme colors if visible."""
+        if self.is_visible and self.current_spectrum:
+            self.show_legend(self.current_spectrum)

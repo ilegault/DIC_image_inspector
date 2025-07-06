@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 from typing import Optional
 from models.analysis_result import AnalysisResult
 from core.report_generator import ReportGenerator
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
 
 
 class ResultsPopup:
@@ -44,10 +44,12 @@ class ResultsPopup:
 
     def _create_popup_window(self):
         """Create the main popup window."""
+        colors = get_theme_colors()
+        
         self.popup_window = tk.Toplevel(self.parent)
         self.popup_window.title("DIC Quality Analysis Results")
         self.popup_window.geometry("1000x800")
-        self.popup_window.configure(bg=APP_CONFIG['colors']['background'])
+        self.popup_window.configure(bg=colors['background'])
         self.popup_window.transient(self.parent)
         self.popup_window.grab_set()
 
@@ -57,8 +59,10 @@ class ResultsPopup:
 
     def _create_popup_content(self):
         """Create the scrollable content area."""
+        colors = get_theme_colors()
+        
         # Main container
-        main_frame = tk.Frame(self.popup_window, bg=APP_CONFIG['colors']['background'])
+        main_frame = tk.Frame(self.popup_window, bg=colors['background'])
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
         # Create scrollable area
@@ -69,10 +73,12 @@ class ResultsPopup:
 
     def _create_scrollable_content(self, parent):
         """Create scrollable content area with results."""
+        colors = get_theme_colors()
+        
         # Canvas and scrollbar for scrolling
-        canvas = tk.Canvas(parent, bg=APP_CONFIG['colors']['background'], highlightthickness=0)
+        canvas = tk.Canvas(parent, bg=colors['background'], highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient='vertical', command=canvas.yview)
-        self.scrollable_frame = tk.Frame(canvas, bg=APP_CONFIG['colors']['background'])
+        self.scrollable_frame = tk.Frame(canvas, bg=colors['background'])
 
         # Configure scrolling
         def configure_scroll_region(event=None):
@@ -137,28 +143,31 @@ class ResultsPopup:
 
     def _add_title_section(self):
         """Add title section."""
+        colors = get_theme_colors()
+        
         title_label = tk.Label(
             self.scrollable_frame,
             text="🔬 DIC Image Quality Analysis Results",
             font=APP_CONFIG['fonts']['title'],
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['background']
+            fg=colors['text_primary'],
+            bg=colors['background']
         )
         title_label.pack(pady=(0, 20))
 
     def _add_executive_summary(self):
         """Add executive summary section."""
+        colors = get_theme_colors()
         section_frame = self._create_section_frame("📋 Executive Summary")
 
         # Overall score display
-        score_frame = tk.Frame(section_frame, bg=APP_CONFIG['colors']['panel_bg'])
+        score_frame = tk.Frame(section_frame, bg=colors['panel_bg'])
         score_frame.pack(pady=10)
 
         overall_score = self.analysis_result.overall_score
         quality_text, score_color = self.analysis_result.get_quality_assessment()
 
         # Large score display
-        score_display = tk.Frame(score_frame, bg=APP_CONFIG['colors']['panel_bg'])
+        score_display = tk.Frame(score_frame, bg=colors['panel_bg'])
         score_display.pack()
 
         tk.Label(
@@ -166,15 +175,15 @@ class ResultsPopup:
             text=f"{overall_score:.1f}",
             font=('Arial', 48, 'bold'),
             fg=score_color,
-            bg=APP_CONFIG['colors']['panel_bg']
+            bg=colors['panel_bg']
         ).pack(side='left')
 
         tk.Label(
             score_display,
             text="/100",
             font=('Arial', 24),
-            fg=APP_CONFIG['colors']['text_secondary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg']
         ).pack(side='left', anchor='s', padx=(5, 0))
 
         tk.Label(
@@ -182,7 +191,7 @@ class ResultsPopup:
             text=quality_text,
             font=('Arial', 14, 'bold'),
             fg=score_color,
-            bg=APP_CONFIG['colors']['panel_bg']
+            bg=colors['panel_bg']
         ).pack(pady=5)
 
         # Analysis method
@@ -191,88 +200,90 @@ class ResultsPopup:
             section_frame,
             text=method_text,
             font=APP_CONFIG['fonts']['body'],
-            fg=APP_CONFIG['colors']['text_secondary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg']
         ).pack(pady=(0, 10))
 
     def _add_technical_analysis(self):
         """Add technical analysis section."""
+        colors = get_theme_colors()
         section_frame = self._create_section_frame("📊 Technical Analysis")
 
         stats = self.analysis_result.quality_map_stats
 
         # Create grid for statistics
-        stats_grid = tk.Frame(section_frame, bg=APP_CONFIG['colors']['panel_bg'])
+        stats_grid = tk.Frame(section_frame, bg=colors['panel_bg'])
         stats_grid.pack(pady=10)
 
         # Left column
-        left_col = tk.Frame(stats_grid, bg=APP_CONFIG['colors']['panel_bg'])
+        left_col = tk.Frame(stats_grid, bg=colors['panel_bg'])
         left_col.pack(side='left', padx=20)
 
         tk.Label(
             left_col,
             text="Quality Statistics:",
             font=('Arial', 12, 'bold'),
-            fg='#3498db',
-            bg=APP_CONFIG['colors']['panel_bg']
+            fg=colors['primary'],
+            bg=colors['panel_bg']
         ).pack(anchor='w')
 
-        self._add_stat_label(left_col, f"• Maximum: {stats.max_quality:.1f}%", '#2ecc71')
-        self._add_stat_label(left_col, f"• Average: {self.analysis_result.overall_score:.1f}%", '#3498db')
-        self._add_stat_label(left_col, f"• Minimum: {stats.min_quality:.1f}%", '#e74c3c')
+        self._add_stat_label(left_col, f"• Maximum: {stats.max_quality:.1f}%", colors['success'])
+        self._add_stat_label(left_col, f"• Average: {self.analysis_result.overall_score:.1f}%", colors['primary'])
+        self._add_stat_label(left_col, f"• Minimum: {stats.min_quality:.1f}%", colors['danger'])
 
         # Right column
-        right_col = tk.Frame(stats_grid, bg=APP_CONFIG['colors']['panel_bg'])
+        right_col = tk.Frame(stats_grid, bg=colors['panel_bg'])
         right_col.pack(side='right', padx=20)
 
         tk.Label(
             right_col,
             text="Distribution:",
             font=('Arial', 12, 'bold'),
-            fg='#3498db',
-            bg=APP_CONFIG['colors']['panel_bg']
+            fg=colors['primary'],
+            bg=colors['panel_bg']
         ).pack(anchor='w')
 
-        self._add_stat_label(right_col, f"• Median: {stats.median_quality:.1f}%", '#f39c12')
-        self._add_stat_label(right_col, f"• Std Deviation: {stats.std_quality:.1f}%", '#9b59b6')
-        self._add_stat_label(right_col, f"• Spectrum: {self.analysis_result.spectrum_used}", '#95a5a6')
+        self._add_stat_label(right_col, f"• Median: {stats.median_quality:.1f}%", colors['warning'])
+        self._add_stat_label(right_col, f"• Std Deviation: {stats.std_quality:.1f}%", colors['purple'])
+        self._add_stat_label(right_col, f"• Spectrum: {self.analysis_result.spectrum_used}", colors['secondary'])
 
     def _add_dic_parameters(self):
         """Add DIC parameters section."""
+        colors = get_theme_colors()
         section_frame = self._create_section_frame("⚙️ Recommended DIC Parameters")
 
         if self.analysis_result.dic_parameters:
             params = self.analysis_result.dic_parameters
 
             # Parameters grid
-            params_grid = tk.Frame(section_frame, bg=APP_CONFIG['colors']['panel_bg'])
+            params_grid = tk.Frame(section_frame, bg=colors['panel_bg'])
             params_grid.pack(pady=10)
 
             # Left column
-            left_params = tk.Frame(params_grid, bg=APP_CONFIG['colors']['panel_bg'])
+            left_params = tk.Frame(params_grid, bg=colors['panel_bg'])
             left_params.pack(side='left', padx=30)
 
             tk.Label(
                 left_params,
                 text="Correlation Setup:",
                 font=('Arial', 12, 'bold'),
-                fg='#3498db',
-                bg=APP_CONFIG['colors']['panel_bg']
+                fg=colors['primary'],
+                bg=colors['panel_bg']
             ).pack(anchor='w')
 
             self._add_param_label(left_params, f"• Subset Size: {params.facet_size} pixels")
             self._add_param_label(left_params, f"• Step Size: {params.step_size} pixels")
 
             # Right column
-            right_params = tk.Frame(params_grid, bg=APP_CONFIG['colors']['panel_bg'])
+            right_params = tk.Frame(params_grid, bg=colors['panel_bg'])
             right_params.pack(side='right', padx=30)
 
             tk.Label(
                 right_params,
                 text="Expected Performance:",
                 font=('Arial', 12, 'bold'),
-                fg='#3498db',
-                bg=APP_CONFIG['colors']['panel_bg']
+                fg=colors['primary'],
+                bg=colors['panel_bg']
             ).pack(anchor='w')
 
             self._add_param_label(right_params, f"• Overlap: {params.overlap_percent:.0f}%")
@@ -280,6 +291,7 @@ class ResultsPopup:
 
     def _add_recommendations(self):
         """Add recommendations section."""
+        colors = get_theme_colors()
         section_frame = self._create_section_frame("💡 Recommendations")
 
         # Generate recommendations using report generator
@@ -299,8 +311,8 @@ class ResultsPopup:
                 section_frame,
                 text=rec_line.strip(),
                 font=APP_CONFIG['fonts']['body'],
-                fg=APP_CONFIG['colors']['text_primary'],
-                bg=APP_CONFIG['colors']['panel_bg'],
+                fg=colors['text_primary'],
+                bg=colors['panel_bg'],
                 wraplength=800,
                 justify='left'
             )
@@ -308,9 +320,10 @@ class ResultsPopup:
 
     def _add_image_information(self):
         """Add image information section."""
+        colors = get_theme_colors()
         section_frame = self._create_section_frame("ℹ️ Image Information")
 
-        info_frame = tk.Frame(section_frame, bg=APP_CONFIG['colors']['panel_bg'])
+        info_frame = tk.Frame(section_frame, bg=colors['panel_bg'])
         info_frame.pack(pady=10)
 
         # Add image dimensions if available
@@ -320,8 +333,8 @@ class ResultsPopup:
                 info_frame,
                 text=f"Image Size: {w} × {h} pixels",
                 font=APP_CONFIG['fonts']['body'],
-                fg=APP_CONFIG['colors']['text_secondary'],
-                bg=APP_CONFIG['colors']['panel_bg']
+                fg=colors['text_secondary'],
+                bg=colors['panel_bg']
             ).pack()
 
         # Add ROI information if available
@@ -330,23 +343,25 @@ class ResultsPopup:
                 info_frame,
                 text=f"ROI Area: {self.analysis_result.roi_area:.0f} pixels²",
                 font=APP_CONFIG['fonts']['body'],
-                fg=APP_CONFIG['colors']['text_secondary'],
-                bg=APP_CONFIG['colors']['panel_bg']
+                fg=colors['text_secondary'],
+                bg=colors['panel_bg']
             ).pack()
         else:
             tk.Label(
                 info_frame,
                 text="ROI: Full image analyzed",
                 font=APP_CONFIG['fonts']['body'],
-                fg=APP_CONFIG['colors']['text_secondary'],
-                bg=APP_CONFIG['colors']['panel_bg']
+                fg=colors['text_secondary'],
+                bg=colors['panel_bg']
             ).pack()
 
     def _create_section_frame(self, title: str) -> tk.Frame:
         """Create a section frame with title."""
+        colors = get_theme_colors()
+        
         section_frame = tk.Frame(
             self.scrollable_frame,
-            bg=APP_CONFIG['colors']['panel_bg'],
+            bg=colors['panel_bg'],
             relief='raised',
             bd=2
         )
@@ -357,43 +372,51 @@ class ResultsPopup:
             section_frame,
             text=title,
             font=APP_CONFIG['fonts']['heading'],
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
         ).pack(pady=10)
 
         return section_frame
 
     def _add_stat_label(self, parent, text: str, color: str):
         """Add a colored statistic label."""
+        colors = get_theme_colors()
         tk.Label(
             parent,
             text=text,
             font=APP_CONFIG['fonts']['body'],
             fg=color,
-            bg=APP_CONFIG['colors']['panel_bg']
+            bg=colors['panel_bg']
         ).pack(anchor='w')
 
     def _add_param_label(self, parent, text: str):
         """Add a parameter label."""
+        colors = get_theme_colors()
         tk.Label(
             parent,
             text=text,
             font=APP_CONFIG['fonts']['body'],
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['panel_bg']
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
         ).pack(anchor='w')
 
     def _create_close_button(self, parent):
         """Create close button."""
+        colors = get_theme_colors()
         close_btn = tk.Button(
             parent,
             text="Close Results",
-            bg='#3498db',
+            bg=colors['btn_primary'],
             fg='white',
             font=('Arial', 12, 'bold'),
             padx=30,
             pady=10,
-            command=self._close_popup
+            relief='flat',
+            bd=0,
+            cursor='hand2',
+            command=self._close_popup,
+            activebackground=colors['btn_primary_hover'],
+            activeforeground='white'
         )
         close_btn.pack(pady=20)
 

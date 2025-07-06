@@ -1,9 +1,9 @@
-# ui/components/control_panel.py - Clean UI Component
+# ui/components/control_panel.py - Fixed UI Component with Dark Mode
 
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Callable, Any
-from utils.constants import APP_CONFIG, get_theme_colors
+from utils.constants import APP_CONFIG, get_theme_colors, set_theme
 from utils.modern_styling import ModernStyleManager
 
 
@@ -28,6 +28,7 @@ class ControlPanel:
 
         # State tracking
         self.current_state = 'no_image'
+        self.dark_mode = APP_CONFIG['theme'] == 'dark'
 
         # UI elements
         self.buttons = {}
@@ -42,7 +43,7 @@ class ControlPanel:
     def _create_panel(self):
         """Create the control panel UI with modern styling."""
         colors = get_theme_colors()
-        
+
         # Main control frame with modern card-like appearance
         self.control_frame = tk.Frame(
             self.parent,
@@ -51,242 +52,263 @@ class ControlPanel:
             bd=0
         )
         self.control_frame.pack(fill='x', padx=0, pady=APP_CONFIG['styling']['element_spacing'])
-        
+
         # Add padding inside the panel
         self.inner_frame = tk.Frame(
             self.control_frame,
             bg=colors['panel_bg']
         )
-        self.inner_frame.pack(fill='x', padx=APP_CONFIG['styling']['panel_padding'], 
-                             pady=APP_CONFIG['styling']['panel_padding'])
+        self.inner_frame.pack(fill='x', padx=16, pady=16)
 
         # Create sections
         self._create_primary_controls()
         self._create_secondary_controls()
-        self._create_zoom_controls()
-        self._create_spectrum_controls()
-        self._create_roi_info_section()
-
-
+        self._create_navigation_and_analysis_controls()
 
     def _create_primary_controls(self):
-        """Create primary control buttons with modern styling."""
+        """Create primary control buttons with modern card design."""
         colors = get_theme_colors()
-        
-        # Section title
-        title_label = tk.Label(
-            self.inner_frame,
-            text="Primary Controls",
-            font=APP_CONFIG['fonts']['subheading'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
-        
-        primary_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
-        primary_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
 
-        # Primary buttons configuration with modern colors
+        # Primary Controls Card
+        primary_card = self._create_modern_card(self.inner_frame, "🎯 Primary Controls")
+
+        # Button grid for clean layout
+        button_grid = tk.Frame(primary_card, bg=colors['panel_bg'])
+        button_grid.pack(fill='x', padx=16, pady=16)
+
+        # Primary buttons with clean modern styling
         primary_buttons = [
-            ('load_btn', "📁 Load Image", colors['btn_primary'], 'load_image'),
-            ('screenshot_btn', "📸 Screenshot", colors['btn_warning'], 'take_screenshot'),
-            ('roi_btn', "🎯 Select ROI", colors['purple'], 'select_roi'),
-            ('analyze_btn', "🔬 Analyze", colors['btn_success'], 'analyze_image')
+            ('load_btn', "📁 Load Image", colors.get('btn_primary', '#2563eb'), 'load_image'),
+            ('screenshot_btn', "📸 Screenshot", colors.get('btn_info', '#3b82f6'), 'take_screenshot'),
+            ('roi_btn', "🎯 Select ROI", colors.get('btn_secondary', '#6b7280'), 'select_roi'),
+            ('analyze_btn', "🔬 Analyze", colors.get('btn_success', '#10b981'), 'analyze_image')
         ]
 
-        for btn_id, text, color, callback_key in primary_buttons:
-            btn = ModernStyleManager.create_modern_button(
-                primary_frame, text, color, 
-                command=lambda k=callback_key: self._execute_callback(k), 
-                size='normal'  # Smaller buttons for compact layout
+        for i, (btn_id, text, color, callback_key) in enumerate(primary_buttons):
+            btn = self._create_modern_button(
+                button_grid, text, color,
+                command=lambda k=callback_key: self._execute_callback(k),
+                style='primary'
             )
-            btn.pack(fill='x', pady=2)  # Stack vertically, full width
+            btn.grid(row=i // 2, column=i % 2, padx=6, pady=6, sticky='ew')
             self.buttons[btn_id] = btn
+
+        # Configure grid weights for responsive design
+        button_grid.grid_columnconfigure(0, weight=1)
+        button_grid.grid_columnconfigure(1, weight=1)
+
+        # ROI Status Information
+        roi_status_frame = tk.Frame(primary_card, bg=colors['hover_bg'], relief='flat', bd=0)
+        roi_status_frame.pack(fill='x', padx=16, pady=(0, 16))
+
+        roi_title = tk.Label(
+            roi_status_frame,
+            text="📍 ROI:",
+            font=APP_CONFIG['fonts']['small_bold'],
+            fg=colors['text_secondary'],
+            bg=colors['hover_bg']
+        )
+        roi_title.pack(side='left', padx=(12, 8), pady=6)
+
+        self.roi_info_label = tk.Label(
+            roi_status_frame,
+            text="Not Selected (analyzing full image)",
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_secondary'],
+            bg=colors['hover_bg']
+        )
+        self.roi_info_label.pack(side='left', pady=6)
 
     def _create_secondary_controls(self):
-        """Create secondary control buttons with modern styling."""
+        """Create secondary control buttons with modern card design."""
         colors = get_theme_colors()
-        
-        # Add spacing
-        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
-        spacer.pack(fill='x')
-        
-        # Section title
-        title_label = tk.Label(
-            self.inner_frame,
-            text="Analysis & Results",
-            font=APP_CONFIG['fonts']['subheading'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
-        
-        secondary_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
-        secondary_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
 
-        # Secondary buttons configuration with modern colors
-        secondary_buttons = [
-            ('quality_map_btn', "🗺️ Quality Map", colors['info'], 'toggle_quality_map'),
-            ('results_btn', "📊 Show Results", colors['secondary'], 'show_results'),
-            ('save_btn', "💾 Save Report", colors['btn_secondary'], 'save_report'),
-            ('theme_btn', "🌙 Dark Mode", colors['purple'], 'toggle_theme'),
-            ('help_btn', "❓ Help", colors['btn_secondary'], 'show_help'),
-            ('reset_display_btn', "🔄 Reset Display", colors['btn_warning'], 'reset_display_results'),
-            ('reset_btn', "🔄 Full Reset", colors['btn_danger'], 'reset_application')
+        # Actions Card
+        actions_card = self._create_modern_card(self.inner_frame, "⚙️ Actions & Results")
+
+        # Action buttons in organized rows
+        actions_frame = tk.Frame(actions_card, bg=colors['panel_bg'])
+        actions_frame.pack(fill='x', padx=16, pady=16)
+
+        # Row 1: Analysis Results
+        results_row = tk.Frame(actions_frame, bg=colors['panel_bg'])
+        results_row.pack(fill='x', pady=(0, 8))
+
+        results_buttons = [
+            ('quality_map_btn', "🗺️ Quality Map", colors.get('btn_info', '#3b82f6'), 'toggle_quality_map'),
+            ('results_btn', "📊 Show Results", colors.get('btn_primary', '#2563eb'), 'show_results'),
         ]
 
-        # Split secondary buttons into two columns for compact layout
-        left_col = tk.Frame(secondary_frame, bg=colors['panel_bg'])
-        left_col.pack(side='left', fill='both', expand=True, padx=(0, 5))
-        
-        right_col = tk.Frame(secondary_frame, bg=colors['panel_bg'])
-        right_col.pack(side='right', fill='both', expand=True, padx=(5, 0))
-
-        for i, (btn_id, text, color, callback_key) in enumerate(secondary_buttons):
-            parent_col = left_col if i % 2 == 0 else right_col
-            btn = ModernStyleManager.create_modern_button(
-                parent_col, text, color,
+        for i, (btn_id, text, color, callback_key) in enumerate(results_buttons):
+            btn = self._create_modern_button(
+                results_row, text, color,
                 command=lambda k=callback_key: self._execute_callback(k),
-                size='small'  # Smaller for compact layout
+                style='secondary'
             )
-            btn.pack(fill='x', pady=1)
+            btn.grid(row=0, column=i, padx=4, pady=0, sticky='ew')
             self.buttons[btn_id] = btn
 
-    def _create_zoom_controls(self):
-        """Create zoom control buttons with modern styling."""
-        colors = get_theme_colors()
-        
-        # Add spacing
-        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
-        spacer.pack(fill='x')
-        
-        # Section title
-        title_label = tk.Label(
-            self.inner_frame,
-            text="Image Navigation",
-            font=APP_CONFIG['fonts']['subheading'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
-        
-        zoom_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
-        zoom_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
+        results_row.grid_columnconfigure(0, weight=1)
+        results_row.grid_columnconfigure(1, weight=1)
 
-        # Zoom label with modern styling
-        zoom_label = tk.Label(
-            zoom_frame,
+        # Row 2: File Operations
+        file_row = tk.Frame(actions_frame, bg=colors['panel_bg'])
+        file_row.pack(fill='x', pady=(0, 8))
+
+        file_buttons = [
+            ('save_btn', "💾 Save Report", colors.get('btn_success', '#10b981'), 'save_report'),
+            ('help_btn', "❓ Help", colors.get('btn_neutral', '#64748b'), 'show_help'),
+        ]
+
+        for i, (btn_id, text, color, callback_key) in enumerate(file_buttons):
+            btn = self._create_modern_button(
+                file_row, text, color,
+                command=lambda k=callback_key: self._execute_callback(k),
+                style='secondary'
+            )
+            btn.grid(row=0, column=i, padx=4, pady=0, sticky='ew')
+            self.buttons[btn_id] = btn
+
+        file_row.grid_columnconfigure(0, weight=1)
+        file_row.grid_columnconfigure(1, weight=1)
+
+        # Row 3: System Controls
+        system_row = tk.Frame(actions_frame, bg=colors['panel_bg'])
+        system_row.pack(fill='x')
+
+        # Update button text based on current theme
+        theme_text = "☀️ Light Mode" if self.dark_mode else "🌙 Dark Mode"
+
+        system_buttons = [
+            ('theme_btn', theme_text, colors.get('btn_secondary', '#6b7280'), 'toggle_theme'),
+            ('reset_display_btn', "🔄 Reset View", colors.get('btn_warning', '#f59e0b'), 'reset_display_results'),
+        ]
+
+        for i, (btn_id, text, color, callback_key) in enumerate(system_buttons):
+            btn = self._create_modern_button(
+                system_row, text, color,
+                command=lambda k=callback_key: self._execute_callback(k),
+                style='secondary'
+            )
+            btn.grid(row=0, column=i, padx=4, pady=0, sticky='ew')
+            self.buttons[btn_id] = btn
+
+        system_row.grid_columnconfigure(0, weight=1)
+        system_row.grid_columnconfigure(1, weight=1)
+
+        # Danger Zone - Full Reset (separate, prominent)
+        danger_frame = tk.Frame(actions_card, bg=colors['panel_bg'])
+        danger_frame.pack(fill='x', padx=16, pady=(0, 16))
+
+        reset_btn = self._create_modern_button(
+            danger_frame, "🔄 Full Reset", colors.get('btn_danger', '#ef4444'),
+            command=lambda: self._execute_callback('reset_application'),
+            style='danger'
+        )
+        reset_btn.pack(fill='x')
+        self.buttons['reset_btn'] = reset_btn
+
+    def _create_navigation_and_analysis_controls(self):
+        """Create compact zoom controls with analysis method selector on the right."""
+        colors = get_theme_colors()
+
+        # Combined Navigation & Analysis Card
+        nav_card = self._create_modern_card(self.inner_frame, "🔍 Navigation & Analysis")
+
+        nav_content = tk.Frame(nav_card, bg=colors['panel_bg'])
+        nav_content.pack(fill='x', padx=16, pady=16)
+
+        # Main horizontal container
+        main_container = tk.Frame(nav_content, bg=colors['panel_bg'])
+        main_container.pack(fill='x')
+
+        # Left side: Compact zoom controls
+        zoom_section = tk.Frame(main_container, bg=colors['panel_bg'])
+        zoom_section.pack(side='left')
+
+        # Zoom controls title
+        zoom_title = tk.Label(
+            zoom_section,
             text="🔍 Zoom:",
-            font=APP_CONFIG['fonts']['body_bold'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        zoom_label.pack(side='left', padx=(0, APP_CONFIG['styling']['element_spacing']))
-
-        # Zoom buttons configuration with modern colors
-        zoom_buttons = [
-            ('zoom_in_btn', "➕", colors['btn_primary'], 'zoom_in'),
-            ('zoom_out_btn', "➖", colors['btn_primary'], 'zoom_out'),
-            ('zoom_fit_btn', "⬜ Fit", colors['btn_success'], 'zoom_fit'),
-            ('zoom_actual_btn', "1:1", colors['btn_warning'], 'zoom_actual')
-        ]
-
-        # Create zoom buttons in a 2x2 grid for compact layout
-        zoom_grid = tk.Frame(zoom_frame, bg=colors['panel_bg'])
-        zoom_grid.pack(fill='x', pady=5)
-        
-        for i, (btn_id, text, color, callback_key) in enumerate(zoom_buttons):
-            row = i // 2
-            col = i % 2
-            btn = ModernStyleManager.create_modern_button(
-                zoom_grid, text, color,
-                command=lambda k=callback_key: self._execute_callback(k),
-                size='small'
-            )
-            btn.grid(row=row, column=col, padx=2, pady=1, sticky='ew')
-            self.buttons[btn_id] = btn
-        
-        # Configure grid weights
-        zoom_grid.grid_columnconfigure(0, weight=1)
-        zoom_grid.grid_columnconfigure(1, weight=1)
-
-        # Zoom level display with modern styling
-        self.zoom_level_var = tk.StringVar(value="100%")
-        zoom_level_label = tk.Label(
-            zoom_frame,
-            textvariable=self.zoom_level_var,
-            font=APP_CONFIG['fonts']['body_bold'],
+            font=APP_CONFIG['fonts']['small_bold'],
             fg=colors['text_secondary'],
             bg=colors['panel_bg']
         )
-        zoom_level_label.pack(side='left', padx=APP_CONFIG['styling']['element_spacing'])
+        zoom_title.pack(anchor='w', pady=(0, 4))
 
-    def _create_spectrum_controls(self):
-        """Create spectrum selection controls with modern styling."""
-        colors = get_theme_colors()
-        
-        # Add spacing
-        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
-        spacer.pack(fill='x')
-        
-        # Section title
-        title_label = tk.Label(
-            self.inner_frame,
-            text="Analysis Configuration",
-            font=APP_CONFIG['fonts']['subheading'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
-        
-        spectrum_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
-        spectrum_frame.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
+        # Very compact zoom buttons in single row
+        zoom_frame = tk.Frame(zoom_section, bg=colors['panel_bg'])
+        zoom_frame.pack()
 
-        # Spectrum selection with modern styling
-        spectrum_label = tk.Label(
-            spectrum_frame,
-            text="Analysis Method:",
-            font=APP_CONFIG['fonts']['body_bold'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        spectrum_label.pack(side='left', padx=(0, APP_CONFIG['styling']['small_spacing']))
-
-        spectrum_options = [
-            'optimized',
-            'controlled'
+        zoom_buttons = [
+            ('zoom_in_btn', "➕", colors.get('btn_info', '#3b82f6'), 'zoom_in'),
+            ('zoom_out_btn', "➖", colors.get('btn_info', '#3b82f6'), 'zoom_out'),
+            ('zoom_fit_btn', "⬜", colors.get('btn_neutral', '#64748b'), 'zoom_fit'),
+            ('zoom_actual_btn', "1:1", colors.get('btn_neutral', '#64748b'), 'zoom_actual')
         ]
 
-        # Style the combobox
-        style = ttk.Style()
-        style.configure('Modern.TCombobox', 
-                       fieldbackground='white',
-                       background=colors['btn_primary'],
-                       borderwidth=1,
-                       relief='flat')
+        for i, (btn_id, text, color, callback_key) in enumerate(zoom_buttons):
+            btn = self._create_compact_button(
+                zoom_frame, text, color,
+                command=lambda k=callback_key: self._execute_callback(k)
+            )
+            btn.pack(side='left', padx=1)  # Very tight spacing
+            self.buttons[btn_id] = btn
 
+        # Compact zoom level display
+        self.zoom_level_var = tk.StringVar(value="100%")
+        zoom_label = tk.Label(
+            zoom_section,
+            textvariable=self.zoom_level_var,
+            font=('Segoe UI', 9, 'bold'),
+            fg=colors['text_primary'],
+            bg=colors['panel_bg']
+        )
+        zoom_label.pack(pady=(4, 0))
+
+        # Right side: Analysis method selector
+        analysis_section = tk.Frame(main_container, bg=colors['panel_bg'])
+        analysis_section.pack(side='right', padx=(20, 0))
+
+        # Analysis method title
+        method_title = tk.Label(
+            analysis_section,
+            text="🎨 Method:",
+            font=APP_CONFIG['fonts']['small_bold'],
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg']
+        )
+        method_title.pack(anchor='w', pady=(0, 4))
+
+        # Analysis method selection
+        method_frame = tk.Frame(analysis_section, bg=colors['panel_bg'])
+        method_frame.pack()
+
+        spectrum_options = ['optimized', 'controlled']
+
+        # Compact styled combobox
         self.spectrum_combo = ttk.Combobox(
-            spectrum_frame,
+            method_frame,
             textvariable=self.spectrum_var,
             values=spectrum_options,
             state='readonly',
-            width=15,
-            font=APP_CONFIG['fonts']['body'],
-            style='Modern.TCombobox'
+            width=12,  # Smaller width
+            font=APP_CONFIG['fonts']['small']
         )
-        self.spectrum_combo.pack(side='left', padx=APP_CONFIG['styling']['small_spacing'])
+        self.spectrum_combo.pack()
         self.spectrum_combo.bind('<<ComboboxSelected>>', self._on_spectrum_changed)
 
-        # Control parameters (initially hidden)
-        self._create_control_parameters(spectrum_frame)
+        # Apply combobox styling based on theme
+        self._style_combobox()
 
-    def _create_control_parameters(self, parent):
+        # Control parameters frame (initially hidden)
+        self.control_params_frame = tk.Frame(nav_card, bg=colors['panel_bg'])
+        self._create_control_parameters()
+
+    def _create_control_parameters(self):
         """Create control-specific parameter controls with modern styling."""
         colors = get_theme_colors()
-        
-        # Create a separate frame for control parameters
-        self.control_params_frame = tk.Frame(self.inner_frame, bg=colors['panel_bg'])
-        
+
         # Parameters container with subtle background
         params_container = tk.Frame(
             self.control_params_frame,
@@ -294,30 +316,30 @@ class ControlPanel:
             relief='flat',
             bd=0
         )
-        params_container.pack(fill='x', padx=10, pady=10)
-        
-        # Inner padding frame
-        self.control_frame = tk.Frame(params_container, bg=colors['hover_bg'])
-        self.control_frame.pack(fill='x', padx=15, pady=10)
+        params_container.pack(fill='x', padx=16, pady=(0, 16))
 
-        # Title with modern styling
+        # Inner padding frame
+        params_inner = tk.Frame(params_container, bg=colors['hover_bg'])
+        params_inner.pack(fill='x', padx=12, pady=12)
+
+        # Title
         control_title = tk.Label(
-            self.control_frame,
+            params_inner,
             text="📐 Advanced Parameters",
             font=APP_CONFIG['fonts']['body_bold'],
             fg=colors['primary'],
             bg=colors['hover_bg']
         )
         control_title.pack(anchor='w', pady=(0, 8))
-        
-        # Parameters row
-        params_row = tk.Frame(self.control_frame, bg=colors['hover_bg'])
+
+        # Parameters in a single row
+        params_row = tk.Frame(params_inner, bg=colors['hover_bg'])
         params_row.pack(fill='x')
 
-        # Facet size with modern styling
+        # Facet size
         facet_frame = tk.Frame(params_row, bg=colors['hover_bg'])
         facet_frame.pack(side='left', padx=(0, 20))
-        
+
         tk.Label(
             facet_frame,
             text="Facet Size:",
@@ -326,19 +348,20 @@ class ControlPanel:
             bg=colors['hover_bg']
         ).pack(side='left', padx=(0, 5))
 
-        facet_spinbox = tk.Spinbox(
+        self.facet_spinbox = tk.Spinbox(
             facet_frame,
             from_=11,
             to=51,
             increment=2,
             textvariable=self.control_params['facet_size'],
-            width=4,
+            width=6,
             font=APP_CONFIG['fonts']['small'],
             relief='flat',
             bd=1,
-            bg='white'
+            bg='white' if APP_CONFIG['theme'] == 'light' else colors['panel_bg'],
+            fg=colors['text_primary']
         )
-        facet_spinbox.pack(side='left', padx=2)
+        self.facet_spinbox.pack(side='left', padx=2)
 
         tk.Label(
             facet_frame,
@@ -348,10 +371,10 @@ class ControlPanel:
             bg=colors['hover_bg']
         ).pack(side='left', padx=(2, 0))
 
-        # Point distance with modern styling
+        # Point distance
         step_frame = tk.Frame(params_row, bg=colors['hover_bg'])
-        step_frame.pack(side='left', padx=(0, 20))
-        
+        step_frame.pack(side='left')
+
         tk.Label(
             step_frame,
             text="Step Size:",
@@ -360,19 +383,20 @@ class ControlPanel:
             bg=colors['hover_bg']
         ).pack(side='left', padx=(0, 5))
 
-        step_spinbox = tk.Spinbox(
+        self.step_spinbox = tk.Spinbox(
             step_frame,
             from_=2,
             to=20,
             increment=1,
             textvariable=self.control_params['point_distance'],
-            width=4,
+            width=6,
             font=APP_CONFIG['fonts']['small'],
             relief='flat',
             bd=1,
-            bg='white'
+            bg='white' if APP_CONFIG['theme'] == 'light' else colors['panel_bg'],
+            fg=colors['text_primary']
         )
-        step_spinbox.pack(side='left', padx=2)
+        self.step_spinbox.pack(side='left', padx=2)
 
         tk.Label(
             step_frame,
@@ -382,58 +406,194 @@ class ControlPanel:
             bg=colors['hover_bg']
         ).pack(side='left', padx=(2, 0))
 
-        # Info label with modern styling
-        info_label = tk.Label(
-            self.control_frame,
-            text="💡 Smaller values provide higher density analysis but slower processing",
-            font=APP_CONFIG['fonts']['small'],
-            fg=colors['text_muted'],
+    def _create_modern_card(self, parent, title):
+        """Create a modern card container with title."""
+        colors = get_theme_colors()
+
+        # Card container
+        card_container = tk.Frame(parent, bg=colors['background'])
+        card_container.pack(fill='x', pady=8)
+
+        # Main card with modern styling
+        card = tk.Frame(
+            card_container,
+            bg=colors['panel_bg'],
+            relief='flat',
+            bd=0,
+            highlightbackground=colors['panel_border'],
+            highlightthickness=1
+        )
+        card.pack(fill='x', padx=2, pady=2)
+
+        # Card header
+        header = tk.Frame(card, bg=colors['hover_bg'], height=36)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+
+        title_label = tk.Label(
+            header,
+            text=title,
+            font=('Segoe UI', 11, 'bold'),
+            fg=colors['text_primary'],
             bg=colors['hover_bg']
         )
-        info_label.pack(anchor='w', pady=(8, 0))
+        title_label.pack(anchor='w', padx=16, pady=8)
 
-    def _create_roi_info_section(self):
-        """Create ROI information display with modern styling."""
+        return card
+
+    def _create_modern_button(self, parent, text, color, command, style='primary'):
+        """Create a modern styled button with enhanced design."""
         colors = get_theme_colors()
-        
-        # Add spacing
-        spacer = tk.Frame(self.inner_frame, bg=colors['panel_bg'], height=15)
-        spacer.pack(fill='x')
-        
-        # Section title
-        title_label = tk.Label(
-            self.inner_frame,
-            text="Region of Interest",
-            font=APP_CONFIG['fonts']['subheading'],
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        title_label.pack(anchor='w', pady=(0, APP_CONFIG['styling']['small_spacing']))
-        
-        # ROI info container with subtle background
-        roi_container = tk.Frame(
-            self.inner_frame,
-            bg=colors['selected_bg'],
-            relief='flat',
-            bd=0
-        )
-        roi_container.pack(fill='x', pady=APP_CONFIG['styling']['small_spacing'])
-        
-        roi_info_frame = tk.Frame(roi_container, bg=colors['selected_bg'])
-        roi_info_frame.pack(fill='x', padx=15, pady=8)
 
-        self.roi_info_label = tk.Label(
-            roi_info_frame,
-            text="🎯 ROI: Not Selected (analyzing full image)",
-            font=APP_CONFIG['fonts']['body'],
-            fg=colors['text_secondary'],
-            bg=colors['selected_bg']
+        # Determine text color based on background
+        if APP_CONFIG['theme'] == 'dark':
+            fg_color = 'white'
+        else:
+            # Use white text on colored buttons, dark text on light buttons
+            if color in [colors.get('btn_secondary', '#6b7280'), '#f3f4f6', '#e5e7eb']:
+                fg_color = colors['text_primary']
+            else:
+                fg_color = 'white'
+
+        btn = tk.Button(
+            parent,
+            text=text,
+            bg=color,
+            fg=fg_color,
+            font=APP_CONFIG['fonts']['button'],
+            padx=16,
+            pady=10,
+            relief='flat',
+            bd=0,
+            cursor='hand2',
+            command=command,
+            activebackground=self._get_hover_color(color),
+            activeforeground=fg_color
         )
-        self.roi_info_label.pack(anchor='w')
+
+        # Add hover effects
+        def on_enter(e):
+            btn.configure(bg=self._get_hover_color(color))
+
+        def on_leave(e):
+            btn.configure(bg=color)
+
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+
+        return btn
+
+    def _create_compact_button(self, parent, text, color, command):
+        """Create a compact button for zoom controls."""
+        colors = get_theme_colors()
+
+        # Very compact buttons for tight layout
+        btn = tk.Button(
+            parent,
+            text=text,
+            bg=color,
+            fg='white' if APP_CONFIG['theme'] == 'dark' or color != colors.get('btn_secondary', '#6b7280') else colors[
+                'text_primary'],
+            font=APP_CONFIG['fonts']['small_bold'],
+            width=3,  # Smaller width
+            padx=2,   # Less padding
+            pady=4,   # Less padding
+            relief='flat',
+            bd=0,
+            cursor='hand2',
+            command=command,
+            activebackground=self._get_hover_color(color),
+            activeforeground='white'
+        )
+
+        # Add hover effects
+        def on_enter(e):
+            btn.configure(bg=self._get_hover_color(color))
+
+        def on_leave(e):
+            btn.configure(bg=color)
+
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+
+        return btn
+
+    def _get_hover_color(self, base_color):
+        """Get hover color for a button."""
+        # Darken color by 20% for hover effect
+        if base_color.startswith('#'):
+            return self._darken_color(base_color, 0.2)
+        return base_color
+
+    def _darken_color(self, hex_color, factor=0.2):
+        """Darken a hex color by a factor."""
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+        darkened = tuple(max(0, int(c * (1 - factor))) for c in rgb)
+        return f"#{darkened[0]:02x}{darkened[1]:02x}{darkened[2]:02x}"
+
+    def _style_combobox(self):
+        """Apply modern styling to combobox based on theme."""
+        colors = get_theme_colors()
+
+        style = ttk.Style()
+
+        # Configure combobox for both themes with explicit text colors
+        style.configure(
+            'Modern.TCombobox',
+            fieldbackground=colors['canvas_bg'],
+            background=colors['panel_bg'],
+            foreground=colors['text_primary'],
+            borderwidth=1,
+            relief='flat',
+            arrowcolor=colors['text_primary'],
+            insertcolor=colors['text_primary']  # Cursor color
+        )
+        
+        # Map combobox states for proper theme switching
+        style.map('Modern.TCombobox',
+            fieldbackground=[
+                ('readonly', colors['canvas_bg']),
+                ('focus', colors['canvas_bg']),
+                ('active', colors['canvas_bg'])
+            ],
+            foreground=[
+                ('readonly', colors['text_primary']),
+                ('focus', colors['text_primary']),
+                ('active', colors['text_primary'])
+            ],
+            selectbackground=[('readonly', colors['selected_bg'])],
+            selectforeground=[('readonly', colors['text_primary'])],
+            background=[('active', colors['hover_bg'])],
+            arrowcolor=[
+                ('active', colors['text_primary']),
+                ('focus', colors['text_primary']),
+                ('readonly', colors['text_primary'])
+            ]
+        )
+
+        self.spectrum_combo.configure(style='Modern.TCombobox')
+        
+        # Force update the combobox to apply new colors
+        self.spectrum_combo.update_idletasks()
 
     def _execute_callback(self, callback_key: str):
         """Execute callback if it exists."""
-        if callback_key in self.callbacks:
+        if callback_key == 'toggle_theme':
+            # Handle theme toggle
+            self.dark_mode = not self.dark_mode
+            new_theme = 'dark' if self.dark_mode else 'light'
+            set_theme(new_theme)
+
+            # Update button text
+            if 'theme_btn' in self.buttons:
+                new_text = "☀️ Light Mode" if self.dark_mode else "🌙 Dark Mode"
+                self.buttons['theme_btn'].config(text=new_text)
+
+            # Notify callback to refresh UI
+            if 'toggle_theme' in self.callbacks:
+                self.callbacks['toggle_theme']()
+        elif callback_key in self.callbacks:
             self.callbacks[callback_key]()
 
     def _on_spectrum_changed(self, event=None):
@@ -442,52 +602,148 @@ class ControlPanel:
 
         # Show/hide control parameters
         if spectrum_type == 'controlled':
-            self.control_params_frame.pack(fill='x', pady=(10, 0))
+            self.control_params_frame.pack(fill='x', pady=(0, 0))
         else:
             self.control_params_frame.pack_forget()
 
         # Notify parent
         self._execute_callback('spectrum_changed')
 
-    def update_state(self, state: str):
-        """
-        Update button states based on application state.
+    def refresh_theme(self):
+        """Refresh all UI elements with new theme colors."""
+        colors = get_theme_colors()
 
-        Args:
-            state: Current application state
-        """
+        # Update all frames
+        for widget in [self.control_frame, self.inner_frame]:
+            widget.configure(bg=colors['panel_bg'])
+
+        # Update all cards and their children
+        self._update_widget_colors(self.inner_frame, colors)
+
+        # Re-style combobox
+        self._style_combobox()
+
+        # Update spinboxes
+        if hasattr(self, 'facet_spinbox'):
+            self.facet_spinbox.configure(
+                bg='white' if APP_CONFIG['theme'] == 'light' else colors['panel_bg'],
+                fg=colors['text_primary']
+            )
+        if hasattr(self, 'step_spinbox'):
+            self.step_spinbox.configure(
+                bg='white' if APP_CONFIG['theme'] == 'light' else colors['panel_bg'],
+                fg=colors['text_primary']
+            )
+
+        # Update button colors - recreate buttons with proper colors
+        self._refresh_button_colors(colors)
+
+    def _refresh_button_colors(self, colors):
+        """Refresh button colors based on theme."""
+        # Define clean modern button color mappings
+        button_color_map = {
+            'load_btn': colors.get('btn_primary', '#2563eb'),
+            'screenshot_btn': colors.get('btn_info', '#3b82f6'),
+            'roi_btn': colors.get('btn_secondary', '#6b7280'),
+            'analyze_btn': colors.get('btn_success', '#10b981'),
+            'quality_map_btn': colors.get('btn_info', '#3b82f6'),
+            'results_btn': colors.get('btn_primary', '#2563eb'),
+            'save_btn': colors.get('btn_success', '#10b981'),
+            'help_btn': colors.get('btn_neutral', '#64748b'),
+            'theme_btn': colors.get('btn_secondary', '#6b7280'),
+            'reset_display_btn': colors.get('btn_warning', '#f59e0b'),
+            'reset_btn': colors.get('btn_danger', '#ef4444'),
+            'zoom_in_btn': colors.get('btn_info', '#3b82f6'),
+            'zoom_out_btn': colors.get('btn_info', '#3b82f6'),
+            'zoom_fit_btn': colors.get('btn_neutral', '#64748b'),
+            'zoom_actual_btn': colors.get('btn_neutral', '#64748b')
+        }
+
+        # Update each button's colors
+        for btn_id, color in button_color_map.items():
+            if btn_id in self.buttons:
+                btn = self.buttons[btn_id]
+                try:
+                    btn.configure(
+                        bg=color,
+                        activebackground=self._get_hover_color(color)
+                    )
+                except:
+                    pass
+
+    def _update_widget_colors(self, widget, colors):
+        """Recursively update widget colors."""
+        try:
+            # Update frame backgrounds
+            if isinstance(widget, tk.Frame):
+                try:
+                    current_bg = widget.cget('bg')
+                    # Check if it's a hover/accent frame
+                    if current_bg in ['#f9fafb', '#1e293b', '#f3f4f6', '#374151', colors.get('hover_bg')]:
+                        widget.configure(bg=colors['hover_bg'])
+                    else:
+                        widget.configure(bg=colors['panel_bg'])
+                except:
+                    widget.configure(bg=colors['panel_bg'])
+
+            # Update label colors
+            elif isinstance(widget, tk.Label):
+                try:
+                    parent_bg = widget.master.cget('bg')
+                    # Determine text color based on label content
+                    text = widget.cget('text')
+                    if any(keyword in text.lower() for keyword in ['zoom:', 'method:', 'roi:', 'advanced']):
+                        widget.configure(bg=parent_bg, fg=colors['text_secondary'])
+                    else:
+                        widget.configure(bg=parent_bg, fg=colors['text_primary'])
+                except:
+                    widget.configure(bg=colors['panel_bg'], fg=colors['text_primary'])
+
+            # Recursively update children
+            for child in widget.winfo_children():
+                self._update_widget_colors(child, colors)
+
+        except Exception:
+            pass
+
+    def update_state(self, state: str):
+        """Update button states based on application state."""
         self.current_state = state
 
         # Define button states for each application state
         state_configs = {
             'no_image': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn'],
-                'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn', 'theme_btn'],
+                'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn',
+                             'reset_display_btn',
+                             'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
                 'special': {}
             },
             'image_loaded': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn',
+                            'reset_display_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn', 'theme_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
-                'special': {'roi_btn': {'bg': '#9b59b6', 'text': '🎯 Select ROI'}}
+                'special': {'roi_btn': {'text': '🎯 Select ROI'}}
             },
             'roi_selected': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn',
+                            'reset_display_btn',
+                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn', 'theme_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
-                'special': {'roi_btn': {'bg': '#9b59b6', 'text': '🎯 New ROI'}}
+                'special': {'roi_btn': {'text': '🎯 New ROI'}}
             },
             'analyzing': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
-                'disabled': ['roi_btn', 'quality_map_btn', 'results_btn', 'save_btn', 'reset_display_btn'],
-                'special': {'analyze_btn': {'state': 'disabled', 'text': '🔬 Analyzing...'}}
+                'enabled': ['help_btn', 'theme_btn'],
+                'disabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn',
+                             'save_btn', 'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
+                             'zoom_fit_btn', 'zoom_actual_btn'],
+                'special': {'analyze_btn': {'text': '🔬 Analyzing...'}}
             },
             'analysis_complete': {
                 'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn',
-                            'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_fit_btn', 'zoom_actual_btn'],
+                            'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
+                            'zoom_fit_btn', 'zoom_actual_btn', 'theme_btn'],
                 'disabled': [],
                 'special': {
                     'analyze_btn': {'text': '🔬 Analyze'},
@@ -515,12 +771,7 @@ class ControlPanel:
                     self.buttons[btn_id].config(**special_config)
 
     def update_roi_info(self, roi_info: str):
-        """
-        Update ROI information display.
-
-        Args:
-            roi_info: ROI information string to display
-        """
+        """Update ROI information display."""
         self.roi_info_label.config(text=roi_info)
 
     def get_selected_spectrum(self) -> str:
@@ -535,24 +786,15 @@ class ControlPanel:
         }
 
     def set_quality_map_active(self, active: bool):
-        """
-        Set quality map button appearance based on active state.
-
-        Args:
-            active: Whether quality map is currently active
-        """
+        """Set quality map button appearance based on active state."""
         if 'quality_map_btn' in self.buttons:
+            colors = get_theme_colors()
             if active:
-                self.buttons['quality_map_btn'].config(bg='#e74c3c')  # Red when active
+                self.buttons['quality_map_btn'].config(bg=colors.get('btn_danger', '#ef4444'))
             else:
-                self.buttons['quality_map_btn'].config(bg='#2ecc71')  # Green when inactive
+                self.buttons['quality_map_btn'].config(bg=colors.get('info', '#3b82f6'))
 
     def update_zoom_level(self, zoom_level: float):
-        """
-        Update zoom level display.
-
-        Args:
-            zoom_level: Current zoom level (1.0 = 100%)
-        """
+        """Update zoom level display."""
         percentage = int(zoom_level * 100)
         self.zoom_level_var.set(f"{percentage}%")

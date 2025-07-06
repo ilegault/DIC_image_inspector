@@ -1,187 +1,357 @@
-# ui/main_window.py - Clean Architecture Implementation
+# main_window.py - Updated Main Window with Theme Support
 
 import tkinter as tk
-from tkinter import messagebox
-import threading
+from tkinter import messagebox, filedialog, ttk
+
 from typing import Optional, Dict, Any
 
-# Import clean architecture components
-from core.image_analyzer import ImageAnalyzer
-from core.report_generator import ReportGenerator
-from models.analysis_result import AnalysisResult
-from models.application_state import ApplicationState
-from ui.components.image_canvas import ImageCanvas
+import threading
+import numpy as np
+from PIL import Image
+
 from ui.components.control_panel import ControlPanel
+from ui.components.image_canvas import ImageCanvas
 from ui.components.roi_selector import ROISelector
 from ui.components.legend_panel import LegendPanel
 from ui.components.results_popup import ResultsPopup
 from ui.dialogs.help_dialog import HelpDialog
 from ui.dialogs.screenshot_dialog import ScreenshotDialog
+
+from models.application_state import ApplicationState
+from models.analysis_result import AnalysisResult
+from core.image_analyzer import ImageAnalyzer
+from core.report_generator import ReportGenerator
 from utils.file_operations import FileOperationsManager
+
 from utils.constants import APP_CONFIG, get_theme_colors
-from utils.modern_styling import apply_modern_theme, get_style_manager, toggle_theme, ModernStyleManager
+from utils.modern_styling import ModernStyleManager
 
 
 class DICQualityInspector:
     """
-    Main application window - UI coordination only.
+    Main application window for DIC Image Quality Inspector.
 
-    This class handles UI coordination and delegates business logic to appropriate services.
-    It follows clean architecture principles with clear separation of concerns.
+    Orchestrates all UI components and manages application flow.
     """
 
     def __init__(self, root: tk.Tk):
-        """Initialize the main window with modern clean architecture."""
+        """Initialize the main application window."""
         self.root = root
+        self.root.title("DIC Image Quality Inspector")
 
-        # Apply modern theme first
-        apply_modern_theme()
-        self.style_manager = get_style_manager()
-
-        # Initialize services (business logic)
-        self.analyzer = ImageAnalyzer()
-        self.report_generator = ReportGenerator()
-        self.file_operations = FileOperationsManager()
+        # Set initial window size and position
+        self._setup_window()
 
         # Initialize state management
         self.state = ApplicationState()
 
-        # Initialize UI components
-        self._setup_window()
-        self._create_ui_components()
+        # Initialize components
+        self.control_panel = None
+        self.image_canvas = None
+        self.roi_selector = None
+        self.legend_panel = None
+        self.results_popup = None
+
+        # Initialize services
+        self.file_operations = FileOperationsManager()
+        self.analyzer = ImageAnalyzer()
+        self.report_generator = ReportGenerator()
+
+        # Style manager
+        self.style_manager = ModernStyleManager()
+
+        # Create UI
+        self._create_ui()
+
+        # Connect event handlers
         self._connect_event_handlers()
 
         # Set initial state
+        self.state.set_application_state('no_image')
         self._update_ui_state()
-        
-        # Setup window close handler
-        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+
+        # Status variable
+        self.status_var = tk.StringVar(value="Ready - Load an image to begin analysis")
 
     def _setup_window(self):
-        """Setup main window properties with modern styling."""
-        self.root.title("DIC Image Quality Inspector v2.0 - Clean Architecture")
-        self.root.geometry("1400x900")  # Larger default size
+        """Configure main window properties."""
+        # Set window size
+        self.root.geometry("1400x900")
+
+        # Center window on screen
+        self.root.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (1400 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (900 // 2)
+        self.root.geometry(f"1400x900+{x}+{y}")
+
+        # Set minimum size
+        self.root.minsize(1200, 700)
+
+        # Configure grid weights for responsive design
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        # Apply theme colors
+        self._apply_theme()
+
+    def _apply_theme(self):
+        """Apply current theme to window."""
         colors = get_theme_colors()
         self.root.configure(bg=colors['background'])
-        self.root.minsize(1000, 700)  # Larger minimum size
+
+        # Configure ttk style for the entire application
+        style = ttk.Style()
         
-        # Modern window styling
+        # Set the theme based on current mode
+        if APP_CONFIG['theme'] == 'dark':
+            # Try to use a dark theme if available
+            try:
+                available_themes = style.theme_names()
+                if 'equilux' in available_themes:
+                    style.theme_use('equilux')
+                elif 'alt' in available_themes:
+                    style.theme_use('alt')
+                else:
+                    style.theme_use('default')
+            except:
+                style.theme_use('default')
+        else:
+            # Use default theme for light mode
+            try:
+                style.theme_use('vista' if 'vista' in style.theme_names() else 'default')
+            except:
+                style.theme_use('default')
+
+        # Apply comprehensive styling
+        self._apply_comprehensive_styling(style, colors)
+
+        # Update window styling for Windows
         try:
-            # Try to set modern window appearance on Windows
-            self.root.tk.call('tk', 'scaling', 1.0)
-        except:
-            pass
+            if tk.sys.platform == 'win32':
+                import ctypes
+                # Enable dark title bar on Windows
+                if APP_CONFIG['theme'] == 'dark':
+                    self.root.update()
+                    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                    set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+                    hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+                    value = ctypes.c_int(1)
+                    set_window_attribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                         ctypes.byref(value), ctypes.sizeof(value))
+        except Exception:
+            pass  # Ignore if dark mode setting fails
 
-    def _create_ui_components(self):
-        """Create and arrange UI components with image-focused layout."""
-        # Main container with modern styling
+    def _apply_comprehensive_styling(self, style, colors):
+        """Apply comprehensive styling to all ttk widgets."""
+        try:
+            # Configure all ttk widgets with theme colors
+            
+            # Combobox styling with proper text color handling
+            style.configure('TCombobox',
+                fieldbackground=colors['canvas_bg'],
+                background=colors['panel_bg'],
+                foreground=colors['text_primary'],
+                borderwidth=1,
+                relief='flat',
+                arrowcolor=colors['text_primary'],
+                insertcolor=colors['text_primary']
+            )
+            
+            style.map('TCombobox',
+                fieldbackground=[
+                    ('readonly', colors['canvas_bg']),
+                    ('focus', colors['canvas_bg']),
+                    ('active', colors['canvas_bg'])
+                ],
+                foreground=[
+                    ('readonly', colors['text_primary']),
+                    ('focus', colors['text_primary']),
+                    ('active', colors['text_primary'])
+                ],
+                selectbackground=[('readonly', colors['selected_bg'])],
+                selectforeground=[('readonly', colors['text_primary'])],
+                background=[('active', colors['hover_bg'])],
+                arrowcolor=[
+                    ('active', colors['text_primary']),
+                    ('focus', colors['text_primary']),
+                    ('readonly', colors['text_primary'])
+                ]
+            )
+            
+            # Scrollbar styling
+            style.configure('Vertical.TScrollbar',
+                background=colors['panel_bg'],
+                troughcolor=colors['hover_bg'],
+                borderwidth=0,
+                arrowcolor=colors['text_secondary'],
+                darkcolor=colors['panel_bg'],
+                lightcolor=colors['panel_bg']
+            )
+            
+            style.map('Vertical.TScrollbar',
+                background=[('active', colors['selected_bg']), ('pressed', colors['primary'])],
+                arrowcolor=[('active', colors['text_primary'])]
+            )
+            
+            style.configure('Horizontal.TScrollbar',
+                background=colors['panel_bg'],
+                troughcolor=colors['hover_bg'],
+                borderwidth=0,
+                arrowcolor=colors['text_secondary'],
+                darkcolor=colors['panel_bg'],
+                lightcolor=colors['panel_bg']
+            )
+            
+            style.map('Horizontal.TScrollbar',
+                background=[('active', colors['selected_bg']), ('pressed', colors['primary'])],
+                arrowcolor=[('active', colors['text_primary'])]
+            )
+            
+            # Frame styling
+            style.configure('TFrame',
+                background=colors['panel_bg'],
+                borderwidth=0,
+                relief='flat'
+            )
+            
+            # Label styling
+            style.configure('TLabel',
+                background=colors['panel_bg'],
+                foreground=colors['text_primary']
+            )
+            
+            # Button styling
+            style.configure('TButton',
+                background=colors['btn_primary'],
+                foreground='white',
+                borderwidth=0,
+                relief='flat'
+            )
+            
+            style.map('TButton',
+                background=[('active', colors['btn_primary_hover']), ('pressed', colors['btn_primary_hover'])],
+                foreground=[('active', 'white'), ('pressed', 'white')]
+            )
+            
+            # Entry styling
+            style.configure('TEntry',
+                fieldbackground=colors['canvas_bg'],
+                background=colors['panel_bg'],
+                foreground=colors['text_primary'],
+                borderwidth=1,
+                relief='flat'
+            )
+            
+            # Spinbox styling
+            style.configure('TSpinbox',
+                fieldbackground=colors['canvas_bg'],
+                background=colors['panel_bg'],
+                foreground=colors['text_primary'],
+                borderwidth=1,
+                relief='flat',
+                arrowcolor=colors['text_primary']
+            )
+            
+        except Exception as e:
+            print(f"Warning: Could not apply comprehensive styling: {e}")
+
+    def _create_ui(self):
+        """Create the main UI layout."""
         colors = get_theme_colors()
-        main_container = tk.Frame(
-            self.root, 
-            bg=colors['background']
-        )
-        main_container.pack(fill='both', expand=True, padx=15, pady=15)
 
-        # Title section (compact)
-        self._create_title_section(main_container)
+        # Main container
+        main_container = tk.Frame(self.root, bg=colors['background'])
+        main_container.pack(fill='both', expand=True)
 
-        # Create horizontal layout: controls on left, image on right
-        content_container = tk.Frame(
-            main_container,
-            bg=colors['background']
-        )
-        content_container.pack(fill='both', expand=True, pady=APP_CONFIG['styling']['section_spacing'])
+        # Create header
+        self._create_header(main_container)
 
-        # Left panel for controls (fixed width, compact)
-        left_panel = tk.Frame(
-            content_container,
-            bg=colors['background'],
-            width=350  # Fixed width for controls
-        )
-        left_panel.pack(side='left', fill='y', padx=(0, 15))
-        left_panel.pack_propagate(False)  # Maintain fixed width
+        # Create content area
+        content_frame = tk.Frame(main_container, bg=colors['background'])
+        content_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
 
-        # Control panel (compact version)
-        self.control_panel = ControlPanel(
-            left_panel,
-            callbacks={
-                'load_image': self.load_image,
-                'take_screenshot': self.take_screenshot,
-                'select_roi': self.select_roi,
-                'analyze_image': self.analyze_image,
-                'toggle_quality_map': self.toggle_quality_map,
-                'show_results': self.show_results,
-                'save_report': self.save_report,
-                'show_help': self.show_help,
-                'reset_application': self.reset_application,
-                'reset_display_results': self.reset_display_results,
-                'spectrum_changed': self.on_spectrum_changed,
-                'zoom_in': self.zoom_in,
-                'zoom_out': self.zoom_out,
-                'zoom_fit': self.zoom_fit,
-                'zoom_actual': self.zoom_actual,
-                'toggle_theme': self.toggle_theme
-            }
-        )
+        # Left panel - Control Panel
+        left_panel = tk.Frame(content_frame, bg=colors['background'], width=400)
+        left_panel.pack(side='left', fill='y', padx=(0, 10))
+        left_panel.pack_propagate(False)
 
-        # Legend panel in left panel
-        self.legend_panel = LegendPanel(left_panel)
+        # Create control panel with callbacks
+        control_callbacks = {
+            'load_image': self.load_image,
+            'take_screenshot': self.take_screenshot,
+            'select_roi': self.select_roi,
+            'analyze_image': self.analyze_image,
+            'toggle_quality_map': self.toggle_quality_map,
+            'show_results': self.show_results,
+            'save_report': self.save_report,
+            'show_help': self.show_help,
+            'reset_application': self.reset_application,
+            'reset_display_results': self.reset_display,
+            'toggle_theme': self.toggle_theme,
+            'spectrum_changed': self.on_spectrum_changed,
+            'zoom_in': self.zoom_in,
+            'zoom_out': self.zoom_out,
+            'zoom_fit': self.zoom_fit,
+            'zoom_actual': self.zoom_actual
+        }
 
-        # Right panel for image (takes remaining space)
-        right_panel = tk.Frame(
-            content_container,
-            bg=colors['background']
-        )
-        right_panel.pack(side='right', fill='both', expand=True)
+        self.control_panel = ControlPanel(left_panel, control_callbacks)
 
-        # Image canvas (now much larger)
-        self.image_canvas = ImageCanvas(
-            right_panel,
-            callbacks={
-                'zoom_changed': self._on_zoom_changed
-            }
-        )
+        # Right panel - Image Display
+        right_panel = tk.Frame(content_frame, bg=colors['panel_bg'], relief='flat', bd=0)
+        right_panel.pack(side='left', fill='both', expand=True)
 
-        # ROI selector
-        self.roi_selector = ROISelector(
-            self.image_canvas.canvas,
-            callbacks={
-                'roi_changed': self.on_roi_changed,
-                'roi_completed': self.on_roi_completed
-            }
-        )
+        # Create image canvas with zoom callback
+        canvas_callbacks = {
+            'zoom_changed': self._on_zoom_changed
+        }
+        self.image_canvas = ImageCanvas(right_panel, canvas_callbacks)
 
-        # Status bar
+        # Create ROI selector
+        roi_callbacks = {
+            'roi_changed': self.on_roi_changed,
+            'roi_completed': self.on_roi_completed
+        }
+        self.roi_selector = ROISelector(self.image_canvas.canvas, roi_callbacks)
+
+        # Create legend panel (initially on image canvas parent)
+        self.legend_panel = LegendPanel(right_panel)
+
+        # Create status bar
         self._create_status_bar()
 
-    def _create_title_section(self, parent):
-        """Create compact application title section."""
+    def _create_header(self, parent):
+        """Create application header with title."""
         colors = get_theme_colors()
-        
+
         # Compact title container
         title_container = tk.Frame(
-            parent, 
+            parent,
             bg=colors['panel_bg'],
             relief='flat',
             bd=0
         )
         title_container.pack(fill='x', pady=(0, 10))
-        
+
+        # Add subtle border
+        border = tk.Frame(title_container, bg=colors['panel_border'], height=1)
+        border.pack(side='bottom', fill='x')
+
         # Horizontal layout for compact title
         title_frame = tk.Frame(title_container, bg=colors['panel_bg'])
-        title_frame.pack(fill='x', padx=15, pady=10)
+        title_frame.pack(fill='x', padx=20, pady=15)
 
-        # Compact title
+        # Application title
         title_label = tk.Label(
             title_frame,
             text="🔬 DIC Image Quality Inspector v2.0",
-            font=APP_CONFIG['fonts']['heading'],  # Smaller font
+            font=APP_CONFIG['fonts']['heading'],
             fg=colors['text_primary'],
             bg=colors['panel_bg']
         )
         title_label.pack(side='left')
-        
-        # Compact subtitle on same line
+
+        # Subtitle
         subtitle_label = tk.Label(
             title_frame,
             text="• Professional Digital Image Correlation Analysis",
@@ -190,22 +360,12 @@ class DICQualityInspector:
             bg=colors['panel_bg']
         )
         subtitle_label.pack(side='left', padx=(10, 0))
-        
-        # Theme toggle button on the right
-        theme_btn = ModernStyleManager.create_modern_button(
-            title_frame,
-            "🌙" if APP_CONFIG['theme'] == 'light' else "☀️",
-            colors['btn_secondary'],
-            command=self.toggle_theme,
-            size='small'
-        )
-        theme_btn.pack(side='right')
 
     def _create_status_bar(self):
         """Create modern status bar."""
         colors = get_theme_colors()
-        
-        # Status bar container
+
+        # Status bar container,
         status_container = tk.Frame(
             self.root,
             bg=colors['panel_bg'],
@@ -213,7 +373,15 @@ class DICQualityInspector:
             bd=0
         )
         status_container.pack(side='bottom', fill='x')
-        
+
+        # Add top border
+        border_frame = tk.Frame(
+            status_container,
+            bg=colors['panel_border'],
+            height=1
+        )
+        border_frame.pack(fill='x', side='top')
+
         # Status bar with modern styling
         self.status_var = tk.StringVar(value="Ready - Load an image to begin analysis")
         status_bar = tk.Label(
@@ -228,50 +396,161 @@ class DICQualityInspector:
             pady=8
         )
         status_bar.pack(fill='x')
-        
-        # Add a subtle top border
-        border_frame = tk.Frame(
-            status_container,
-            bg=colors['panel_border'],
-            height=1
-        )
-        border_frame.pack(fill='x', side='top')
+
+    def toggle_theme(self):
+        """Toggle between light and dark themes."""
+        # Theme toggling is handled in control panel
+        # Refresh entire UI
+        self._refresh_ui_theme()
+
+    def _refresh_ui_theme(self):
+        """Refresh UI with new theme colors."""
+        # Apply new theme to window
+        self._apply_theme()
+
+        # Get new colors
+        colors = get_theme_colors()
+
+        # Update all frames recursively
+        self._update_widget_theme(self.root, colors)
+
+        # Update specific components
+        if self.control_panel:
+            self.control_panel.refresh_theme()
+
+        if self.image_canvas:
+            self.image_canvas.refresh_theme()
+
+        if self.legend_panel:
+            self.legend_panel.refresh_theme()
+
+        # Refresh style manager to update ttk styles
+        self.style_manager = ModernStyleManager()
+
+        # Re-show quality map if active
+        if self.state.has_analysis_result() and self.image_canvas.is_showing_quality_map():
+            result = self.state.get_analysis_result()
+            spectrum = self.control_panel.get_selected_spectrum()
+            self.image_canvas.show_quality_map(result.quality_map, spectrum)
+            self.legend_panel.show_legend(spectrum)
+
+    def _update_widget_theme(self, widget, colors):
+        """Recursively update widget colors for theme."""
+        try:
+            # Skip ttk widgets as they're handled by ttk styling
+            if isinstance(widget, (ttk.Widget,)):
+                return
+
+            # Update widget background and foreground
+            if hasattr(widget, 'configure') and hasattr(widget, 'cget'):
+                widget_type = type(widget).__name__
+                
+                # Get current background to determine what type of widget this is
+                try:
+                    current_bg = widget.cget('bg')
+                except:
+                    current_bg = None
+                
+                # Handle different widget types based on their current background
+                if isinstance(widget, tk.Frame):
+                    # Determine frame type by current background
+                    if current_bg in [colors.get('background'), '#f8fafc', '#0f172a']:
+                        widget.configure(bg=colors['background'])
+                    elif current_bg in [colors.get('hover_bg'), '#f3f4f6', '#374151']:
+                        widget.configure(bg=colors['hover_bg'])
+                    else:
+                        widget.configure(bg=colors['panel_bg'])
+                        
+                elif isinstance(widget, tk.Label):
+                    # Get parent background to match
+                    try:
+                        parent_bg = widget.master.cget('bg')
+                        widget.configure(bg=parent_bg, fg=colors['text_primary'])
+                    except:
+                        widget.configure(bg=colors['panel_bg'], fg=colors['text_primary'])
+                        
+                elif isinstance(widget, tk.Button):
+                    # Only update if it's not a custom styled button
+                    if not hasattr(widget, '_custom_styled'):
+                        # Check if it's a primary button by color
+                        if current_bg in ['#3b82f6', '#2563eb']:
+                            widget.configure(
+                                bg=colors['btn_primary'],
+                                fg='white',
+                                activebackground=colors['btn_primary_hover'],
+                                activeforeground='white'
+                            )
+                        else:
+                            # Keep the button's original styling but update text
+                            try:
+                                widget.configure(fg=colors['text_primary'])
+                            except:
+                                pass
+                                
+                elif isinstance(widget, (tk.Entry, tk.Text)):
+                    widget.configure(
+                        bg=colors['canvas_bg'],
+                        fg=colors['text_primary'],
+                        insertbackground=colors['text_primary']
+                    )
+                    
+                elif isinstance(widget, tk.Listbox):
+                    widget.configure(
+                        bg=colors['canvas_bg'],
+                        fg=colors['text_primary'],
+                        selectbackground=colors['selected_bg'],
+                        selectforeground=colors['text_primary']
+                    )
+                    
+                elif isinstance(widget, tk.Canvas):
+                    widget.configure(bg=colors['canvas_bg'])
+                    
+                elif isinstance(widget, tk.Spinbox):
+                    widget.configure(
+                        bg=colors['canvas_bg'],
+                        fg=colors['text_primary'],
+                        buttonbackground=colors['panel_bg'],
+                        insertbackground=colors['text_primary']
+                    )
+
+            # Recursively update children
+            for child in widget.winfo_children():
+                self._update_widget_theme(child, colors)
+
+        except Exception as e:
+            pass  # Skip widgets that can't be updated
 
     def _connect_event_handlers(self):
         """Connect event handlers and observers."""
-        # State change observers
-        self.state.add_observer('analysis_result', self._on_analysis_result_changed)
+        # State observers
         self.state.add_observer('image', self._on_image_changed)
         self.state.add_observer('roi', self._on_roi_changed_state)
+        self.state.add_observer('analysis_result', self._on_analysis_result_changed)
         self.state.add_observer('application_state', self._on_app_state_changed)
+
+        # Window close handler
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def _update_ui_state(self):
         """Update UI components based on current state."""
-        app_state = self.state.get_application_state()
+        state = self.state.get_application_state()
+        self.control_panel.update_state(state)
 
-        # Update control panel state
-        self.control_panel.update_state(app_state)
-
-        # Update status message
+        # Update status bar
         status_messages = {
             'no_image': "Ready - Load an image to begin analysis",
-            'image_loaded': "Image loaded - Select ROI for targeted analysis or analyze full image",
+            'image_loaded': "Image loaded - Select ROI or analyze full image",
             'roi_selected': "ROI selected - Ready for analysis",
-            'analyzing': "Analysis in progress - Please wait...",
-            'analysis_complete': "Analysis complete - Click 'Show Results' for details"
+            'analyzing': "Analyzing image quality...",
+            'analysis_complete': "Analysis complete - View results or adjust settings"
         }
 
-        if app_state in status_messages:
-            self.status_var.set(status_messages[app_state])
+        self.status_var.set(status_messages.get(state, "Ready"))
 
-    # Event Handlers
+    # Rest of the methods remain the same...
     def load_image(self):
         """Handle load image request."""
         try:
-            from tkinter import filedialog
-            from PIL import Image
-            import numpy as np
-
             filetypes = [
                 ("Image files", "*.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
                 ("All files", "*.*")
@@ -284,15 +563,15 @@ class DICQualityInspector:
             )
 
             if filepath:
-                # Load image
-                pil_image = Image.open(filepath)
-                if pil_image.mode != 'RGB':
-                    pil_image = pil_image.convert('RGB')
-                image_array = np.array(pil_image)
+                # Load image using file operations
+                image_array = self.file_operations.load_image_from_file(filepath)
 
-                # Update state
-                self.state.set_image(image_array, filepath, "file")
-                self.file_operations.set_last_directory(filepath)
+                if image_array is not None:
+                    self.state.set_image(image_array, filepath, "file")
+                    self.state.clear_roi()
+                    self.state.clear_analysis_result()
+                else:
+                    messagebox.showerror("Load Error", "Failed to load image file")
 
         except Exception as e:
             messagebox.showerror("Load Error", f"Failed to load image: {str(e)}")
@@ -319,145 +598,151 @@ class DICQualityInspector:
         self.root.deiconify()
         if image_data is not None:
             self.state.set_image(image_data, None, "screenshot")
+            self.state.clear_roi()
+            self.state.clear_analysis_result()
 
     def select_roi(self):
         """Handle ROI selection request."""
-        if not self.state.has_image():
-            messagebox.showwarning("No Image", "Please load an image first")
-            return
-
-        self.roi_selector.start_roi_selection()
+        if self.state.has_image():
+            self.roi_selector.start_roi_selection()
 
     def on_roi_changed(self, roi_coords):
-        """Handle ROI coordinates change."""
-        if roi_coords and len(roi_coords) >= 3:
-            self.state.set_roi(roi_coords)
+        """Handle ROI coordinates change during selection."""
+        # Update display during selection if needed
+        pass
 
     def on_roi_completed(self, roi_coords):
         """Handle ROI selection completion."""
         if roi_coords and len(roi_coords) >= 3:
             self.state.set_roi(roi_coords)
             self.state.set_application_state('roi_selected')
-            # Update ROI info display
-            roi_info = f"ROI selected: {len(roi_coords)} points"
-            self.control_panel.update_roi_info(roi_info)
 
     def analyze_image(self):
-        """Handle image analysis request."""
-        if not self.state.has_image():
-            messagebox.showwarning("No Image", "Please load an image first")
+        """Handle analyze image request."""
+        if not self.state.can_analyze():
             return
 
-        # Update state to analyzing
-        self.state.set_application_state('analyzing')
+        # Get analysis parameters
+        spectrum_type = self.control_panel.get_selected_spectrum()
+
+        # Set analysis in progress
+        self.state.set_analysis_in_progress(True)
 
         # Run analysis in background thread
-        threading.Thread(target=self._run_analysis, daemon=True).start()
+        threading.Thread(
+            target=self._run_analysis,
+            args=(spectrum_type,),
+            daemon=True
+        ).start()
 
-    def _run_analysis(self):
+    def _run_analysis(self, spectrum_type: str):
         """Run analysis in background thread."""
         try:
-            # Get analysis parameters
+            # Get image and ROI
             image = self.state.get_image()
             roi = self.state.get_roi()
-            spectrum = self.control_panel.get_selected_spectrum()
 
-            # Run analysis using service
+            # Get parameters for controlled method
+            analysis_kwargs = {
+                'spectrum_type': spectrum_type
+            }
+
+            if spectrum_type == 'controlled':
+                params = self.control_panel.get_control_parameters()
+                analysis_kwargs['subset_size'] = params['facet_size']
+                analysis_kwargs['step_size'] = params['point_distance']
+
+            # Perform analysis
             result = self.analyzer.analyze_image(
                 image=image,
                 roi=roi,
-                spectrum_type=spectrum
+                **analysis_kwargs
             )
 
-            # Update state on UI thread
+            # Update UI on main thread
             self.root.after(0, lambda: self._on_analysis_complete(result))
 
         except Exception as e:
-            error_message = str(e)
             import traceback
             traceback.print_exc()
-            self.root.after(0, lambda: self._on_analysis_error(error_message))
+            self.root.after(0, lambda: self._on_analysis_error(str(e)))
 
     def _on_analysis_complete(self, result: AnalysisResult):
         """Handle analysis completion."""
         self.state.set_analysis_result(result)
-        self.state.set_application_state('analysis_complete')
+        self.state.set_analysis_in_progress(False)
 
-        # Auto-show quality map
+        # Auto-show quality map after short delay
         self.root.after(500, self._auto_show_quality_map)
 
     def _on_analysis_error(self, error_message: str):
         """Handle analysis error."""
+        self.state.set_analysis_in_progress(False)
         messagebox.showerror("Analysis Error", f"Analysis failed: {error_message}")
 
-        # Revert to previous state
-        if self.state.has_roi():
-            self.state.set_application_state('roi_selected')
-        else:
-            self.state.set_application_state('image_loaded')
-
     def _auto_show_quality_map(self):
-        """Auto-show quality map after analysis."""
-        if self.state.has_analysis_result():
-            result = self.state.get_analysis_result()
-            self.image_canvas.show_quality_map(
-                result.quality_map,
-                self.control_panel.get_selected_spectrum()
-            )
-            self.legend_panel.show_legend(self.control_panel.get_selected_spectrum())
+        """Automatically show quality map after analysis."""
+        if self.state.has_analysis_result() and not self.image_canvas.is_showing_quality_map():
+            self.toggle_quality_map()
 
     def toggle_quality_map(self):
-        """Handle quality map toggle request."""
+        """Toggle quality map display."""
+        print("DEBUG: toggle_quality_map() called")
         if not self.state.has_analysis_result():
-            messagebox.showwarning("No Analysis", "Please analyze an image first")
+            print("DEBUG: No analysis result available")
             return
 
-        if self.image_canvas.is_showing_quality_map():
-            self.image_canvas.show_original()
+        is_showing = self.image_canvas.is_showing_quality_map()
+        print(f"DEBUG: Currently showing quality map: {is_showing}")
+        
+        if is_showing:
+            # Hide quality map
+            print("DEBUG: Hiding quality map")
+            self.image_canvas.hide_quality_map()
             self.legend_panel.hide_legend()
+            self.control_panel.set_quality_map_active(False)
         else:
+            # Show quality map
+            print("DEBUG: Showing quality map")
             result = self.state.get_analysis_result()
-            self.image_canvas.show_quality_map(
-                result.quality_map,
-                self.control_panel.get_selected_spectrum()
-            )
-            self.legend_panel.show_legend(self.control_panel.get_selected_spectrum())
+            spectrum_type = self.control_panel.get_selected_spectrum()
+            self.image_canvas.show_quality_map(result.quality_map, spectrum_type)
+            self.legend_panel.show_legend(spectrum_type)
+            self.control_panel.set_quality_map_active(True)
 
     def show_results(self):
-        """Handle show results request."""
+        """Show analysis results dialog."""
         if not self.state.has_analysis_result():
-            messagebox.showwarning("No Results", "Please analyze an image first")
             return
 
-        # Show results popup
         try:
-            results_popup = ResultsPopup(
+            self.results_popup = ResultsPopup(
                 self.root,
                 self.state.get_analysis_result(),
                 self.report_generator
             )
-            results_popup.show()
+            self.results_popup.show()
         except Exception as e:
             messagebox.showerror("Results Error", f"Failed to show results: {str(e)}")
 
     def save_report(self):
-        """Handle save report request."""
-        if not self.state.has_analysis_result():
-            messagebox.showwarning("No Results", "Please analyze an image first")
+        """Save analysis report."""
+        if not self.state.can_save_report():
             return
 
         try:
-            from tkinter import filedialog
-
-            # Generate comprehensive report
+            # Generate report content
             result = self.state.get_analysis_result()
+            image_info = self.state.get_image_info()
+            roi_info = self.state.get_roi_info()
+
             report_content = self.report_generator.generate_comprehensive_report(
                 result.to_dict(),
-                self._get_image_info(),
-                self._get_roi_info()
+                image_info,
+                roi_info
             )
 
-            # Save dialog
+            # Get save location
             filename = filedialog.asksaveasfilename(
                 title="Save Report",
                 defaultextension=".txt",
@@ -468,7 +753,6 @@ class DICQualityInspector:
             if filename:
                 success = self.file_operations.save_report_to_file(report_content, filename)
                 if success:
-                    self.status_var.set("Report saved successfully")
                     messagebox.showinfo("Success", "Report saved successfully!")
                 else:
                     messagebox.showerror("Error", "Failed to save report")
@@ -477,7 +761,7 @@ class DICQualityInspector:
             messagebox.showerror("Save Error", f"Failed to save report: {str(e)}")
 
     def show_help(self):
-        """Handle help request."""
+        """Show help dialog."""
         try:
             help_dialog = HelpDialog(self.root)
             help_dialog.show()
@@ -485,37 +769,48 @@ class DICQualityInspector:
             messagebox.showerror("Help Error", f"Failed to show help: {str(e)}")
 
     def reset_application(self):
-        """Handle full application reset request."""
-        self.state.reset()
-        self.image_canvas.clear()
-        self.roi_selector.clear()
-        self.legend_panel.hide_legend()
-        self.control_panel.update_roi_info("ROI: Not Selected (analyzing full image)")
+        """Reset entire application."""
+        if messagebox.askyesno("Confirm Reset",
+                               "This will clear all data and reset the application. Continue?"):
+            self.state.reset()
+            self.image_canvas.clear()
+            self.roi_selector.clear()
+            self.legend_panel.hide_legend()
+            self._update_ui_state()
 
-    def reset_display_results(self):
-        """Handle reset display/results request - keeps loaded image."""
-        if not self.state.has_image():
-            # No image loaded, perform full reset
-            self.reset_application()
-            return
+    def reset_display(self):
+        """Reset display and view options."""
+        print("DEBUG: reset_display() called")
         
-        # Store current image for redisplay
-        current_image = self.state.get_image()
+        # Hide quality map first, then reset view
+        print("DEBUG: Hiding quality map")
+        self.image_canvas.hide_quality_map()
+        print("DEBUG: Resetting canvas view")
+        self.image_canvas.reset_view()
         
-        # Reset state (keeps image)
-        self.state.reset_display_and_results()
-        
-        # Clear UI components but redisplay the image
+        # Clear ROI display and data
+        print("DEBUG: Clearing ROI")
         self.roi_selector.clear()
-        self.legend_panel.hide_legend()
-        self.control_panel.update_roi_info("ROI: Not Selected (analyzing full image)")
+        self.state.clear_roi()
+        self.state.clear_analysis_result()
         
-        # Redisplay the original image (without any overlays)
-        if current_image is not None:
-            self.image_canvas.display_image(current_image)
+        # Reset UI panels
+        print("DEBUG: Hiding legend and resetting controls")
+        self.legend_panel.hide_legend()
+        self.control_panel.set_quality_map_active(False)
+        
+        # Clear any displayed results/statistics
+        if hasattr(self, 'results_popup') and self.results_popup:
+            self.results_popup.destroy()
+            self.results_popup = None
+            
+        # Update UI state to reflect changes
+        print("DEBUG: Updating UI state")
+        self._update_ui_state()
+        print("DEBUG: reset_display() completed")
 
     def on_spectrum_changed(self):
-        """Handle spectrum selection change."""
+        """Handle spectrum type change."""
         spectrum_type = self.control_panel.get_selected_spectrum()
 
         if self.state.has_analysis_result() and self.image_canvas.is_showing_quality_map():
@@ -524,7 +819,7 @@ class DICQualityInspector:
             self.image_canvas.show_quality_map(result.quality_map, spectrum_type)
             self.legend_panel.show_legend(spectrum_type)
 
-    # Zoom Control Methods
+    # Zoom control methods
     def zoom_in(self):
         """Handle zoom in request."""
         self.image_canvas.zoom_in()
@@ -554,15 +849,15 @@ class DICQualityInspector:
         """Handle zoom level change from image canvas."""
         self.control_panel.update_zoom_level(zoom_level)
 
-    def toggle_theme(self):
-        """Toggle between light and dark themes."""
-        try:
-            # This is a placeholder for now - we'll implement theme switching later
-            messagebox.showinfo("Theme Toggle", "Theme switching will be implemented in the next update!")
-        except Exception as e:
-            print(f"Error toggling theme: {e}")
+    def _get_image_info(self) -> Optional[Dict[str, Any]]:
+        """Get image information for report."""
+        return self.state.get_image_info()
 
-    # State Change Observers
+    def _get_roi_info(self) -> Optional[Dict[str, Any]]:
+        """Get ROI information for report."""
+        return self.state.get_roi_info()
+
+    # State change observers
     def _on_analysis_result_changed(self, result: AnalysisResult):
         """Handle analysis result change."""
         self._update_ui_state()
@@ -570,7 +865,14 @@ class DICQualityInspector:
     def _on_image_changed(self, image_data):
         """Handle image change."""
         if image_data:
-            self.image_canvas.display_image(image_data.array)
+            # Extract the numpy array from ImageData object
+            if hasattr(image_data, 'array'):
+                image_array = image_data.array
+            else:
+                # Fallback if it's already an array
+                image_array = image_data
+
+            self.image_canvas.display_image(image_array)
             self.state.set_application_state('image_loaded')
             # Update zoom display
             self._update_zoom_display()
@@ -582,7 +884,9 @@ class DICQualityInspector:
         """Handle ROI change."""
         if roi_data:
             self.roi_selector.update_roi_display(roi_data)
-            roi_info = f"ROI: {len(roi_data.coordinates)} points, {roi_data.calculate_area():.0f} px²"
+            roi_info = f"ROI: {len(roi_data) if isinstance(roi_data, list) else len(roi_data.coordinates)} points"
+            if hasattr(roi_data, 'calculate_area'):
+                roi_info += f", {roi_data.calculate_area():.0f} px²"
             self.control_panel.update_roi_info(roi_info)
         else:
             self.roi_selector.clear()
@@ -593,30 +897,26 @@ class DICQualityInspector:
         """Handle application state change."""
         self._update_ui_state()
 
-    # Helper Methods
-    def _get_image_info(self) -> Optional[Dict[str, Any]]:
-        """Get image information for report."""
-        return self.state.get_image_info()
-
-    def _get_roi_info(self) -> Optional[Dict[str, Any]]:
-        """Get ROI information for report."""
-        return self.state.get_roi_info()
-
-    def _on_closing(self):
-        """Handle application closing."""
-        try:
-            # Close main window
-            self.root.destroy()
-        except Exception as e:
-            print(f"Error during application closing: {e}")
+    def on_closing(self):
+        """Handle window closing event."""
+        if messagebox.askokcancel("Quit", "Do you want to quit?"):
             self.root.destroy()
 
+    def run(self):
+        """Start the application."""
+        self.root.mainloop()
 
+
+# Application entry point
 def main():
     """Main entry point for the application."""
     root = tk.Tk()
     app = DICQualityInspector(root)
-    root.mainloop()
+
+    # Set window close protocol
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+
+    app.run()
 
 
 if __name__ == "__main__":

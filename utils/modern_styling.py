@@ -26,16 +26,40 @@ class ModernStyleManager:
         try:
             colors = get_theme_colors()
             
-            # Configure modern combobox style
+            # Configure modern combobox style with proper text color handling
             self.style.configure(
                 'Modern.TCombobox',
                 fieldbackground=colors['canvas_bg'],
                 background=colors['panel_bg'],
+                foreground=colors['text_primary'],
                 borderwidth=1,
                 relief='flat',
                 focuscolor=colors['primary'],
                 selectbackground=colors['selected_bg'],
-                selectforeground=colors['text_primary']
+                selectforeground=colors['text_primary'],
+                arrowcolor=colors['text_primary'],
+                insertcolor=colors['text_primary']
+            )
+            
+            # Configure combobox dropdown with explicit text colors
+            self.style.map('Modern.TCombobox',
+                fieldbackground=[
+                    ('readonly', colors['canvas_bg']),
+                    ('focus', colors['canvas_bg']),
+                    ('active', colors['canvas_bg'])
+                ],
+                foreground=[
+                    ('readonly', colors['text_primary']),
+                    ('focus', colors['text_primary']),
+                    ('active', colors['text_primary'])
+                ],
+                selectbackground=[('readonly', colors['selected_bg'])],
+                selectforeground=[('readonly', colors['text_primary'])],
+                arrowcolor=[
+                    ('active', colors['text_primary']),
+                    ('focus', colors['text_primary']),
+                    ('readonly', colors['text_primary'])
+                ]
             )
             
             # Configure modern scrollbar styles
@@ -49,6 +73,12 @@ class ModernStyleManager:
                 lightcolor=colors['panel_bg']
             )
             
+            # Map scrollbar states
+            self.style.map('Modern.Vertical.TScrollbar',
+                background=[('active', colors['selected_bg']), ('pressed', colors['primary'])],
+                arrowcolor=[('active', colors['text_primary'])]
+            )
+            
             self.style.configure(
                 'Modern.Horizontal.TScrollbar',
                 background=colors['panel_bg'],
@@ -59,6 +89,12 @@ class ModernStyleManager:
                 lightcolor=colors['panel_bg']
             )
             
+            # Map horizontal scrollbar states
+            self.style.map('Modern.Horizontal.TScrollbar',
+                background=[('active', colors['selected_bg']), ('pressed', colors['primary'])],
+                arrowcolor=[('active', colors['text_primary'])]
+            )
+            
             # Configure modern progressbar style
             self.style.configure(
                 'Modern.TProgressbar',
@@ -67,6 +103,21 @@ class ModernStyleManager:
                 borderwidth=0,
                 lightcolor=colors['primary'],
                 darkcolor=colors['primary']
+            )
+            
+            # Configure modern frame style
+            self.style.configure(
+                'Modern.TFrame',
+                background=colors['panel_bg'],
+                borderwidth=0,
+                relief='flat'
+            )
+            
+            # Configure modern label style
+            self.style.configure(
+                'Modern.TLabel',
+                background=colors['panel_bg'],
+                foreground=colors['text_primary']
             )
             
         except Exception as e:
@@ -139,26 +190,28 @@ class ModernStyleManager:
     @staticmethod
     def _get_button_colors(style):
         """Get button colors for a given style."""
+        colors = get_theme_colors()  # Use this instead of APP_CONFIG['colors']
+
         color_map = {
             'primary': {
-                'bg': APP_CONFIG['colors']['btn_primary'],
-                'hover': APP_CONFIG['colors']['btn_primary_hover']
+                'bg': colors['btn_primary'],  # Instead of APP_CONFIG['colors']['btn_primary']
+                'hover': colors['btn_primary_hover']
             },
             'secondary': {
-                'bg': APP_CONFIG['colors']['btn_secondary'],
-                'hover': APP_CONFIG['colors']['btn_secondary_hover']
+                'bg': colors['btn_secondary'],
+                'hover': colors['btn_secondary_hover']
             },
             'success': {
-                'bg': APP_CONFIG['colors']['btn_success'],
-                'hover': APP_CONFIG['colors']['btn_success_hover']
+                'bg': colors['btn_success'],
+                'hover': colors['btn_success_hover']
             },
             'warning': {
-                'bg': APP_CONFIG['colors']['btn_warning'],
-                'hover': APP_CONFIG['colors']['btn_warning_hover']
+                'bg': colors['btn_warning'],
+                'hover': colors['btn_warning_hover']
             },
             'danger': {
-                'bg': APP_CONFIG['colors']['btn_danger'],
-                'hover': APP_CONFIG['colors']['btn_danger_hover']
+                'bg': colors['btn_danger'],
+                'hover': colors['btn_danger_hover']
             }
         }
         return color_map.get(style, color_map['primary'])
@@ -166,12 +219,14 @@ class ModernStyleManager:
     @staticmethod
     def _get_hover_color(base_color):
         """Get hover color for a button."""
+        colors = get_theme_colors()  # Add this line
+
         hover_colors = {
-            APP_CONFIG['colors']['btn_primary']: APP_CONFIG['colors']['btn_primary_hover'],
-            APP_CONFIG['colors']['btn_secondary']: APP_CONFIG['colors']['btn_secondary_hover'],
-            APP_CONFIG['colors']['btn_success']: APP_CONFIG['colors']['btn_success_hover'],
-            APP_CONFIG['colors']['btn_warning']: APP_CONFIG['colors']['btn_warning_hover'],
-            APP_CONFIG['colors']['btn_danger']: APP_CONFIG['colors']['btn_danger_hover'],
+            colors['btn_primary']: colors['btn_primary_hover'],  # Use colors[] instead of APP_CONFIG['colors']
+            colors['btn_secondary']: colors['btn_secondary_hover'],
+            colors['btn_success']: colors['btn_success_hover'],
+            colors['btn_warning']: colors['btn_warning_hover'],
+            colors['btn_danger']: colors['btn_danger_hover'],
             '#3498db': '#2563eb',  # Legacy blue
             '#e67e22': '#d97706',  # Legacy orange
             '#9b59b6': '#7c3aed',  # Legacy purple

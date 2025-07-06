@@ -2,6 +2,7 @@
 
 import tkinter as tk
 from tkinter import ttk
+import cv2
 from PIL import Image, ImageTk
 import numpy as np
 from typing import Optional, Tuple
@@ -30,7 +31,8 @@ class ImageCanvas:
 
         # Display state
         self.displayed_image = None
-        self.original_image = None
+        self.original_image = None  # The true original image (never modified)
+        self.current_image = None   # The currently displayed image (may be blended)
         self.quality_map_data = None
         self.quality_visualization = None
         self.showing_quality_map = False
@@ -160,75 +162,206 @@ class ImageCanvas:
         # Make canvas focusable for key events
         self.canvas.focus_set()
 
-    def display_image(self, image_data: np.ndarray, preserve_view: bool = False):
+    def display_image(self, image_data: np.ndarray, preserve_view: bool = False, is_original: bool = True):
         """
         Display an image on the canvas.
 
         Args:
-            image_data: Image data as numpy array
-            preserve_view: Whether to preserve current zoom and scroll position
+            image_data: Image as numpy array (NOT ImageData object)
+            preserve_view: Whether to preserve current zoom/pan
+            is_original: Whether this is the original image (not a processed/blended version)
         """
         try:
-            # Store current view state if preserving
-            if preserve_view and self.displayed_image:
-                current_zoom = self.zoom_level
-                visible_x = self.canvas.xview()
-                visible_y = self.canvas.yview()
+            # Clear any existing image items
+            self.canvas.delete("all")
+
+            # Handle both numpy array and ImageData object
+            if hasattr(image_data, 'array'):
+                # It's an ImageData object, extract the array
+                image_array = image_data.array
             else:
-                current_zoom = 1.0
-                visible_x = None
-                visible_y = None
+                # It's already a numpy array
+                image_array = image_data
+
+            # Validate image array
+            if not isinstance(image_array, np.ndarray):
+                raise ValueError("Image must be a numpy array")
+
+            # Convert to uint8 if necessary
+            if image_array.dtype != np.uint8:
+                image_array = np.clip(image_array, 0, 255).astype(np.uint8)
+
+            # Store current image
+            self.current_image = image_array.copy()
+            
+            # Store as original image only if this is truly the original
+            if is_original:
+                self.original_image = image_array.copy()
+
+            # Convert grayscale to RGB if needed
+            if len(image_array.shape) == 2:
+                image_array = cv2.cvtColor(image_array, cv2.COLOR_GRAY2RGB)
+            elif len(image_array.shape) == 3 and image_array.shape[2] == 4:
+                # Convert RGBA to RGB
+                image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2RGB)
 
             # Convert numpy array to PIL Image
-            if len(image_data.shape) == 3:
-                pil_image = Image.fromarray(image_data.astype(np.uint8))
-            else:
-                pil_image = Image.fromarray(image_data.astype(np.uint8), mode='L')
-                pil_image = pil_image.convert('RGB')
+            pil_image = Image.fromarray(image_array)
 
-            # Calculate display scale
-            max_size = APP_CONFIG['display']['max_image_size']
-            if max(pil_image.size) > max_size:
-                ratio = max_size / max(pil_image.size)
-                new_size = (int(pil_image.size[0] * ratio), int(pil_image.size[1] * ratio))
-                pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
-                self.display_scale = ratio
-            else:
-                self.display_scale = 1.0
-
-            # Store original and current images
-            self.original_image = image_data
+            # Store as displayed image
             self.displayed_image = pil_image
 
-            # Apply zoom if not preserving view
+            # Calculate initial display scale if not preserving view
             if not preserve_view:
+                canvas_width = self.canvas.winfo_width()
+                canvas_height = self.canvas.winfo_height()
+
+                # Use default size if canvas not yet rendered
+                if canvas_width <= 1:
+                    canvas_width = 800
+                if canvas_height <= 1:
+                    canvas_height = 500
+
+                img_width, img_height = pil_image.size
+
+                # Calculate scale to fit image in canvas
+                scale_x = canvas_width / img_width
+                scale_y = canvas_height / img_height
+                self.display_scale = min(scale_x, scale_y) * 0.9  # 90% to leave margin
+
+                # Reset zoom level
                 self.zoom_level = 1.0
 
-            # Apply current zoom level
-            if self.zoom_level != 1.0:
-                zoomed_size = (
-                    int(pil_image.width * self.zoom_level),
-                    int(pil_image.height * self.zoom_level)
-                )
-                pil_image = pil_image.resize(zoomed_size, Image.Resampling.LANCZOS)
+            # Create the photo image
+            display_width = int(pil_image.width * self.display_scale * self.zoom_level)
+            display_height = int(pil_image.height * self.display_scale * self.zoom_level)
 
-            # Convert to PhotoImage
-            self.photo = ImageTk.PhotoImage(pil_image)
+            if display_width != pil_image.width or display_height != pil_image.height:
+                resized_image = pil_image.resize((display_width, display_height), Image.Resampling.LANCZOS)
+            else:
+                resized_image = pil_image
 
-            # Clear canvas and display image
-            self.canvas.delete('all')
-            self._position_and_display_image()
+            self.photo = ImageTk.PhotoImage(resized_image)
 
-            # Restore view state if preserving
-            if preserve_view and visible_x and visible_y:
-                self.canvas.xview_moveto(visible_x[0])
-                self.canvas.yview_moveto(visible_y[0])
+            # Update canvas size and display image
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
 
-            # Update canvas display scale for other components
+            if display_width <= canvas_width and display_height <= canvas_height:
+                # Center the image
+                x = (canvas_width - display_width) // 2
+                y = (canvas_height - display_height) // 2
+                self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
+                self.image_item = self.canvas.create_image(x, y, anchor='nw', image=self.photo)
+
+                # Store offsets for coordinate conversion
+                self.image_offset_x = x
+                self.image_offset_y = y
+                self.canvas.image_offset_x = x
+                self.canvas.image_offset_y = y
+            else:
+                # Image larger than canvas - use scrolling
+                self.canvas.configure(scrollregion=(0, 0, display_width, display_height))
+                self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+
+                # No offset when scrolling
+                self.image_offset_x = 0
+                self.image_offset_y = 0
+                self.canvas.image_offset_x = 0
+                self.canvas.image_offset_y = 0
+
+            # Store display scale on canvas for ROI selector
             self.canvas.display_scale = self.display_scale * self.zoom_level
+
+            # Notify zoom change
+            self._notify_zoom_changed()
+
+            # Clear quality map state
+            self.quality_map_data = None
+            self.quality_visualization = None
+            self.showing_quality_map = False
 
         except Exception as e:
             print(f"Error displaying image: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def refresh_theme(self):
+        """Refresh canvas with new theme colors."""
+        colors = get_theme_colors()
+
+        # Update canvas background
+        self.canvas.configure(bg=colors['canvas_bg'])
+
+        # Update the image panel and its children
+        self.image_panel.configure(bg=colors['panel_bg'])
+
+        # Update all the frames in the hierarchy
+        for widget in self.image_panel.winfo_children():
+            if isinstance(widget, tk.Frame):
+                widget.configure(bg=colors['panel_bg'])
+            elif isinstance(widget, tk.Label):
+                widget.configure(
+                    bg=colors['panel_bg'],
+                    fg=colors['text_primary']
+                )
+
+        # Update scrollbar styling if they exist
+        if hasattr(self, 'v_scrollbar') and hasattr(self, 'h_scrollbar'):
+            # Re-apply modern scrollbar styling
+            style = ttk.Style()
+            style.configure(
+                'Modern.Vertical.TScrollbar',
+                background=colors['panel_bg'],
+                troughcolor=colors['hover_bg'],
+                borderwidth=0,
+                arrowcolor=colors['text_secondary']
+            )
+            style.configure(
+                'Modern.Horizontal.TScrollbar',
+                background=colors['panel_bg'],
+                troughcolor=colors['hover_bg'],
+                borderwidth=0,
+                arrowcolor=colors['text_secondary']
+            )
+
+        # Force canvas update
+        self.canvas.update_idletasks()
+
+    def show_quality_map(self, quality_map_data: np.ndarray, spectrum_type: str):
+        """
+        Show quality map overlay.
+
+        Args:
+            quality_map_data: Quality map data (0-1 normalized)
+            spectrum_type: Color spectrum type to use
+        """
+        if quality_map_data is None or self.original_image is None:
+            return
+
+        # Store quality map data
+        self.quality_map_data = quality_map_data
+
+        # Generate quality visualization
+        try:
+            from analysis.quality_map.colormap import apply_dic_colormap
+
+            # Apply colormap
+            colored_map = apply_dic_colormap(quality_map_data, spectrum_type)
+
+            # Always blend with original image to avoid multiple overlays
+            alpha = 0.7  # Default alpha value for quality map overlay
+            blended = self._blend_images(self.original_image, colored_map, alpha)
+
+            # Display blended image (not original)
+            self.display_image(blended, preserve_view=True, is_original=False)
+            self.showing_quality_map = True
+            print(f"DEBUG: Quality map displayed, showing_quality_map set to True")
+
+        except Exception as e:
+            print(f"Error showing quality map: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _position_and_display_image(self):
         """Position and display the image on canvas."""
@@ -316,11 +449,11 @@ class ImageCanvas:
         mouse_x = self.canvas.canvasx(event.x)
         mouse_y = self.canvas.canvasy(event.y)
 
-        # Calculate new zoom level
+        # Calculate new zoom level with smaller, more precise increments
         if event.num == 5 or event.delta < 0:  # Zoom out
-            self.zoom_level = max(0.1, self.zoom_level - 0.1)
+            self.zoom_level = max(0.1, self.zoom_level - 0.05)
         elif event.num == 4 or event.delta > 0:  # Zoom in
-            self.zoom_level = min(5.0, self.zoom_level + 0.1)
+            self.zoom_level = min(2.0, self.zoom_level + 0.05)
         else:
             return "break"
 
@@ -346,17 +479,17 @@ class ImageCanvas:
         if canvas_height <= 1:
             canvas_height = 500
         
-        # Calculate old and new image dimensions
-        old_width = int(self.displayed_image.width * old_zoom)
-        old_height = int(self.displayed_image.height * old_zoom)
+        # Calculate old and new image dimensions using both display_scale and zoom_level
+        old_width = int(self.displayed_image.width * self.display_scale * old_zoom)
+        old_height = int(self.displayed_image.height * self.display_scale * old_zoom)
         
         base_width = self.displayed_image.width
         base_height = self.displayed_image.height
-        new_width = int(base_width * self.zoom_level)
-        new_height = int(base_height * self.zoom_level)
+        new_width = max(1, int(base_width * self.display_scale * self.zoom_level))
+        new_height = max(1, int(base_height * self.display_scale * self.zoom_level))
 
         # Resize image
-        if self.zoom_level == 1.0:
+        if new_width == self.displayed_image.width and new_height == self.displayed_image.height:
             resized_image = self.displayed_image
         else:
             resized_image = self.displayed_image.resize(
@@ -402,59 +535,47 @@ class ImageCanvas:
             self.canvas.image_offset_x = 0
             self.canvas.image_offset_y = 0
             
-            # Calculate zoom center adjustment for scrollable images
-            if old_width > 0 and old_height > 0:
-                # Adjust mouse coordinates if they were relative to a centered small image
-                if hasattr(self, 'image_offset_x') and hasattr(self, 'image_offset_y'):
-                    adjusted_mouse_x = mouse_x - getattr(self, 'image_offset_x', 0)
-                    adjusted_mouse_y = mouse_y - getattr(self, 'image_offset_y', 0)
-                else:
-                    adjusted_mouse_x = mouse_x
-                    adjusted_mouse_y = mouse_y
-                
-                # Calculate the relative position of the mouse in the old image
-                rel_x = adjusted_mouse_x / old_width if old_width > 0 else 0.5
-                rel_y = adjusted_mouse_y / old_height if old_height > 0 else 0.5
-                
-                # Clamp relative positions to valid range
-                rel_x = max(0, min(1, rel_x))
-                rel_y = max(0, min(1, rel_y))
-                
-                # Calculate where that same relative position should be in the new image
-                new_mouse_x = rel_x * new_width
-                new_mouse_y = rel_y * new_height
-                
-                # Calculate the desired scroll position to keep the zoom point centered
-                if new_width > canvas_width:
-                    # Image is wider than canvas - calculate scroll position
-                    desired_x = (new_mouse_x - canvas_width / 2) / new_width
-                    desired_x = max(0, min(1, desired_x))
-                else:
-                    # Image fits horizontally - center it
-                    desired_x = 0.5
-                
-                if new_height > canvas_height:
-                    # Image is taller than canvas - calculate scroll position  
-                    desired_y = (new_mouse_y - canvas_height / 2) / new_height
-                    desired_y = max(0, min(1, desired_y))
-                else:
-                    # Image fits vertically - center it
-                    desired_y = 0.5
-                
-                # Apply the new scroll position
-                self.canvas.xview_moveto(desired_x)
-                self.canvas.yview_moveto(desired_y)
-            else:
-                # No old dimensions - center the image
-                if new_width > canvas_width:
-                    self.canvas.xview_moveto(0.5)
-                else:
-                    self.canvas.xview_moveto(0.0)
+            # For large images, try to maintain the zoom center
+            # Use a simpler approach to avoid coordinate system confusion
+            try:
+                if old_width > 0 and old_height > 0:
+                    # Calculate the center point of the current view
+                    if old_width <= canvas_width and old_height <= canvas_height:
+                        # Old image was centered - use canvas center as zoom point
+                        center_x_ratio = 0.5
+                        center_y_ratio = 0.5
+                    else:
+                        # Old image was scrollable - get current view center
+                        current_scroll_x = self.canvas.xview()[0]
+                        current_scroll_y = self.canvas.yview()[0]
+                        view_width = self.canvas.xview()[1] - self.canvas.xview()[0]
+                        view_height = self.canvas.yview()[1] - self.canvas.yview()[0]
+                        center_x_ratio = current_scroll_x + view_width / 2
+                        center_y_ratio = current_scroll_y + view_height / 2
                     
-                if new_height > canvas_height:
-                    self.canvas.yview_moveto(0.5)
+                    # Calculate new scroll position to keep the same center
+                    # Only calculate scroll if the new image is larger than canvas
+                    if new_width > canvas_width:
+                        new_scroll_x = max(0, min(1, center_x_ratio - (canvas_width / new_width) / 2))
+                    else:
+                        new_scroll_x = 0
+                    
+                    if new_height > canvas_height:
+                        new_scroll_y = max(0, min(1, center_y_ratio - (canvas_height / new_height) / 2))
+                    else:
+                        new_scroll_y = 0
+                    
+                    self.canvas.xview_moveto(new_scroll_x)
+                    self.canvas.yview_moveto(new_scroll_y)
                 else:
-                    self.canvas.yview_moveto(0.0)
+                    # No old dimensions - center the image
+                    self.canvas.xview_moveto(0.5)
+                    self.canvas.yview_moveto(0.5)
+            except Exception as e:
+                # Fallback to centering if anything goes wrong
+                print(f"Zoom positioning error: {e}")
+                self.canvas.xview_moveto(0.5)
+                self.canvas.yview_moveto(0.5)
 
         # Update display scale
         self.canvas.display_scale = self.display_scale * self.zoom_level
@@ -528,7 +649,7 @@ class ImageCanvas:
         mouse_y = self.canvas.canvasy(center_y)
         
         old_zoom = self.zoom_level
-        self.zoom_level = min(5.0, self.zoom_level + 0.2)
+        self.zoom_level = min(2.0, self.zoom_level + 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         return "break"
 
@@ -548,7 +669,7 @@ class ImageCanvas:
         mouse_y = self.canvas.canvasy(center_y)
         
         old_zoom = self.zoom_level
-        self.zoom_level = max(0.1, self.zoom_level - 0.2)
+        self.zoom_level = max(0.1, self.zoom_level - 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         return "break"
 
@@ -573,7 +694,7 @@ class ImageCanvas:
         fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
         
         old_zoom = self.zoom_level
-        self.zoom_level = max(0.1, min(5.0, fit_zoom))
+        self.zoom_level = max(0.1, min(2.0, fit_zoom))
         
         # Center the zoom
         center_x = canvas_width / 2
@@ -621,7 +742,7 @@ class ImageCanvas:
         mouse_y = self.canvas.canvasy(center_y)
         
         old_zoom = self.zoom_level
-        self.zoom_level = min(5.0, self.zoom_level + 0.2)
+        self.zoom_level = min(2.0, self.zoom_level + 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         self._notify_zoom_changed()
 
@@ -641,7 +762,7 @@ class ImageCanvas:
         mouse_y = self.canvas.canvasy(center_y)
         
         old_zoom = self.zoom_level
-        self.zoom_level = max(0.1, self.zoom_level - 0.2)
+        self.zoom_level = max(0.1, self.zoom_level - 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         self._notify_zoom_changed()
 
@@ -666,7 +787,7 @@ class ImageCanvas:
         fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
         
         old_zoom = self.zoom_level
-        self.zoom_level = max(0.1, min(5.0, fit_zoom))
+        self.zoom_level = max(0.1, min(2.0, fit_zoom))
         
         # Center the zoom
         center_x = canvas_width / 2
@@ -707,7 +828,7 @@ class ImageCanvas:
             return
         
         # Clamp zoom level
-        zoom_level = max(0.1, min(5.0, zoom_level))
+        zoom_level = max(0.1, min(2.0, zoom_level))
         
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
@@ -723,38 +844,6 @@ class ImageCanvas:
         self.zoom_level = zoom_level
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         self._notify_zoom_changed()
-
-    def show_quality_map(self, quality_map_data: np.ndarray, spectrum_type: str):
-        """
-        Show quality map overlay.
-
-        Args:
-            quality_map_data: Quality map data (0-1 normalized)
-            spectrum_type: Color spectrum type to use
-        """
-        if quality_map_data is None or self.original_image is None:
-            return
-
-        # Store quality map data
-        self.quality_map_data = quality_map_data
-
-        # Generate quality visualization
-        try:
-            from analysis.quality_map.colormap import apply_dic_colormap
-
-            # Apply colormap
-            colored_map = apply_dic_colormap(quality_map_data, spectrum_type)
-
-            # Blend with original image
-            alpha = APP_CONFIG['display']['quality_map_alpha']
-            blended = self._blend_images(self.original_image, colored_map, alpha)
-
-            # Display blended image
-            self.display_image(blended, preserve_view=True)
-            self.showing_quality_map = True
-
-        except Exception as e:
-            print(f"Error showing quality map: {e}")
 
     def _blend_images(self, base_image: np.ndarray, overlay: np.ndarray, alpha: float) -> np.ndarray:
         """
@@ -787,9 +876,14 @@ class ImageCanvas:
 
     def show_original(self):
         """Show original image without any processing."""
+        print(f"DEBUG: show_original() called")
         if self.original_image is not None:
-            self.display_image(self.original_image, preserve_view=True)
+            print("DEBUG: Displaying original image")
+            self.display_image(self.original_image, preserve_view=True, is_original=False)
             self.showing_quality_map = False
+            print(f"DEBUG: Set showing_quality_map to False")
+        else:
+            print("DEBUG: No original image to show")
 
     def show_edges(self):
         """Show edge detection visualization."""
@@ -857,6 +951,7 @@ class ImageCanvas:
         self.canvas.delete('all')
         self.displayed_image = None
         self.original_image = None
+        self.current_image = None
         self.quality_map_data = None
         self.quality_visualization = None
         self.showing_quality_map = False
@@ -867,7 +962,29 @@ class ImageCanvas:
 
     def is_showing_quality_map(self) -> bool:
         """Check if quality map is currently being shown."""
+        print(f"DEBUG: is_showing_quality_map() returning: {self.showing_quality_map}")
         return self.showing_quality_map
+
+    def reset_view(self):
+        """Reset view to default zoom and position."""
+        print(f"DEBUG: reset_view() called, showing_quality_map={self.showing_quality_map}")
+        if self.displayed_image:
+            # Reset zoom level
+            self.zoom_level = 1.0
+
+            # Always show original image and reset quality map state
+            print("DEBUG: reset_view() calling show_original()")
+            self.show_original()
+
+    def hide_quality_map(self):
+        """Hide the quality map and show original image."""
+        print(f"DEBUG: hide_quality_map() called, showing_quality_map={self.showing_quality_map}")
+        if self.original_image is not None and self.showing_quality_map:
+            print("DEBUG: Calling show_original() to hide quality map")
+            self.show_original()
+            # showing_quality_map is already set to False in show_original()
+        else:
+            print(f"DEBUG: Not hiding quality map - original_image={self.original_image is not None}, showing_quality_map={self.showing_quality_map}")
 
     def get_image_coordinates(self, canvas_x: int, canvas_y: int) -> Tuple[int, int]:
         """
