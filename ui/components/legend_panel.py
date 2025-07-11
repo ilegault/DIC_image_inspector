@@ -28,14 +28,14 @@ class LegendPanel:
         # Legend definitions for different spectrums
         self.spectrum_definitions = {
             'optimized': {
-                'name': 'Optimized (Rainbow: Red→Blue)',
+                'name': 'Optimized DIC',
                 'colors': [
-                    (0, 0, 0, "Critical (0-75%): Black - Not suitable for DIC"),
-                    (255, 0, 0, "Minimum (75%): Red - Threshold for DIC"),
-                    (255, 127, 0, "Good (80-85%): Orange - Acceptable for DIC"),
-                    (255, 255, 0, "Very Good (85-90%): Yellow - Good for DIC"),
-                    (0, 255, 0, "Excellent (90-95%): Green - Excellent for DIC"),
-                    (0, 0, 255, "Perfect (95-100%): Blue - Ideal for DIC")
+                    (50, 0, 0, "Unusable (0-70%): No correlation possible"),
+                    (255, 0, 0, "Poor (70-80%): Unreliable correlation"),
+                    (255, 140, 0, "Acceptable (80-85%): Usable with uncertainty"),
+                    (255, 255, 0, "Good (85-90%): Good correlation quality"),
+                    (0, 255, 255, "Very Good (90-95%): Very reliable"),
+                    (0, 100, 255, "Excellent (95-100%): Optimal pattern")
                 ]
             },
             'controlled': {
@@ -149,7 +149,7 @@ class LegendPanel:
         # Title with proper contrast
         title_label = tk.Label(
             header_frame,
-            text=f"🎨 {spectrum_def['name']}",
+            text=f" {spectrum_def['name']}",
             font=('Segoe UI', 11, 'bold'),
             fg=colors['text_primary'],
             bg=colors['hover_bg']
@@ -159,7 +159,7 @@ class LegendPanel:
         # Close button
         close_btn = tk.Label(
             header_frame,
-            text="✕",
+            text="×",
             font=('Segoe UI', 12),
             fg=colors['text_secondary'],
             bg=colors['hover_bg'],

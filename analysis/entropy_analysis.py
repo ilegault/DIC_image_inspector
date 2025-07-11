@@ -45,7 +45,7 @@ class EntropyAnalyzer:
             # For large images, use optimized analysis
             if gray.size > 1000000:  # > 1 megapixel
                 return self._analyze_optimized(gray)
-            
+
             # Global Shannon entropy
             global_entropy = self._calculate_global_entropy(gray)
 
@@ -88,20 +88,20 @@ class EntropyAnalyzer:
         # Downsample for analysis to improve performance
         h, w = gray.shape
         scale_factor = min(1.0, 800.0 / max(h, w))  # Max 800px on longest side
-        
+
         if scale_factor < 1.0:
             new_h, new_w = int(h * scale_factor), int(w * scale_factor)
             gray_small = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_AREA)
         else:
             gray_small = gray
-        
+
         # Calculate basic entropy metrics on downsampled image
         global_entropy = self._calculate_global_entropy(gray_small)
         local_entropy = self._calculate_local_entropy_fast(gray_small)
         texture_entropy = self._calculate_texture_entropy_fast(gray_small)
         information_measures = self._calculate_information_measures_fast(gray_small)
         entropy_distribution = self._calculate_entropy_distribution(gray_small)
-        
+
         return {
             **global_entropy,
             **local_entropy,
@@ -120,7 +120,7 @@ class EntropyAnalyzer:
     def _calculate_local_entropy_fast(self, gray: np.ndarray) -> Dict[str, float]:
         """Fast local entropy calculation using sampling."""
         h, w = gray.shape
-        
+
         # Use only one window size for speed
         window_size = 7
         if h < window_size or w < window_size:
@@ -130,23 +130,23 @@ class EntropyAnalyzer:
                 'local_entropy_max': 0.0,
                 'local_entropy_min': 0.0
             }
-        
+
         # Sample fewer points for speed
         step = max(window_size, min(h, w) // 20)  # Sample ~400 points max
         window_entropies = []
-        
+
         for y in range(0, h - window_size + 1, step):
             for x in range(0, w - window_size + 1, step):
                 window = gray[y:y + window_size, x:x + window_size]
-                
+
                 # Calculate entropy for this window
                 hist, _ = np.histogram(window, bins=16, range=(0, 256), density=True)
                 hist = hist[hist > 0]
-                
+
                 if len(hist) > 0:
                     window_entropy = -np.sum(hist * np.log2(hist))
                     window_entropies.append(window_entropy)
-        
+
         if not window_entropies:
             return {
                 'local_entropy_mean': 0.0,
@@ -154,9 +154,9 @@ class EntropyAnalyzer:
                 'local_entropy_max': 0.0,
                 'local_entropy_min': 0.0
             }
-        
+
         window_entropies = np.array(window_entropies)
-        
+
         return {
             'local_entropy_mean': float(np.mean(window_entropies)),
             'local_entropy_std': float(np.std(window_entropies)),
@@ -167,22 +167,22 @@ class EntropyAnalyzer:
     def _calculate_texture_entropy_fast(self, gray: np.ndarray) -> Dict[str, float]:
         """Fast texture entropy using sampling."""
         h, w = gray.shape
-        
+
         if h < 3 or w < 3:
             return {
                 'texture_entropy': 0.0,
                 'texture_uniformity': 0.0,
                 'texture_complexity': 0.0
             }
-        
+
         # Sample points instead of processing every pixel
         sample_step = max(1, min(h, w) // 100)  # Sample ~10000 points max
         lbp_patterns = []
-        
+
         for y in range(1, h - 1, sample_step):
             for x in range(1, w - 1, sample_step):
                 center = gray[y, x]
-                
+
                 # 8-neighborhood comparison
                 pattern = 0
                 neighbors = [
@@ -190,37 +190,37 @@ class EntropyAnalyzer:
                     gray[y, x + 1], gray[y + 1, x + 1], gray[y + 1, x],
                     gray[y + 1, x - 1], gray[y, x - 1]
                 ]
-                
+
                 for i, neighbor in enumerate(neighbors):
                     if neighbor >= center:
                         pattern += 2 ** i
-                
+
                 lbp_patterns.append(pattern)
-        
+
         if not lbp_patterns:
             return {
                 'texture_entropy': 0.0,
                 'texture_uniformity': 0.0,
                 'texture_complexity': 0.0
             }
-        
+
         # Calculate texture entropy
         lbp_hist, _ = np.histogram(lbp_patterns, bins=256, density=True)
         lbp_hist = lbp_hist[lbp_hist > 0]
-        
+
         if len(lbp_hist) > 0:
             texture_entropy = float(-np.sum(lbp_hist * np.log2(lbp_hist)))
         else:
             texture_entropy = 0.0
-        
+
         # Texture uniformity
         unique_patterns = len(np.unique(lbp_patterns))
         texture_uniformity = float(1.0 / unique_patterns) if unique_patterns > 0 else 0.0
-        
+
         # Texture complexity
         max_texture_entropy = np.log2(256)
         texture_complexity = texture_entropy / max_texture_entropy if max_texture_entropy > 0 else 0.0
-        
+
         return {
             'texture_entropy': texture_entropy,
             'texture_uniformity': texture_uniformity,
@@ -231,23 +231,23 @@ class EntropyAnalyzer:
         """Fast information measures calculation."""
         # Global entropy
         global_entropy = self._calculate_global_entropy(gray)['shannon_entropy']
-        
+
         # Gradient entropy (simplified)
         grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
         grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
         gradient_mag = np.sqrt(grad_x ** 2 + grad_y ** 2)
         gradient_mag_int = np.clip(gradient_mag, 0, 255).astype(np.uint8)
         gradient_entropy = self._calculate_global_entropy(gradient_mag_int)['shannon_entropy']
-        
+
         # Laplacian entropy
         laplacian = cv2.Laplacian(gray, cv2.CV_64F)
         laplacian_int = np.clip(np.abs(laplacian), 0, 255).astype(np.uint8)
         laplacian_entropy = self._calculate_global_entropy(laplacian_int)['shannon_entropy']
-        
+
         # Information gain
         gradient_info_gain = gradient_entropy - global_entropy
         laplacian_info_gain = laplacian_entropy - global_entropy
-        
+
         return {
             'gradient_entropy': float(gradient_entropy),
             'laplacian_entropy': float(laplacian_entropy),
@@ -659,38 +659,38 @@ class EntropyAnalyzer:
 
         # Shannon entropy recommendations
         if shannon_entropy < 2.0:
-            recommendations.append("❌ Very low information content")
+            recommendations.append(" Very low information content")
             recommendations.append("Pattern lacks sufficient detail for reliable correlation")
         elif shannon_entropy < 3.0:
-            recommendations.append("⚠️ Low information content")
+            recommendations.append(" Low information content")
             recommendations.append("Consider more complex speckle pattern")
         elif shannon_entropy > 7.0:
-            recommendations.append("⚠️ Very high information content")
+            recommendations.append(" Very high information content")
             recommendations.append("May indicate noise or excessive detail")
 
         # Texture complexity recommendations
         if texture_complexity < 0.3:
-            recommendations.append("⚠️ Low texture complexity")
+            recommendations.append(" Low texture complexity")
             recommendations.append("Pattern may be too regular for optimal correlation")
         elif texture_complexity > 0.8:
-            recommendations.append("⚠️ Very high texture complexity")
+            recommendations.append(" Very high texture complexity")
             recommendations.append("May indicate noise or overly random pattern")
 
         # Entropy uniformity recommendations
         if entropy_uniformity < 0.6:
-            recommendations.append("⚠️ Uneven information distribution")
+            recommendations.append(" Uneven information distribution")
             recommendations.append("Some regions have much less detail than others")
 
         # Overall assessment
         quality_score = self.calculate_entropy_quality_score(metrics)
         if quality_score > 0.8:
-            recommendations.append("✅ Excellent information content for DIC")
+            recommendations.append(" Excellent information content for DIC")
         elif quality_score > 0.6:
-            recommendations.append("✅ Good information content for DIC")
+            recommendations.append(" Good information content for DIC")
         elif quality_score > 0.4:
-            recommendations.append("⚠️ Acceptable information content")
+            recommendations.append(" Acceptable information content")
         else:
-            recommendations.append("❌ Poor information content for DIC")
+            recommendations.append(" Poor information content for DIC")
 
         return recommendations
 

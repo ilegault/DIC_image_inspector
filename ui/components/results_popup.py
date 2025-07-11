@@ -45,7 +45,7 @@ class ResultsPopup:
     def _create_popup_window(self):
         """Create the main popup window."""
         colors = get_theme_colors()
-        
+
         self.popup_window = tk.Toplevel(self.parent)
         self.popup_window.title("DIC Quality Analysis Results")
         self.popup_window.geometry("1000x800")
@@ -60,7 +60,7 @@ class ResultsPopup:
     def _create_popup_content(self):
         """Create the scrollable content area."""
         colors = get_theme_colors()
-        
+
         # Main container
         main_frame = tk.Frame(self.popup_window, bg=colors['background'])
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
@@ -74,7 +74,7 @@ class ResultsPopup:
     def _create_scrollable_content(self, parent):
         """Create scrollable content area with results."""
         colors = get_theme_colors()
-        
+
         # Canvas and scrollbar for scrolling
         canvas = tk.Canvas(parent, bg=colors['background'], highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient='vertical', command=canvas.yview)
@@ -144,10 +144,10 @@ class ResultsPopup:
     def _add_title_section(self):
         """Add title section."""
         colors = get_theme_colors()
-        
+
         title_label = tk.Label(
             self.scrollable_frame,
-            text="🔬 DIC Image Quality Analysis Results",
+            text=" DIC Image Quality Analysis Results",
             font=APP_CONFIG['fonts']['title'],
             fg=colors['text_primary'],
             bg=colors['background']
@@ -157,7 +157,7 @@ class ResultsPopup:
     def _add_executive_summary(self):
         """Add executive summary section."""
         colors = get_theme_colors()
-        section_frame = self._create_section_frame("📋 Executive Summary")
+        section_frame = self._create_section_frame(" Executive Summary")
 
         # Overall score display
         score_frame = tk.Frame(section_frame, bg=colors['panel_bg'])
@@ -207,7 +207,7 @@ class ResultsPopup:
     def _add_technical_analysis(self):
         """Add technical analysis section."""
         colors = get_theme_colors()
-        section_frame = self._create_section_frame("📊 Technical Analysis")
+        section_frame = self._create_section_frame(" Technical Analysis")
 
         stats = self.analysis_result.quality_map_stats
 
@@ -250,7 +250,7 @@ class ResultsPopup:
     def _add_dic_parameters(self):
         """Add DIC parameters section."""
         colors = get_theme_colors()
-        section_frame = self._create_section_frame("⚙️ Recommended DIC Parameters")
+        section_frame = self._create_section_frame(" Recommended DIC Parameters")
 
         if self.analysis_result.dic_parameters:
             params = self.analysis_result.dic_parameters
@@ -271,7 +271,7 @@ class ResultsPopup:
                 bg=colors['panel_bg']
             ).pack(anchor='w')
 
-            self._add_param_label(left_params, f"• Subset Size: {params.facet_size} pixels")
+            self._add_param_label(left_params, f"• Subset Size: {params.subset_size_used} pixels")
             self._add_param_label(left_params, f"• Step Size: {params.step_size} pixels")
 
             # Right column
@@ -292,7 +292,7 @@ class ResultsPopup:
     def _add_recommendations(self):
         """Add recommendations section."""
         colors = get_theme_colors()
-        section_frame = self._create_section_frame("💡 Recommendations")
+        section_frame = self._create_section_frame(" Recommendations")
 
         # Generate recommendations using report generator
         recommendations_text = self.report_generator.generate_section(
@@ -358,7 +358,7 @@ class ResultsPopup:
     def _create_section_frame(self, title: str) -> tk.Frame:
         """Create a section frame with title."""
         colors = get_theme_colors()
-        
+
         section_frame = tk.Frame(
             self.scrollable_frame,
             bg=colors['panel_bg'],

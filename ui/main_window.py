@@ -75,17 +75,25 @@ class DICQualityInspector:
 
     def _setup_window(self):
         """Configure main window properties."""
+        # Get screen dimensions for 1/4 size calculation
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Calculate 1/4 screen size (approximately)
+        window_width = int(screen_width * 0.5)  # Half width for better usability
+        window_height = int(screen_height * 0.6)  # 60% height for better aspect ratio
+
         # Set window size
-        self.root.geometry("1400x900")
+        self.root.geometry(f"{window_width}x{window_height}")
 
         # Center window on screen
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (1400 // 2)
-        y = (self.root.winfo_screenheight() // 2) - (900 // 2)
-        self.root.geometry(f"1400x900+{x}+{y}")
+        x = (screen_width // 2) - (window_width // 2)
+        y = (screen_height // 2) - (window_height // 2)
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
 
-        # Set minimum size
-        self.root.minsize(1200, 700)
+        # Set minimum size (much smaller for compact app)
+        self.root.minsize(800, 500)
 
         # Configure grid weights for responsive design
         self.root.grid_rowconfigure(0, weight=1)
@@ -101,7 +109,7 @@ class DICQualityInspector:
 
         # Configure ttk style for the entire application
         style = ttk.Style()
-        
+
         # Set the theme based on current mode
         if APP_CONFIG['theme'] == 'dark':
             # Try to use a dark theme if available
@@ -145,7 +153,7 @@ class DICQualityInspector:
         """Apply comprehensive styling to all ttk widgets."""
         try:
             # Configure all ttk widgets with theme colors
-            
+
             # Combobox styling with proper text color handling
             style.configure('TCombobox',
                 fieldbackground=colors['canvas_bg'],
@@ -156,7 +164,7 @@ class DICQualityInspector:
                 arrowcolor=colors['text_primary'],
                 insertcolor=colors['text_primary']
             )
-            
+
             style.map('TCombobox',
                 fieldbackground=[
                     ('readonly', colors['canvas_bg']),
@@ -177,7 +185,7 @@ class DICQualityInspector:
                     ('readonly', colors['text_primary'])
                 ]
             )
-            
+
             # Scrollbar styling
             style.configure('Vertical.TScrollbar',
                 background=colors['panel_bg'],
@@ -187,12 +195,12 @@ class DICQualityInspector:
                 darkcolor=colors['panel_bg'],
                 lightcolor=colors['panel_bg']
             )
-            
+
             style.map('Vertical.TScrollbar',
                 background=[('active', colors['selected_bg']), ('pressed', colors['primary'])],
                 arrowcolor=[('active', colors['text_primary'])]
             )
-            
+
             style.configure('Horizontal.TScrollbar',
                 background=colors['panel_bg'],
                 troughcolor=colors['hover_bg'],
@@ -201,25 +209,25 @@ class DICQualityInspector:
                 darkcolor=colors['panel_bg'],
                 lightcolor=colors['panel_bg']
             )
-            
+
             style.map('Horizontal.TScrollbar',
                 background=[('active', colors['selected_bg']), ('pressed', colors['primary'])],
                 arrowcolor=[('active', colors['text_primary'])]
             )
-            
+
             # Frame styling
             style.configure('TFrame',
                 background=colors['panel_bg'],
                 borderwidth=0,
                 relief='flat'
             )
-            
+
             # Label styling
             style.configure('TLabel',
                 background=colors['panel_bg'],
                 foreground=colors['text_primary']
             )
-            
+
             # Button styling
             style.configure('TButton',
                 background=colors['btn_primary'],
@@ -227,12 +235,12 @@ class DICQualityInspector:
                 borderwidth=0,
                 relief='flat'
             )
-            
+
             style.map('TButton',
                 background=[('active', colors['btn_primary_hover']), ('pressed', colors['btn_primary_hover'])],
                 foreground=[('active', 'white'), ('pressed', 'white')]
             )
-            
+
             # Entry styling
             style.configure('TEntry',
                 fieldbackground=colors['canvas_bg'],
@@ -241,7 +249,7 @@ class DICQualityInspector:
                 borderwidth=1,
                 relief='flat'
             )
-            
+
             # Spinbox styling
             style.configure('TSpinbox',
                 fieldbackground=colors['canvas_bg'],
@@ -251,7 +259,7 @@ class DICQualityInspector:
                 relief='flat',
                 arrowcolor=colors['text_primary']
             )
-            
+
         except Exception as e:
             print(f"Warning: Could not apply comprehensive styling: {e}")
 
@@ -266,13 +274,13 @@ class DICQualityInspector:
         # Create header
         self._create_header(main_container)
 
-        # Create content area
+        # Create content area (reduced padding for compact design)
         content_frame = tk.Frame(main_container, bg=colors['background'])
-        content_frame.pack(fill='both', expand=True, padx=20, pady=(0, 20))
+        content_frame.pack(fill='both', expand=True, padx=15, pady=(0, 15))
 
-        # Left panel - Control Panel
-        left_panel = tk.Frame(content_frame, bg=colors['background'], width=400)
-        left_panel.pack(side='left', fill='y', padx=(0, 10))
+        # Left panel - Control Panel (reduced width with better spacing)
+        left_panel = tk.Frame(content_frame, bg=colors['background'], width=310)
+        left_panel.pack(side='left', fill='y', padx=(0, 20))
         left_panel.pack_propagate(False)
 
         # Create control panel with callbacks
@@ -291,7 +299,6 @@ class DICQualityInspector:
             'spectrum_changed': self.on_spectrum_changed,
             'zoom_in': self.zoom_in,
             'zoom_out': self.zoom_out,
-            'zoom_fit': self.zoom_fit,
             'zoom_actual': self.zoom_actual
         }
 
@@ -331,35 +338,35 @@ class DICQualityInspector:
             relief='flat',
             bd=0
         )
-        title_container.pack(fill='x', pady=(0, 10))
+        title_container.pack(fill='x', pady=(0, 8))
 
         # Add subtle border
         border = tk.Frame(title_container, bg=colors['panel_border'], height=1)
         border.pack(side='bottom', fill='x')
 
-        # Horizontal layout for compact title
+        # Horizontal layout for compact title (reduced padding)
         title_frame = tk.Frame(title_container, bg=colors['panel_bg'])
-        title_frame.pack(fill='x', padx=20, pady=15)
+        title_frame.pack(fill='x', padx=15, pady=10)
 
-        # Application title
+        # Application title (compact version)
         title_label = tk.Label(
             title_frame,
-            text="🔬 DIC Image Quality Inspector v2.0",
-            font=APP_CONFIG['fonts']['heading'],
+            text=" DIC Quality Inspector v2.0",
+            font=APP_CONFIG['fonts']['subheading'],
             fg=colors['text_primary'],
             bg=colors['panel_bg']
         )
         title_label.pack(side='left')
 
-        # Subtitle
+        # Subtitle (shorter for compact design)
         subtitle_label = tk.Label(
             title_frame,
-            text="• Professional Digital Image Correlation Analysis",
-            font=APP_CONFIG['fonts']['body'],
+            text="• Digital Image Correlation Analysis",
+            font=APP_CONFIG['fonts']['small'],
             fg=colors['text_secondary'],
             bg=colors['panel_bg']
         )
-        subtitle_label.pack(side='left', padx=(10, 0))
+        subtitle_label.pack(side='left', padx=(8, 0))
 
     def _create_status_bar(self):
         """Create modern status bar."""
@@ -444,13 +451,13 @@ class DICQualityInspector:
             # Update widget background and foreground
             if hasattr(widget, 'configure') and hasattr(widget, 'cget'):
                 widget_type = type(widget).__name__
-                
+
                 # Get current background to determine what type of widget this is
                 try:
                     current_bg = widget.cget('bg')
                 except:
                     current_bg = None
-                
+
                 # Handle different widget types based on their current background
                 if isinstance(widget, tk.Frame):
                     # Determine frame type by current background
@@ -460,7 +467,7 @@ class DICQualityInspector:
                         widget.configure(bg=colors['hover_bg'])
                     else:
                         widget.configure(bg=colors['panel_bg'])
-                        
+
                 elif isinstance(widget, tk.Label):
                     # Get parent background to match
                     try:
@@ -468,7 +475,7 @@ class DICQualityInspector:
                         widget.configure(bg=parent_bg, fg=colors['text_primary'])
                     except:
                         widget.configure(bg=colors['panel_bg'], fg=colors['text_primary'])
-                        
+
                 elif isinstance(widget, tk.Button):
                     # Only update if it's not a custom styled button
                     if not hasattr(widget, '_custom_styled'):
@@ -486,14 +493,14 @@ class DICQualityInspector:
                                 widget.configure(fg=colors['text_primary'])
                             except:
                                 pass
-                                
+
                 elif isinstance(widget, (tk.Entry, tk.Text)):
                     widget.configure(
                         bg=colors['canvas_bg'],
                         fg=colors['text_primary'],
                         insertbackground=colors['text_primary']
                     )
-                    
+
                 elif isinstance(widget, tk.Listbox):
                     widget.configure(
                         bg=colors['canvas_bg'],
@@ -501,10 +508,10 @@ class DICQualityInspector:
                         selectbackground=colors['selected_bg'],
                         selectforeground=colors['text_primary']
                     )
-                    
+
                 elif isinstance(widget, tk.Canvas):
                     widget.configure(bg=colors['canvas_bg'])
-                    
+
                 elif isinstance(widget, tk.Spinbox):
                     widget.configure(
                         bg=colors['canvas_bg'],
@@ -579,10 +586,7 @@ class DICQualityInspector:
     def take_screenshot(self):
         """Handle screenshot request."""
         try:
-            # Hide main window temporarily
-            self.root.withdraw()
-
-            # Show screenshot dialog
+            # Show screenshot dialog first (don't hide main window yet)
             screenshot_dialog = ScreenshotDialog(
                 self.root,
                 callback=self._on_screenshot_captured
@@ -590,16 +594,30 @@ class DICQualityInspector:
             screenshot_dialog.show()
 
         except Exception as e:
+            messagebox.showerror("Screenshot Error", f"Failed to capture screenshot: {str(e)}")
+
+    def _start_screenshot_dialog(self):
+        """Start the screenshot dialog after window is hidden."""
+        try:
+            # Show screenshot dialog
+            screenshot_dialog = ScreenshotDialog(
+                self.root,
+                callback=self._on_screenshot_captured
+            )
+            screenshot_dialog.show()
+        except Exception as e:
             self.root.deiconify()
             messagebox.showerror("Screenshot Error", f"Failed to capture screenshot: {str(e)}")
 
     def _on_screenshot_captured(self, image_data):
         """Handle screenshot capture completion."""
-        self.root.deiconify()
+        # Window restoration is handled by the dialog itself
         if image_data is not None:
             self.state.set_image(image_data, None, "screenshot")
             self.state.clear_roi()
             self.state.clear_analysis_result()
+            self._update_ui_state()
+            self.status_var.set("Screenshot captured - Ready for analysis")
 
     def select_roi(self):
         """Handle ROI selection request."""
@@ -649,8 +667,8 @@ class DICQualityInspector:
 
             if spectrum_type == 'controlled':
                 params = self.control_panel.get_control_parameters()
-                analysis_kwargs['subset_size'] = params['facet_size']
-                analysis_kwargs['step_size'] = params['point_distance']
+                analysis_kwargs['subset_size'] = params['subset_size']
+                analysis_kwargs['step_size'] = params['step_size']
 
             # Perform analysis
             result = self.analyzer.analyze_image(
@@ -694,7 +712,7 @@ class DICQualityInspector:
 
         is_showing = self.image_canvas.is_showing_quality_map()
         print(f"DEBUG: Currently showing quality map: {is_showing}")
-        
+
         if is_showing:
             # Hide quality map
             print("DEBUG: Hiding quality map")
@@ -781,29 +799,29 @@ class DICQualityInspector:
     def reset_display(self):
         """Reset display and view options."""
         print("DEBUG: reset_display() called")
-        
+
         # Hide quality map first, then reset view
         print("DEBUG: Hiding quality map")
         self.image_canvas.hide_quality_map()
         print("DEBUG: Resetting canvas view")
         self.image_canvas.reset_view()
-        
+
         # Clear ROI display and data
         print("DEBUG: Clearing ROI")
         self.roi_selector.clear()
         self.state.clear_roi()
         self.state.clear_analysis_result()
-        
+
         # Reset UI panels
         print("DEBUG: Hiding legend and resetting controls")
         self.legend_panel.hide_legend()
         self.control_panel.set_quality_map_active(False)
-        
+
         # Clear any displayed results/statistics
         if hasattr(self, 'results_popup') and self.results_popup:
             self.results_popup.destroy()
             self.results_popup = None
-            
+
         # Update UI state to reflect changes
         print("DEBUG: Updating UI state")
         self._update_ui_state()
@@ -828,11 +846,6 @@ class DICQualityInspector:
     def zoom_out(self):
         """Handle zoom out request."""
         self.image_canvas.zoom_out()
-        self._update_zoom_display()
-
-    def zoom_fit(self):
-        """Handle zoom fit request."""
-        self.image_canvas.zoom_fit()
         self._update_zoom_display()
 
     def zoom_actual(self):

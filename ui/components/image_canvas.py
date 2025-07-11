@@ -56,7 +56,7 @@ class ImageCanvas:
     def _create_canvas_area(self):
         """Create the main canvas area with modern styling."""
         colors = get_theme_colors()
-        
+
         # Main image panel with modern card-like appearance
         self.image_panel = tk.Frame(
             self.parent,
@@ -68,12 +68,12 @@ class ImageCanvas:
 
         # Title section with modern styling
         title_frame = tk.Frame(self.image_panel, bg=colors['panel_bg'])
-        title_frame.pack(fill='x', padx=APP_CONFIG['styling']['panel_padding'], 
+        title_frame.pack(fill='x', padx=APP_CONFIG['styling']['panel_padding'],
                         pady=(APP_CONFIG['styling']['panel_padding'], APP_CONFIG['styling']['small_spacing']))
-        
+
         img_title = tk.Label(
             title_frame,
-            text="📸 Image Preview",
+            text=" Image Preview",
             font=APP_CONFIG['fonts']['heading'],
             fg=colors['text_primary'],
             bg=colors['panel_bg']
@@ -82,8 +82,8 @@ class ImageCanvas:
 
         # Canvas frame with modern styling
         canvas_frame = tk.Frame(self.image_panel, bg=colors['panel_bg'])
-        canvas_frame.pack(fill='both', expand=True, 
-                         padx=APP_CONFIG['styling']['panel_padding'], 
+        canvas_frame.pack(fill='both', expand=True,
+                         padx=APP_CONFIG['styling']['panel_padding'],
                          pady=(0, APP_CONFIG['styling']['panel_padding']))
 
         # Canvas with modern styling and subtle border
@@ -94,7 +94,7 @@ class ImageCanvas:
             bd=1
         )
         canvas_container.pack(fill='both', expand=True)
-        
+
         # Inner canvas frame
         inner_canvas_frame = tk.Frame(canvas_container, bg=colors['panel_bg'])
         inner_canvas_frame.pack(fill='both', expand=True, padx=1, pady=1)
@@ -193,7 +193,7 @@ class ImageCanvas:
 
             # Store current image
             self.current_image = image_array.copy()
-            
+
             # Store as original image only if this is truly the original
             if is_original:
                 self.original_image = image_array.copy()
@@ -384,32 +384,32 @@ class ImageCanvas:
             # Image fits entirely in canvas - center it directly
             center_x = (canvas_width - img_width) // 2
             center_y = (canvas_height - img_height) // 2
-            
+
             # Set scroll region to canvas size for proper centering
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
             self.image_item = self.canvas.create_image(center_x, center_y, anchor='nw', image=self.photo)
-            
+
             # Store offset for other components
             self.image_offset_x = center_x
             self.image_offset_y = center_y
             self.canvas.image_offset_x = center_x
             self.canvas.image_offset_y = center_y
-            
+
             # No scrolling needed - image is centered
             self.canvas.xview_moveto(0.0)
             self.canvas.yview_moveto(0.0)
-            
+
         else:
             # Image is larger than canvas - use scroll region approach
             self.canvas.configure(scrollregion=(0, 0, img_width, img_height))
             self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
-            
+
             # No offset when using scroll regions
             self.image_offset_x = 0
             self.image_offset_y = 0
             self.canvas.image_offset_x = 0
             self.canvas.image_offset_y = 0
-            
+
             # Center the view on the image
             if img_width > canvas_width:
                 # Image is wider - center horizontally
@@ -417,14 +417,14 @@ class ImageCanvas:
             else:
                 # Image fits horizontally - no horizontal scrolling needed
                 center_ratio_x = 0.0
-                
+
             if img_height > canvas_height:
                 # Image is taller - center vertically
                 center_ratio_y = 0.5
             else:
                 # Image fits vertically - no vertical scrolling needed
                 center_ratio_y = 0.0
-            
+
             self.canvas.xview_moveto(center_ratio_x)
             self.canvas.yview_moveto(center_ratio_y)
 
@@ -459,7 +459,7 @@ class ImageCanvas:
 
         # Apply zoom centered on mouse position
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
-        
+
         # Notify zoom change
         self._notify_zoom_changed()
         return "break"
@@ -472,17 +472,17 @@ class ImageCanvas:
         # Get current scroll position and canvas dimensions
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
-        
+
         # Use reasonable defaults if canvas not rendered yet
         if canvas_width <= 1:
             canvas_width = 800
         if canvas_height <= 1:
             canvas_height = 500
-        
+
         # Calculate old and new image dimensions using both display_scale and zoom_level
         old_width = int(self.displayed_image.width * self.display_scale * old_zoom)
         old_height = int(self.displayed_image.height * self.display_scale * old_zoom)
-        
+
         base_width = self.displayed_image.width
         base_height = self.displayed_image.height
         new_width = max(1, int(base_width * self.display_scale * self.zoom_level))
@@ -503,38 +503,38 @@ class ImageCanvas:
         # Update canvas and position image properly
         if self.image_item:
             self.canvas.delete(self.image_item)
-        
+
         # Handle positioning based on image size relative to canvas
         if new_width <= canvas_width and new_height <= canvas_height:
             # Image fits entirely in canvas - center it directly
             center_x = (canvas_width - new_width) // 2
             center_y = (canvas_height - new_height) // 2
-            
+
             # Set scroll region to canvas size for proper centering
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
             self.image_item = self.canvas.create_image(center_x, center_y, anchor='nw', image=self.photo)
-            
+
             # Store offset for other components
             self.image_offset_x = center_x
             self.image_offset_y = center_y
             self.canvas.image_offset_x = center_x
             self.canvas.image_offset_y = center_y
-            
+
             # No scrolling needed - image is centered
             self.canvas.xview_moveto(0.0)
             self.canvas.yview_moveto(0.0)
-            
+
         else:
             # Image is larger than canvas - use scroll region approach
             self.canvas.configure(scrollregion=(0, 0, new_width, new_height))
             self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
-            
+
             # No offset when using scroll regions
             self.image_offset_x = 0
             self.image_offset_y = 0
             self.canvas.image_offset_x = 0
             self.canvas.image_offset_y = 0
-            
+
             # For large images, try to maintain the zoom center
             # Use a simpler approach to avoid coordinate system confusion
             try:
@@ -552,19 +552,19 @@ class ImageCanvas:
                         view_height = self.canvas.yview()[1] - self.canvas.yview()[0]
                         center_x_ratio = current_scroll_x + view_width / 2
                         center_y_ratio = current_scroll_y + view_height / 2
-                    
+
                     # Calculate new scroll position to keep the same center
                     # Only calculate scroll if the new image is larger than canvas
                     if new_width > canvas_width:
                         new_scroll_x = max(0, min(1, center_x_ratio - (canvas_width / new_width) / 2))
                     else:
                         new_scroll_x = 0
-                    
+
                     if new_height > canvas_height:
                         new_scroll_y = max(0, min(1, center_y_ratio - (canvas_height / new_height) / 2))
                     else:
                         new_scroll_y = 0
-                    
+
                     self.canvas.xview_moveto(new_scroll_x)
                     self.canvas.yview_moveto(new_scroll_y)
                 else:
@@ -637,17 +637,17 @@ class ImageCanvas:
         """Zoom in using keyboard shortcut."""
         if not self.displayed_image:
             return "break"
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = min(2.0, self.zoom_level + 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -657,17 +657,17 @@ class ImageCanvas:
         """Zoom out using keyboard shortcut."""
         if not self.displayed_image:
             return "break"
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = max(0.1, self.zoom_level - 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -677,31 +677,31 @@ class ImageCanvas:
         """Fit image to canvas."""
         if not self.displayed_image:
             return "break"
-        
+
         # Calculate fit zoom level
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
-        
+
         if canvas_width <= 1 or canvas_height <= 1:
             return "break"
-        
+
         img_width = self.displayed_image.width
         img_height = self.displayed_image.height
-        
+
         # Calculate zoom to fit
         zoom_x = canvas_width / img_width
         zoom_y = canvas_height / img_height
         fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = max(0.1, min(2.0, fit_zoom))
-        
+
         # Center the zoom
         center_x = canvas_width / 2
         center_y = canvas_height / 2
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         return "break"
 
@@ -709,17 +709,17 @@ class ImageCanvas:
         """Zoom to actual size (100%)."""
         if not self.displayed_image:
             return "break"
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = 1.0
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -730,17 +730,17 @@ class ImageCanvas:
         """Zoom in programmatically."""
         if not self.displayed_image:
             return
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = min(2.0, self.zoom_level + 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -750,17 +750,17 @@ class ImageCanvas:
         """Zoom out programmatically."""
         if not self.displayed_image:
             return
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = max(0.1, self.zoom_level - 0.1)
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -770,31 +770,31 @@ class ImageCanvas:
         """Fit image to canvas programmatically."""
         if not self.displayed_image:
             return
-        
+
         # Calculate fit zoom level
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
-        
+
         if canvas_width <= 1 or canvas_height <= 1:
             return
-        
+
         img_width = self.displayed_image.width
         img_height = self.displayed_image.height
-        
+
         # Calculate zoom to fit
         zoom_x = canvas_width / img_width
         zoom_y = canvas_height / img_height
         fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = max(0.1, min(2.0, fit_zoom))
-        
+
         # Center the zoom
         center_x = canvas_width / 2
         center_y = canvas_height / 2
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
         self._notify_zoom_changed()
 
@@ -802,17 +802,17 @@ class ImageCanvas:
         """Zoom to actual size (100%) programmatically."""
         if not self.displayed_image:
             return
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = 1.0
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -826,20 +826,20 @@ class ImageCanvas:
         """Set zoom level programmatically."""
         if not self.displayed_image:
             return
-        
+
         # Clamp zoom level
         zoom_level = max(0.1, min(2.0, zoom_level))
-        
+
         # Get canvas center for zoom point
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         center_x = canvas_width / 2
         center_y = canvas_height / 2
-        
+
         # Convert to canvas coordinates
         mouse_x = self.canvas.canvasx(center_x)
         mouse_y = self.canvas.canvasy(center_y)
-        
+
         old_zoom = self.zoom_level
         self.zoom_level = zoom_level
         self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
@@ -1012,11 +1012,11 @@ class ImageCanvas:
         # The canvas shows the image scaled by (display_scale * zoom_level)
         # So to get original coordinates, we divide by the total scaling
         total_scale = self.display_scale * self.zoom_level
-        
+
         # Ensure we don't divide by zero
         if total_scale <= 0:
             total_scale = 1.0
-            
+
         original_image_x = canvas_x / total_scale
         original_image_y = canvas_y / total_scale
 

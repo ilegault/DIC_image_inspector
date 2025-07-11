@@ -380,31 +380,31 @@ class SpeckleAnalyzer:
         spatial_uniformity = metrics.get('spatial_uniformity', 0)
 
         if total_speckles == 0:
-            recommendations.append("❌ No speckles detected - apply speckle pattern")
+            recommendations.append(" No speckles detected - apply speckle pattern")
             recommendations.append("Use spray paint or toner powder to create random pattern")
         elif total_speckles < 20:
-            recommendations.append("⚠️ Very few speckles - increase speckle density")
+            recommendations.append(" Very few speckles - increase speckle density")
 
         if mean_diameter < 2:
-            recommendations.append("⚠️ Speckles too small - may cause noise issues")
+            recommendations.append(" Speckles too small - may cause noise issues")
             recommendations.append("Use larger speckle pattern or reduce image resolution")
         elif mean_diameter > 12:
-            recommendations.append("⚠️ Speckles too large - may reduce correlation accuracy")
+            recommendations.append(" Speckles too large - may reduce correlation accuracy")
             recommendations.append("Use finer speckle pattern or increase image resolution")
 
         if density_score < 0.6:
-            recommendations.append("⚠️ Suboptimal speckle density")
+            recommendations.append(" Suboptimal speckle density")
             if metrics.get('speckle_density', 0) < 50:
                 recommendations.append("Increase speckle density")
             else:
                 recommendations.append("Reduce speckle density")
 
         if spatial_uniformity < 0.6:
-            recommendations.append("⚠️ Uneven speckle distribution")
+            recommendations.append(" Uneven speckle distribution")
             recommendations.append("Ensure more uniform speckle application")
 
         if len(recommendations) == 0:
-            recommendations.append("✅ Good speckle pattern for DIC analysis")
+            recommendations.append(" Good speckle pattern for DIC analysis")
 
         return recommendations
 

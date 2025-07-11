@@ -24,11 +24,12 @@ class ColormapGenerator:
                 'name': 'Optimized DIC',
                 'description': 'Optimized for DIC analysis visualization',
                 'colors': [
-                    (0, 0, 0, "Critical: Not suitable for DIC"),       # Black for worst
-                    (139, 0, 0, "Poor: Below threshold"),              # Dark red
-                    (255, 69, 0, "Good: Acceptable for DIC"),          # Orange red
-                    (255, 215, 0, "Very Good: Good for DIC"),          # Gold
-                    (0, 255, 0, "Excellent: Ideal for DIC")            # Green for best
+                    (0, 0, 0, "Unusable: No correlation possible"),        # Black for worst
+                    (139, 0, 0, "Poor: Unreliable correlation"),           # Dark red
+                    (255, 140, 0, "Acceptable: Usable with uncertainty"),  # Orange
+                    (255, 255, 0, "Good: Good correlation quality"),       # Yellow
+                    (0, 255, 255, "Very Good: Very reliable"),             # Cyan
+                    (0, 255, 0, "Excellent: Optimal pattern")              # Green for best
                 ]
             },
             'controlled': {

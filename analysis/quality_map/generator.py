@@ -132,17 +132,17 @@ class QualityMapGenerator:
         quality_map = np.zeros((h, w), dtype=np.float32)
         count_map = np.zeros((h, w), dtype=np.int32)
 
-        logger.info(f"ZEISS-style analysis: facet={facet_size}, distance={point_distance}")
+        logger.info(f"Controlled method analysis: facet={facet_size}, distance={point_distance}")
 
-        # High-density sampling like ZEISS
+        # High-density sampling with controlled parameters
         analysis_count = 0
         for y in range(0, h - facet_size + 1, point_distance):
             for x in range(0, w - facet_size + 1, point_distance):
                 # Extract subset
                 subset = gray[y:y + facet_size, x:x + facet_size]
 
-                # Calculate ZEISS-style quality
-                quality_score = self._calculate_zeiss_quality(subset)
+                # Calculate quality using unified method
+                quality_score = self.quality_calculator.calculate_subset_quality(subset)
 
                 # Map back to image coordinates
                 y_end = min(y + facet_size, h)
@@ -152,7 +152,7 @@ class QualityMapGenerator:
 
                 analysis_count += 1
 
-        logger.info(f"Completed {analysis_count} ZEISS-style analysis points")
+        logger.info(f"Completed {analysis_count} controlled method analysis points")
 
         # Average overlapping regions
         mask = count_map > 0
@@ -162,171 +162,6 @@ class QualityMapGenerator:
         quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.3)
 
         return np.clip(quality_map, 0, 1)
-
-    def _calculate_zeiss_quality(self, subset: np.ndarray) -> float:
-        """Calculate ZEISS-style quality focusing on correlation reliability."""
-        if subset.size == 0:
-            return 0.0
-
-        try:
-            # Calculate gradients
-            grad_x = cv2.Sobel(subset, cv2.CV_64F, 1, 0, ksize=3)
-            grad_y = cv2.Sobel(subset, cv2.CV_64F, 0, 1, ksize=3)
-            gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
-
-            # 1. Gradient content analysis (50% weight) - More strict
-            mean_gradient = np.mean(gradient_magnitude)
-            gradient_std = np.std(gradient_magnitude)
-
-            # More discriminating gradient assessment for ZEISS-style analysis
-            normalized_gradient = mean_gradient / 255.0
-            if normalized_gradient > 0.6:  # Very high gradients (excellent)
-                gradient_score = 1.0
-            elif normalized_gradient > 0.4:  # High gradients (very good)
-                gradient_score = 0.7 + 0.3 * (normalized_gradient - 0.4) / 0.2
-            elif normalized_gradient > 0.2:  # Medium gradients (good)
-                gradient_score = 0.4 + 0.3 * (normalized_gradient - 0.2) / 0.2
-            elif normalized_gradient > 0.1:  # Low gradients (fair)
-                gradient_score = 0.2 + 0.2 * (normalized_gradient - 0.1) / 0.1
-            elif normalized_gradient > 0.05:  # Very low gradients (poor)
-                gradient_score = 0.1 + 0.1 * (normalized_gradient - 0.05) / 0.05
-            else:  # Extremely low gradients (critical)
-                gradient_score = normalized_gradient * 2
-
-            # Gradient distribution quality - more realistic for artificial patterns
-            if mean_gradient > 0:
-                gradient_cv = gradient_std / mean_gradient
-            else:
-                gradient_cv = 0.0
-            if 0.5 <= gradient_cv <= 2.5:  # Wider optimal range for artificial patterns
-                distribution_bonus = 1.0
-            elif 0.3 <= gradient_cv <= 3.5:  # Acceptable range
-                distribution_bonus = 0.8
-            elif 0.2 <= gradient_cv <= 4.0:  # Fair range
-                distribution_bonus = 0.6
-            else:
-                distribution_bonus = 0.4  # Poor but not extremely penalized
-
-            gradient_quality = gradient_score * distribution_bonus
-
-            # 2. Pattern uniqueness (25% weight) - More strict
-            mean_intensity = np.mean(subset)
-            intensity_std = np.std(subset)
-            if mean_intensity > 0:
-                contrast_ratio = intensity_std / mean_intensity
-            else:
-                contrast_ratio = 0.0
-
-            # More discriminating contrast assessment for ZEISS-style analysis
-            if contrast_ratio > 0.8:  # Very high contrast (excellent)
-                contrast_score = 1.0
-            elif contrast_ratio > 0.5:  # High contrast (very good)
-                contrast_score = 0.7 + 0.3 * (contrast_ratio - 0.5) / 0.3
-            elif contrast_ratio > 0.3:  # Medium contrast (good)
-                contrast_score = 0.4 + 0.3 * (contrast_ratio - 0.3) / 0.2
-            elif contrast_ratio > 0.15:  # Low contrast (fair)
-                contrast_score = 0.2 + 0.2 * (contrast_ratio - 0.15) / 0.15
-            elif contrast_ratio > 0.05:  # Very low contrast (poor)
-                contrast_score = 0.1 + 0.1 * (contrast_ratio - 0.05) / 0.1
-            else:  # Extremely low contrast (critical)
-                contrast_score = contrast_ratio * 2
-
-            # Pattern complexity using simplified LBP
-            complexity_score = self._calculate_pattern_complexity(subset)
-
-            uniqueness_quality = contrast_score * 0.7 + complexity_score * 0.3
-
-            # 3. Noise resistance (15% weight) - More realistic for artificial patterns
-            if subset.shape[0] > 3 and subset.shape[1] > 3:
-                smoothed = cv2.GaussianBlur(subset, (3, 3), 0.5)
-                noise = subset.astype(float) - smoothed.astype(float)
-                noise_std = np.std(noise)
-                signal_std = np.std(smoothed)
-                if noise_std > 0:
-                    snr = signal_std / noise_std
-                else:
-                    snr = float('inf')  # Perfect signal (no noise)
-                noise_quality = min(1.0, snr / 10.0)  # More realistic SNR requirement
-                
-                # Less harsh penalties for artificial speckle patterns
-                if snr < 3.0:  # Very low SNR
-                    noise_quality *= 0.4  # Moderate penalty instead of heavy
-                elif snr < 6.0:  # Low SNR
-                    noise_quality *= 0.7  # Light penalty instead of moderate
-            else:
-                noise_quality = 0.5  # Higher default for small regions
-
-            # 4. Focus quality (10% weight) - More realistic for artificial patterns
-            laplacian = cv2.Laplacian(subset, cv2.CV_64F)
-            laplacian_var = np.var(laplacian)
-            focus_score = min(1.0, laplacian_var / 500.0)  # More realistic threshold
-            
-            # Less harsh penalties for artificial speckle patterns
-            if laplacian_var < 20.0:  # Very low focus
-                focus_score *= 0.3  # Moderate penalty instead of heavy
-            elif laplacian_var < 50.0:  # Low focus
-                focus_score *= 0.6  # Light penalty instead of moderate
-
-            # Combine all factors (ZEISS-style weighting)
-            overall_quality = (
-                    gradient_quality * 0.50 +
-                    uniqueness_quality * 0.25 +
-                    noise_quality * 0.15 +
-                    focus_score * 0.10
-            )
-            
-            # Apply critical quality checks - more lenient for artificial speckle patterns
-            critical_factors = []
-            if gradient_quality < 0.05:  # Only extremely poor gradients
-                critical_factors.append("gradient")
-            if uniqueness_quality < 0.05:  # Only extremely poor contrast
-                critical_factors.append("contrast")
-            if noise_quality < 0.05:  # Only extremely poor noise
-                critical_factors.append("noise")
-            if focus_score < 0.05:  # Only extremely poor focus
-                critical_factors.append("focus")
-            
-            # Apply lighter penalties for critical issues
-            if len(critical_factors) >= 3:
-                overall_quality *= 0.4  # Moderate penalty for multiple critical issues
-            elif len(critical_factors) >= 2:
-                overall_quality *= 0.6  # Light penalty for some critical issues
-            elif len(critical_factors) == 1:
-                overall_quality *= 0.8  # Very light penalty for single critical issue
-
-            return max(0.0, min(1.0, overall_quality))
-
-        except Exception as e:
-            logger.warning(f"Error in ZEISS quality calculation: {e}")
-            return 0.0
-
-    def _calculate_pattern_complexity(self, subset: np.ndarray) -> float:
-        """Calculate pattern complexity using simplified texture analysis."""
-        if subset.shape[0] < 3 or subset.shape[1] < 3:
-            return 0.5
-
-        try:
-            center = subset[1:-1, 1:-1]
-
-            # 8-neighborhood comparison
-            neighbors = [
-                subset[:-2, :-2], subset[:-2, 1:-1], subset[:-2, 2:],
-                subset[1:-1, :-2], subset[1:-1, 2:],
-                subset[2:, :-2], subset[2:, 1:-1], subset[2:, 2:]
-            ]
-
-            texture_variations = 0
-            for neighbor in neighbors:
-                texture_variations += np.sum(neighbor > center)
-
-            if center.size > 0:
-                texture_complexity = texture_variations / (center.size * len(neighbors))
-                return min(1.0, texture_complexity * 4)
-            else:
-                return 0.5
-
-        except Exception:
-            return 0.5
 
     def _generate_roi_based_map(self, gray: np.ndarray, roi: 'ROIData', spectrum_type: str, 
                                subset_size: Optional[int], step_size: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
@@ -467,11 +302,11 @@ class QualityMapGenerator:
         quality_map = np.zeros((h, w), dtype=np.float32)
         count_map = np.zeros((h, w), dtype=np.int32)
         
-        logger.info(f"ZEISS-style ROI analysis: facet={facet_size}, distance={point_distance}")
+        logger.info(f"Controlled method ROI analysis: facet={facet_size}, distance={point_distance}")
         
         analysis_count = 0
         
-        # High-density sampling like ZEISS, but only for ROI regions
+        # High-density sampling with controlled parameters, but only for ROI regions
         for y in range(0, h - facet_size + 1, point_distance):
             for x in range(0, w - facet_size + 1, point_distance):
                 # Check if this facet intersects with ROI
@@ -485,8 +320,8 @@ class QualityMapGenerator:
                 # Extract subset
                 subset = gray[y:y + facet_size, x:x + facet_size]
                 
-                # Calculate ZEISS-style quality
-                quality_score = self._calculate_zeiss_quality(subset)
+                # Calculate quality using unified method
+                quality_score = self.quality_calculator.calculate_subset_quality(subset)
                 
                 # Map back to image coordinates, but only for ROI pixels
                 y_end = min(y + facet_size, h)
@@ -499,7 +334,7 @@ class QualityMapGenerator:
                 
                 analysis_count += 1
         
-        logger.info(f"Completed {analysis_count} ZEISS-style ROI analysis points")
+        logger.info(f"Completed {analysis_count} controlled method ROI analysis points")
         
         # Average overlapping regions
         mask = count_map > 0

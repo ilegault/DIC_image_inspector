@@ -124,7 +124,8 @@ Quality Statistics:
 
 Analysis Algorithm:
   The analysis uses advanced subset-based quality assessment including:
-  • Gradient content analysis (Sum of Squared Gradients)
+  • Gradient content analysis (Mean Intensity Gradient - MIG)
+  • Enhanced feature calculation (Ef) combining first and second-order gradients
   • Speckle morphology evaluation
   • Contrast distribution assessment
   • Pattern uniqueness calculation
@@ -249,22 +250,30 @@ or make improvements first."""
 
 1. GRADIENT CONTENT ANALYSIS
 {"=" * 30}
-The primary quality metric is based on gradient analysis using the Sobel operator:
+The primary quality metric is based on advanced gradient analysis using MIG and Ef calculations:
 
-Gradient Calculation:
+First-Order Gradient Calculation (Sobel operator):
     Gx(x,y) = I(x+1,y-1) + 2×I(x+1,y) + I(x+1,y+1) - I(x-1,y-1) - 2×I(x-1,y) - I(x-1,y+1)
     Gy(x,y) = I(x-1,y+1) + 2×I(x,y+1) + I(x+1,y+1) - I(x-1,y-1) - 2×I(x,y-1) - I(x+1,y-1)
 
-Gradient Magnitude:
+First-Order Gradient Magnitude:
     |∇I(x,y)| = √(Gx² + Gy²)
 
-Sum of Squared Gradients (SSG):
-    SSG = Σ Σ |∇I(x,y)|²
-         x y
-
-Normalized SSG:
-    SSG_norm = SSG / (N × 255²)
+Mean Intensity Gradient (MIG) - Pan et al., 2009:
+    MIG = (1/N) × Σ Σ |∇I(x,y)|
+                  x y
     where N = total number of pixels
+
+Second-Order Gradient Calculation:
+    Gxx = ∂²I/∂x²,  Gyy = ∂²I/∂y²,  Gxy = ∂²I/∂x∂y
+
+Second-Order Gradient Magnitude:
+    |∇²I(x,y)| = √(Gxx² + Gyy² + 2×Gxy²)
+
+Enhanced Feature (Ef) - Hu et al., 2021:
+    Ef = α × MIG + β × (1/N) × Σ Σ |∇²I(x,y)|
+                              x y
+    where α = 0.7, β = 0.3 (weighting coefficients)
 
 2. CONTRAST ANALYSIS
 {"=" * 20}
@@ -285,15 +294,24 @@ Combined Contrast Score:
 
 3. OVERALL QUALITY COMPUTATION
 {"=" * 30}
-The final quality score is a weighted combination:
+The final quality score is a weighted combination emphasizing MIG/Ef metrics:
 
 Q_total = w₁×Q_gradient + w₂×Q_contrast + w₃×Q_entropy + w₄×Q_pattern + w₅×Q_noise
 
+where Q_gradient is computed using MIG and Ef:
+    Q_gradient = (Ef_score × 0.8 + MIG_score × 0.2) × distribution_bonus
+
+MIG and Ef Scoring:
+    MIG_score = min(1.0, normalized_MIG × 6)
+    Ef_score = min(1.0, normalized_Ef × 4)
+    normalized_MIG = MIG / 255.0
+    normalized_Ef = Ef / 255.0
+
 Standard weights:
-    w₁ = 0.40  (Gradient content - most important for DIC)
-    w₂ = 0.25  (Contrast quality)
-    w₃ = 0.20  (Information content)
-    w₄ = 0.10  (Pattern complexity)
+    w₁ = 0.60  (Gradient content - MIG/Ef emphasis for DIC)
+    w₂ = 0.20  (Contrast quality)
+    w₃ = 0.10  (Information content)
+    w₄ = 0.05  (Pattern complexity)
     w₅ = 0.05  (Noise level)
 
 Constraint: Σwᵢ = 1.0
@@ -323,6 +341,8 @@ Analysis Configuration:
   • Color spectrum: {spectrum_used}
 
 References:
+• Pan, B. et al. (2009). Mean intensity gradient: An effective global parameter for quality assessment of the speckle patterns used in digital image correlation. Optics and Lasers in Engineering.
+• Hu, Z. et al. (2021). Enhanced feature for quality assessment of speckle patterns in digital image correlation. Measurement Science and Technology.
 • Pan, B. (2018). Digital image correlation for surface deformation measurement.
 • Sutton, M.A. et al. (2009). Image correlation for shape, motion and deformation measurements.
 • Reu, P.L. (2015). All about speckles: Speckle density. Experimental Techniques.
@@ -427,35 +447,35 @@ End of Report
             # Strict DIC-only recommendations
             if score >= 95:
                 recommendations.extend([
-                    "🔵 PERFECT pattern! Ideal for high-precision DIC analysis.",
+                    " PERFECT pattern! Ideal for high-precision DIC analysis.",
                     "Use finest correlation parameters for maximum accuracy.",
                     "Consider this as a reference pattern for other setups.",
                     "Expected accuracy: ±0.001-0.005 pixels"
                 ])
             elif score >= 90:
                 recommendations.extend([
-                    "🔷 EXCELLENT pattern quality for precision DIC work.",
+                    " EXCELLENT pattern quality for precision DIC work.",
                     "Use standard DIC parameters with confidence.",
                     "Expect sub-pixel accuracy in correlation results.",
                     "Expected accuracy: ±0.005-0.01 pixels"
                 ])
             elif score >= 85:
                 recommendations.extend([
-                    "🟡 VERY GOOD pattern for DIC analysis.",
+                    " VERY GOOD pattern for DIC analysis.",
                     "Use recommended DIC parameters - good correlation expected.",
                     "Suitable for most strain measurement applications.",
                     "Expected accuracy: ±0.01-0.02 pixels"
                 ])
             elif score >= 80:
                 recommendations.extend([
-                    "🟠 GOOD pattern quality for DIC applications.",
+                    " GOOD pattern quality for DIC applications.",
                     "Acceptable correlation reliability with standard parameters.",
                     "Monitor correlation quality during analysis.",
                     "Expected accuracy: ±0.02-0.03 pixels"
                 ])
             elif score >= 75:
                 recommendations.extend([
-                    "🔴 MINIMUM pattern - threshold for DIC analysis.",
+                    " MINIMUM pattern - threshold for DIC analysis.",
                     "Use larger subset sizes (increase by 30-50%) for better correlation.",
                     "Monitor correlation quality very closely during analysis.",
                     "Strong recommendation to improve pattern if possible.",
@@ -463,11 +483,11 @@ End of Report
                 ])
             else:
                 recommendations.extend([
-                    "⚫ CRITICAL: Pattern NOT suitable for DIC analysis.",
-                    "🚨 MANDATORY recommendation to reapply or enhance speckle pattern.",
+                    " CRITICAL: Pattern NOT suitable for DIC analysis.",
+                    " MANDATORY recommendation to reapply or enhance speckle pattern.",
                     "Current pattern will result in correlation failure and unreliable results.",
                     "Consider alternative measurement techniques.",
-                    "❌ Do not proceed with DIC analysis using this pattern."
+                    " Do not proceed with DIC analysis using this pattern."
                 ])
         else:
             # More realistic recommendations for other spectrums
@@ -514,13 +534,13 @@ End of Report
         # Add spectrum-specific note
         if spectrum_type == 'custom_dic':
             recommendations.extend([
-                "📊 Note: Using strict DIC-only quality assessment.",
+                " Note: Using strict DIC-only quality assessment.",
                 "Only patterns rated 75%+ are considered suitable for DIC work."
             ])
         else:
             spectrum_name = spectrum_type.replace('_', ' ').title()
             recommendations.extend([
-                f"📊 Note: Using {spectrum_name} spectrum assessment.",
+                f" Note: Using {spectrum_name} spectrum assessment.",
                 "Professional DIC quality evaluation with appropriate thresholds."
             ])
 
@@ -562,17 +582,17 @@ End of Report
         quality_text, _ = self._assess_quality_level(score, spectrum_type)
 
         if score >= 90:
-            return f"✅ PROCEED - {quality_text}. Your image is excellent for DIC analysis."
+            return f" PROCEED - {quality_text}. Your image is excellent for DIC analysis."
         elif score >= 75:
-            return f"✅ PROCEED - {quality_text}. Your image is suitable for DIC analysis."
+            return f" PROCEED - {quality_text}. Your image is suitable for DIC analysis."
         elif score >= 60:
-            return f"⚠️ PROCEED WITH CAUTION - {quality_text}. Consider larger subset sizes."
+            return f" PROCEED WITH CAUTION - {quality_text}. Consider larger subset sizes."
         elif score >= 45:
-            return f"⚠️ MARGINAL - {quality_text}. Use with care and larger parameters."
+            return f" MARGINAL - {quality_text}. Use with care and larger parameters."
         elif score >= 30:
-            return f"🚫 NOT RECOMMENDED - {quality_text}. Consider pattern improvement."
+            return f" NOT RECOMMENDED - {quality_text}. Consider pattern improvement."
         else:
-            return f"🚫 DO NOT PROCEED - {quality_text}. Pattern enhancement required."
+            return f" DO NOT PROCEED - {quality_text}. Pattern enhancement required."
 
     def generate_section(self, section_type: str, analysis_results: Dict,
                          **kwargs) -> str:

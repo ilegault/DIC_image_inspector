@@ -55,7 +55,7 @@ class HelpDialog:
         # Title
         title_label = tk.Label(
             main_frame,
-            text="🔍 DIC Image Quality Inspector - Help Guide",
+            text=" DIC Image Quality Inspector - Help Guide",
             font=APP_CONFIG['fonts']['title'],
             fg=APP_CONFIG['colors']['text_primary'],
             bg=APP_CONFIG['colors']['background']
@@ -133,9 +133,9 @@ class HelpDialog:
         """Get comprehensive help content."""
         return """DIC IMAGE QUALITY INSPECTOR - COMPREHENSIVE HELP GUIDE
 
-═══════════════════════════════════════════════════════════════════════════════
 
-🚀 GETTING STARTED
+
+ GETTING STARTED
 
 • Loading Images:
   - Click "Load Image" to select an image file from your computer
@@ -149,9 +149,9 @@ class HelpDialog:
   4. View results using "Show Results" button
   5. Save comprehensive report if needed
 
-═══════════════════════════════════════════════════════════════════════════════
 
-🎯 REGION OF INTEREST (ROI) SELECTION
+
+ REGION OF INTEREST (ROI) SELECTION
 
 • Starting ROI Selection:
   - Click "Select ROI" button to enter selection mode
@@ -173,9 +173,9 @@ class HelpDialog:
   - Avoid edges and boundaries of specimens
   - Ensure ROI contains sufficient pattern detail
 
-═══════════════════════════════════════════════════════════════════════════════
 
-🖼️ IMAGE NAVIGATION & VIEWING
+
+️ IMAGE NAVIGATION & VIEWING
 
 • Zoom Controls:
   - Mouse wheel: Zoom in/out at cursor position
@@ -195,9 +195,9 @@ class HelpDialog:
   - "Quality Map" button toggles color overlay showing analysis results
   - Different color schemes available via dropdown menu
 
-═══════════════════════════════════════════════════════════════════════════════
 
-🔬 ANALYSIS & QUALITY ASSESSMENT
+
+ ANALYSIS & QUALITY ASSESSMENT
 
 • Analysis Process:
   - Examines speckle pattern quality across the image
@@ -220,9 +220,9 @@ class HelpDialog:
   - 45-60: Marginal - Use with caution
   - Below 45: Poor - Consider pattern improvement
 
-═══════════════════════════════════════════════════════════════════════════════
 
-⚙️ ADVANCED FEATURES
+
+ ADVANCED FEATURES
 
 • Controlled Method Analysis:
   - Select "controlled" spectrum for professional assessment
@@ -239,9 +239,9 @@ class HelpDialog:
   - Toggle quality map on/off to compare with original
   - Legend updates automatically when changing spectrums
 
-═══════════════════════════════════════════════════════════════════════════════
 
-📊 INTERPRETING RESULTS
+
+ INTERPRETING RESULTS
 
 • Executive Summary:
   - Large score display with color-coded assessment
@@ -262,9 +262,9 @@ class HelpDialog:
   - Suggestions for improving pattern if needed
   - Parameter adjustments for optimal results
 
-═══════════════════════════════════════════════════════════════════════════════
 
-🔧 TROUBLESHOOTING
+
+ TROUBLESHOOTING
 
 • ROI Selection Issues:
   - If ROI appears offset, try resetting view first
@@ -286,9 +286,9 @@ class HelpDialog:
   - Try different color spectrums if colors are hard to distinguish
   - Legend panel shows meaning of each color
 
-═══════════════════════════════════════════════════════════════════════════════
 
-💡 BEST PRACTICES
+
+ BEST PRACTICES
 
 • Image Preparation:
   - Ensure good lighting and focus before capture
@@ -310,9 +310,9 @@ class HelpDialog:
   - Consider larger subsets for lower quality patterns
   - Adjust overlap based on measurement requirements
 
-═══════════════════════════════════════════════════════════════════════════════
 
-📚 TECHNICAL BACKGROUND
+
+ TECHNICAL BACKGROUND
 
 This tool analyzes digital image correlation (DIC) pattern quality by:
 
@@ -325,9 +325,9 @@ This tool analyzes digital image correlation (DIC) pattern quality by:
 The analysis provides scientifically-based recommendations for DIC correlation
 parameters and expected measurement accuracy.
 
-═══════════════════════════════════════════════════════════════════════════════
 
-🆘 SUPPORT
+
+ SUPPORT
 
 For additional support or feature requests:
 • Check the application documentation
@@ -336,7 +336,7 @@ For additional support or feature requests:
 
 Version: 2.0.0 - Clean Architecture Implementation
 
-═══════════════════════════════════════════════════════════════════════════════"""
+"""
 
     def _close_help(self):
         """Close the help dialog."""

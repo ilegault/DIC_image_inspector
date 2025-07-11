@@ -27,6 +27,12 @@ class QualityCalculator:
             'noise': 0.05  # Noise level
         }
 
+        # Scoring calibration parameters
+        self.mig_normalization_factor = 50.0  # MIG typically ranges 0-50 for good speckle patterns
+        self.ef_normalization_factor = 100.0  # Initial estimate, needs empirical calibration
+        self.mig_score_multiplier = 1.2  # Adjusted from original 6 to account for new normalization
+        self.ef_score_multiplier = 1.0   # Initial value for empirical calibration
+
         # Validate weights
         if abs(sum(self.weights.values()) - 1.0) > 1e-6:
             logger.warning(f"Quality weights don't sum to 1.0: {sum(self.weights.values())}")
@@ -108,51 +114,80 @@ class QualityCalculator:
             return gray
 
     def _calculate_gradient_quality(self, gray: np.ndarray) -> Dict:
-        """Calculate gradient-based quality metrics."""
-        # Calculate gradients using Sobel operator
+        """
+        Calculate gradient-based quality metrics using MIG and Ef calculations.
+        
+        Based on:
+        - Pan et al., 2009: Mean Intensity Gradient (MIG) calculation
+        - Hu et al., 2021: Enhanced feature (Ef) combining first and second-order gradients
+        """
+        # Calculate first-order gradients using Sobel operator
         grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
         grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
-
-        # Sum of Squared Gradients (SSG) - key DIC metric
-        ssg = np.sum(gradient_magnitude ** 2)
-        normalized_ssg = ssg / (gray.size * 255 ** 2)
-
-        # Mean Intensity Gradient (MIG)
-        mig = np.mean(gradient_magnitude)
-        normalized_mig = mig / 255.0
-
-        # Gradient distribution analysis with safe arithmetic
-        gradient_mean = np.mean(gradient_magnitude)
-        gradient_std = np.std(gradient_magnitude)
+        
+        # Calculate second-order gradients (second derivatives)
+        grad_xx = cv2.Sobel(grad_x, cv2.CV_64F, 1, 0, ksize=3)  # d²I/dx²
+        grad_yy = cv2.Sobel(grad_y, cv2.CV_64F, 0, 1, ksize=3)  # d²I/dy²
+        grad_xy = cv2.Sobel(grad_x, cv2.CV_64F, 0, 1, ksize=3)  # d²I/dxdy
+        
+        # Calculate first-order gradient magnitude
+        first_order_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+        
+        # Calculate second-order gradient magnitude
+        second_order_magnitude = np.sqrt(grad_xx ** 2 + grad_yy ** 2 + 2 * grad_xy ** 2)
+        
+        # Mean Intensity Gradient (MIG) - Pan et al., 2009
+        mig = np.mean(first_order_magnitude)
+        
+        # Enhanced feature (Ef) - Hu et al., 2021
+        # Combining first and second-order gradients with coefficients α=0.7, β=0.3
+        alpha = 0.7
+        beta = 0.3
+        ef = alpha * np.mean(first_order_magnitude) + beta * np.mean(second_order_magnitude)
+        
+        # Normalize metrics for scoring
+        # MIG typically ranges 0-50 for good speckle patterns (Pan et al., 2009)
+        normalized_mig = mig / self.mig_normalization_factor
+        # Ef normalization - empirical calibration needed based on test images
+        normalized_ef = ef / self.ef_normalization_factor
+        
+        # Calculate gradient distribution statistics for quality assessment
+        gradient_mean = np.mean(first_order_magnitude)
+        gradient_std = np.std(first_order_magnitude)
         if gradient_mean > 0:
             gradient_cv = gradient_std / gradient_mean
         else:
             gradient_cv = 0.0
-
-        # Calculate gradient score
-        mig_score = min(1.0, normalized_mig * 6)
-        ssg_score = min(1.0, normalized_ssg * 200)
-
-        # Distribution quality bonus
+        
+        # Calculate quality scores with configurable multipliers
+        mig_score = min(1.0, normalized_mig * self.mig_score_multiplier)
+        ef_score = min(1.0, normalized_ef * self.ef_score_multiplier)
+        
+        # Distribution quality assessment
         if 0.5 <= gradient_cv <= 2.0:
             distribution_bonus = 1.0
         elif 0.3 <= gradient_cv <= 3.0:
             distribution_bonus = 0.9
         else:
             distribution_bonus = 0.8
-
-        # Combined gradient score
-        gradient_score = (mig_score * 0.7 + ssg_score * 0.3) * distribution_bonus
-
+        
+        # Combined gradient score emphasizing Ef metric
+        gradient_score = (ef_score * 0.8 + mig_score * 0.2) * distribution_bonus
+        
         return {
             'score': gradient_score,
-            'ssg': ssg,
-            'normalized_ssg': normalized_ssg,
             'mig': mig,
             'normalized_mig': normalized_mig,
+            'ef': ef,
+            'normalized_ef': normalized_ef,
+            'mig_score': mig_score,
+            'ef_score': ef_score,
             'gradient_cv': gradient_cv,
-            'distribution_bonus': distribution_bonus
+            'distribution_bonus': distribution_bonus,
+            'first_order_mean': np.mean(first_order_magnitude),
+            'second_order_mean': np.mean(second_order_magnitude),
+            'alpha_coefficient': alpha,
+            'beta_coefficient': beta
         }
 
     def _calculate_contrast_quality(self, gray: np.ndarray) -> Dict:
@@ -385,6 +420,113 @@ class QualityCalculator:
         """Get current quality metric weights."""
         return self.weights.copy()
 
+    def set_scoring_calibration(self, 
+                               mig_normalization_factor: Optional[float] = None,
+                               ef_normalization_factor: Optional[float] = None,
+                               mig_score_multiplier: Optional[float] = None,
+                               ef_score_multiplier: Optional[float] = None) -> None:
+        """
+        Update scoring calibration parameters for MIG and Ef metrics.
+        
+        Args:
+            mig_normalization_factor: Normalization factor for MIG (default: 50.0)
+            ef_normalization_factor: Normalization factor for Ef (needs empirical calibration)
+            mig_score_multiplier: Score multiplier for MIG (default: 1.2)
+            ef_score_multiplier: Score multiplier for Ef (needs empirical calibration)
+        """
+        if mig_normalization_factor is not None:
+            self.mig_normalization_factor = mig_normalization_factor
+            logger.info(f"Updated MIG normalization factor to {mig_normalization_factor}")
+            
+        if ef_normalization_factor is not None:
+            self.ef_normalization_factor = ef_normalization_factor
+            logger.info(f"Updated Ef normalization factor to {ef_normalization_factor}")
+            
+        if mig_score_multiplier is not None:
+            self.mig_score_multiplier = mig_score_multiplier
+            logger.info(f"Updated MIG score multiplier to {mig_score_multiplier}")
+            
+        if ef_score_multiplier is not None:
+            self.ef_score_multiplier = ef_score_multiplier
+            logger.info(f"Updated Ef score multiplier to {ef_score_multiplier}")
+
+    def get_scoring_calibration(self) -> Dict[str, float]:
+        """Get current scoring calibration parameters."""
+        return {
+            'mig_normalization_factor': self.mig_normalization_factor,
+            'ef_normalization_factor': self.ef_normalization_factor,
+            'mig_score_multiplier': self.mig_score_multiplier,
+            'ef_score_multiplier': self.ef_score_multiplier
+        }
+
+    def calibrate_ef_from_samples(self, sample_images: list, target_ef_range: Tuple[float, float] = (0.3, 0.8)) -> None:
+        """
+        Empirically calibrate Ef normalization based on sample images.
+        
+        Args:
+            sample_images: List of sample images (numpy arrays) representing good speckle patterns
+            target_ef_range: Target range for normalized Ef values (min, max)
+        """
+        if not sample_images:
+            logger.warning("No sample images provided for Ef calibration")
+            return
+            
+        ef_values = []
+        
+        for img in sample_images:
+            try:
+                # Convert to grayscale if needed
+                if len(img.shape) == 3:
+                    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray = img.copy()
+                
+                # Calculate Ef for this sample
+                grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+                grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+                grad_xx = cv2.Sobel(grad_x, cv2.CV_64F, 1, 0, ksize=3)
+                grad_yy = cv2.Sobel(grad_y, cv2.CV_64F, 0, 1, ksize=3)
+                grad_xy = cv2.Sobel(grad_x, cv2.CV_64F, 0, 1, ksize=3)
+                
+                first_order_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+                second_order_magnitude = np.sqrt(grad_xx ** 2 + grad_yy ** 2 + 2 * grad_xy ** 2)
+                
+                alpha = 0.7
+                beta = 0.3
+                ef = alpha * np.mean(first_order_magnitude) + beta * np.mean(second_order_magnitude)
+                ef_values.append(ef)
+                
+            except Exception as e:
+                logger.warning(f"Error processing sample image for Ef calibration: {e}")
+                continue
+        
+        if not ef_values:
+            logger.warning("No valid Ef values calculated from sample images")
+            return
+            
+        # Calculate statistics
+        ef_min = np.min(ef_values)
+        ef_max = np.max(ef_values)
+        ef_mean = np.mean(ef_values)
+        ef_std = np.std(ef_values)
+        
+        logger.info(f"Ef calibration statistics: min={ef_min:.2f}, max={ef_max:.2f}, mean={ef_mean:.2f}, std={ef_std:.2f}")
+        
+        # Calculate normalization factor to map typical good values to target range
+        # Use the 75th percentile as the reference for good speckle patterns
+        ef_75th = np.percentile(ef_values, 75)
+        target_mid = (target_ef_range[0] + target_ef_range[1]) / 2
+        
+        # Calculate new normalization factor
+        new_ef_normalization = ef_75th / target_mid
+        
+        # Update calibration
+        old_factor = self.ef_normalization_factor
+        self.ef_normalization_factor = new_ef_normalization
+        
+        logger.info(f"Ef calibration complete: normalization factor updated from {old_factor:.2f} to {new_ef_normalization:.2f}")
+        logger.info(f"This maps Ef 75th percentile ({ef_75th:.2f}) to normalized value {target_mid:.2f}")
+
     def calculate_quality_statistics(self, quality_scores: np.ndarray) -> Dict:
         """
         Calculate statistical metrics for a set of quality scores.
@@ -426,7 +568,7 @@ class QualityCalculator:
         Calculate quality score for a subset/patch of an image.
         
         This method is optimized for quality map generation where many small
-        subsets need to be analyzed efficiently.
+        subsets need to be analyzed efficiently. Uses MIG/Ef-based gradient scoring.
         
         Args:
             subset: Image subset as numpy array (grayscale)
@@ -445,16 +587,16 @@ class QualityCalculator:
             else:
                 gray = subset.copy()
             
-            # Calculate simplified quality metrics for efficiency
+            # Calculate simplified quality metrics for efficiency using MIG/Ef approach
             gradient_score = self._calculate_fast_gradient_quality(gray)
             contrast_score = self._calculate_fast_contrast_quality(gray)
             entropy_score = self._calculate_fast_entropy_quality(gray)
             
-            # Weighted combination (simplified from full analysis)
+            # Updated weighted combination emphasizing gradient quality (aligned with main weights)
             quality_score = (
-                gradient_score * 0.5 +  # Gradient is most important for DIC
-                contrast_score * 0.3 +
-                entropy_score * 0.2
+                gradient_score * 0.60 +  # Increased gradient weight for MIG/Ef emphasis
+                contrast_score * 0.25 +  # Contrast quality
+                entropy_score * 0.15     # Information content
             )
             
             # Apply critical quality checks - more lenient for artificial speckle patterns
@@ -481,30 +623,64 @@ class QualityCalculator:
             return 0.0
     
     def _calculate_fast_gradient_quality(self, gray: np.ndarray) -> float:
-        """Fast gradient quality calculation for subset analysis."""
-        # Calculate gradients using Sobel operator
+        """
+        Fast MIG-based gradient quality calculation for subset analysis.
+        
+        Based on Pan et al., 2009 Mean Intensity Gradient (MIG) calculation
+        with Enhanced feature (Ef) from Hu et al., 2021 for improved DIC quality assessment.
+        """
+        # Calculate first-order gradients using Sobel operator
         grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
         grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
         
-        # Mean Intensity Gradient (MIG) - simplified metric
-        mig = np.mean(gradient_magnitude)
-        normalized_mig = mig / 255.0
+        # Calculate first-order gradient magnitude
+        first_order_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
         
-        # More discriminating gradient assessment for DIC applications
-        # Use a sigmoid-like curve to better differentiate quality levels
-        if normalized_mig > 0.6:  # Very high gradients (excellent)
-            gradient_score = 1.0
-        elif normalized_mig > 0.4:  # High gradients (very good)
-            gradient_score = 0.7 + 0.3 * (normalized_mig - 0.4) / 0.2
-        elif normalized_mig > 0.2:  # Medium gradients (good)
-            gradient_score = 0.4 + 0.3 * (normalized_mig - 0.2) / 0.2
-        elif normalized_mig > 0.1:  # Low gradients (fair)
-            gradient_score = 0.2 + 0.2 * (normalized_mig - 0.1) / 0.1
-        elif normalized_mig > 0.05:  # Very low gradients (poor)
-            gradient_score = 0.1 + 0.1 * (normalized_mig - 0.05) / 0.05
-        else:  # Extremely low gradients (critical)
-            gradient_score = normalized_mig * 2  # Linear scaling for very low values
+        # Calculate Mean Intensity Gradient (MIG) - Pan et al., 2009
+        mig = np.mean(first_order_magnitude)
+        
+        # For enhanced assessment, also calculate second-order gradients (Ef metric)
+        grad_xx = cv2.Sobel(grad_x, cv2.CV_64F, 1, 0, ksize=3)  # d²I/dx²
+        grad_yy = cv2.Sobel(grad_y, cv2.CV_64F, 0, 1, ksize=3)  # d²I/dy²
+        grad_xy = cv2.Sobel(grad_x, cv2.CV_64F, 0, 1, ksize=3)  # d²I/dxdy
+        
+        # Calculate second-order gradient magnitude
+        second_order_magnitude = np.sqrt(grad_xx ** 2 + grad_yy ** 2 + 2 * grad_xy ** 2)
+        
+        # Enhanced feature (Ef) - Hu et al., 2021
+        # Combining first and second-order gradients with coefficients α=0.7, β=0.3
+        alpha = 0.7
+        beta = 0.3
+        ef = alpha * np.mean(first_order_magnitude) + beta * np.mean(second_order_magnitude)
+        
+        # Normalize metrics for scoring
+        # MIG typically ranges 0-50 for good speckle patterns (Pan et al., 2009)
+        normalized_mig = mig / self.mig_normalization_factor
+        # Ef normalization - empirical calibration needed based on test images
+        normalized_ef = ef / self.ef_normalization_factor
+        
+        # Calculate gradient distribution statistics for quality assessment
+        gradient_mean = np.mean(first_order_magnitude)
+        gradient_std = np.std(first_order_magnitude)
+        if gradient_mean > 0:
+            gradient_cv = gradient_std / gradient_mean
+        else:
+            gradient_cv = 0.0
+        
+        # Calculate quality scores based on MIG and Ef with configurable multipliers
+        mig_score = min(1.0, normalized_mig * self.mig_score_multiplier)
+        ef_score = min(1.0, normalized_ef * self.ef_score_multiplier)
+        
+        # Distribution quality assessment
+        if 0.5 <= gradient_cv <= 2.0:
+            distribution_bonus = 1.0
+        elif 0.3 <= gradient_cv <= 3.0:
+            distribution_bonus = 0.9
+        else:
+            distribution_bonus = 0.8
+        
+        # Combined gradient score emphasizing Ef metric (same as main method)
+        gradient_score = (ef_score * 0.8 + mig_score * 0.2) * distribution_bonus
         
         return min(1.0, gradient_score)
     

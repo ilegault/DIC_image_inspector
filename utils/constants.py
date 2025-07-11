@@ -471,12 +471,12 @@ APP_CONFIG = {
         'button_large': ('Segoe UI', 12, 'bold'),  # Large button text
     },
 
-    # Enhanced window configuration
+    # Enhanced window configuration - Compact size for minimized app
     'window': {
-        'min_width': 1000,
-        'min_height': 700,
-        'default_width': 1400,
-        'default_height': 900,
+        'min_width': 800,
+        'min_height': 500,
+        'default_width': 960,  # Half of typical 1920px screen
+        'default_height': 650,  # 60% of typical 1080px screen
         'resizable': True,
         'icon': None,  # Set to icon path if available
     },

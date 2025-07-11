@@ -395,38 +395,38 @@ class ContrastAnalyzer:
 
         # RMS contrast recommendations
         if rms_contrast < 0.1:
-            recommendations.append("❌ Very low contrast - improve lighting or pattern")
+            recommendations.append(" Very low contrast - improve lighting or pattern")
             recommendations.append("Consider adjusting camera exposure or gain settings")
         elif rms_contrast < 0.2:
-            recommendations.append("⚠️ Low contrast - may affect correlation accuracy")
+            recommendations.append(" Low contrast - may affect correlation accuracy")
             recommendations.append("Try increasing lighting contrast or adjusting camera settings")
         elif rms_contrast > 0.8:
-            recommendations.append("⚠️ Very high contrast - may cause saturation")
+            recommendations.append(" Very high contrast - may cause saturation")
             recommendations.append("Consider reducing lighting contrast or exposure")
 
         # Dynamic range recommendations
         if range_utilization < 0.3:
-            recommendations.append("⚠️ Poor dynamic range utilization")
+            recommendations.append(" Poor dynamic range utilization")
             recommendations.append("Adjust camera exposure to use full intensity range")
         elif dynamic_range < 50:
-            recommendations.append("⚠️ Limited dynamic range")
+            recommendations.append(" Limited dynamic range")
             recommendations.append("Improve lighting setup or check camera bit depth")
 
         # Edge strength recommendations
         if edge_strength < 10:
-            recommendations.append("⚠️ Weak edge content")
+            recommendations.append(" Weak edge content")
             recommendations.append("Ensure sharp focus and adequate speckle pattern")
 
         # Overall assessment
         quality_score = self.calculate_contrast_quality_score(metrics)
         if quality_score > 0.8:
-            recommendations.append("✅ Excellent contrast for DIC analysis")
+            recommendations.append(" Excellent contrast for DIC analysis")
         elif quality_score > 0.6:
-            recommendations.append("✅ Good contrast for DIC analysis")
+            recommendations.append(" Good contrast for DIC analysis")
         elif quality_score > 0.4:
-            recommendations.append("⚠️ Acceptable contrast - minor improvements recommended")
+            recommendations.append(" Acceptable contrast - minor improvements recommended")
         else:
-            recommendations.append("❌ Poor contrast - significant improvements needed")
+            recommendations.append(" Poor contrast - significant improvements needed")
 
         return recommendations
 
