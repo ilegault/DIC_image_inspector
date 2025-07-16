@@ -32,14 +32,43 @@ class QualityCalculator:
         }
 
         # Scoring calibration parameters
-        self.mig_normalization_factor = 50.0  # MIG typically ranges 0-50 for good speckle patterns
-        self.ef_normalization_factor = 100.0  # Initial estimate, needs empirical calibration
-        self.mig_score_multiplier = 1.0  # Adjusted from original 6 to account for new normalization
-        self.ef_score_multiplier = 1.0   # Initial value for empirical calibration
+        self.mig_normalization_factor = 50  # MIG typically ranges 0-50 for good speckle patterns
+        self.ef_normalization_factor = 40  # Initial estimate, needs empirical calibration
+        self.mig_score_multiplier = 2.0  # Adjusted from original 6 to account for new normalization
+        self.ef_score_multiplier = 1.2   # Initial value for empirical calibration
 
         # Validate weights
         if abs(sum(self.weights.values()) - 1.0) > 1e-6:
             logger.warning(f"Quality weights don't sum to 1.0: {sum(self.weights.values())}")
+
+    def update_scoring_parameters(self, mig_norm_factor: Optional[float] = None,
+                                  ef_norm_factor: Optional[float] = None,
+                                  mig_score_multiplier: Optional[float] = None,
+                                  ef_score_multiplier: Optional[float] = None):
+        """
+        Update scoring calibration parameters.
+        
+        Args:
+            mig_norm_factor: New MIG normalization factor
+            ef_norm_factor: New Ef normalization factor  
+            mig_score_multiplier: New MIG score multiplier
+            ef_score_multiplier: New Ef score multiplier
+        """
+        if mig_norm_factor is not None:
+            self.mig_normalization_factor = mig_norm_factor
+            logger.info(f"Updated MIG normalization factor to: {mig_norm_factor}")
+            
+        if ef_norm_factor is not None:
+            self.ef_normalization_factor = ef_norm_factor
+            logger.info(f"Updated Ef normalization factor to: {ef_norm_factor}")
+            
+        if mig_score_multiplier is not None:
+            self.mig_score_multiplier = mig_score_multiplier
+            logger.info(f"Updated MIG score multiplier to: {mig_score_multiplier}")
+            
+        if ef_score_multiplier is not None:
+            self.ef_score_multiplier = ef_score_multiplier
+            logger.info(f"Updated Ef score multiplier to: {ef_score_multiplier}")
 
     def calculate_quality_score(self, image: np.ndarray, roi_coords: Optional[list] = None) -> Dict:
         """
@@ -125,14 +154,17 @@ class QualityCalculator:
         quality_scores = self.gradient_analyzer.calculate_gradient_quality_score(
             gray, 
             mig_norm_factor=self.mig_normalization_factor,
-            ef_norm_factor=self.ef_normalization_factor
+            ef_norm_factor=self.ef_normalization_factor,
+            mig_score_multiplier=self.mig_score_multiplier,
+            ef_score_multiplier=self.ef_score_multiplier
         )
         
         # Log values for debugging
-        logger.debug(f"Raw MIG: {quality_scores['raw_mig']:.2f} (normalized: {quality_scores['normalized_mig']:.3f})")
-        logger.debug(f"Raw Ef: {quality_scores['raw_ef']:.2f} (normalized: {quality_scores['normalized_ef']:.3f})")
-        logger.debug(f"MIG Score: {quality_scores['mig_score']:.3f}, Ef Score: {quality_scores['ef_score']:.3f}")
-        logger.debug(f"Final Gradient Score: {quality_scores['gradient_score']:.3f}")
+        logger.info(f"Using multipliers - MIG: {self.mig_score_multiplier}, Ef: {self.ef_score_multiplier}")
+        logger.info(f"Raw MIG: {quality_scores['raw_mig']:.2f} (normalized: {quality_scores['normalized_mig']:.3f})")
+        logger.info(f"Raw Ef: {quality_scores['raw_ef']:.2f} (normalized: {quality_scores['normalized_ef']:.3f})")
+        logger.info(f"MIG Score: {quality_scores['mig_score']:.3f}, Ef Score: {quality_scores['ef_score']:.3f}")
+        logger.info(f"Final Gradient Score: {quality_scores['gradient_score']:.3f}")
         
         return {
             'score': quality_scores['gradient_score'],
@@ -476,7 +508,9 @@ class QualityCalculator:
         quality_scores = self.gradient_analyzer.calculate_gradient_quality_score(
             gray,
             mig_norm_factor=self.mig_normalization_factor,
-            ef_norm_factor=self.ef_normalization_factor
+            ef_norm_factor=self.ef_normalization_factor,
+            mig_score_multiplier=self.mig_score_multiplier,
+            ef_score_multiplier=self.ef_score_multiplier
         )
         
         return quality_scores['gradient_score']

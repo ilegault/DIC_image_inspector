@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 import threading
 import numpy as np
 from PIL import Image
+import logging
 
 from ui.components.control_panel import ControlPanel
 from ui.components.image_canvas import ImageCanvas
@@ -25,6 +26,8 @@ from utils.file_operations import FileOperationsManager
 
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.modern_styling import ModernStyleManager
+
+logger = logging.getLogger(__name__)
 
 
 class DICQualityInspector:
@@ -53,9 +56,11 @@ class DICQualityInspector:
         self.results_popup = None
 
         # Initialize services
+        logger.info("Initializing application services...")
         self.file_operations = FileOperationsManager()
         self.analyzer = ImageAnalyzer()
         self.report_generator = ReportGenerator()
+        logger.info("Application services initialized successfully")
 
         # Style manager
         self.style_manager = ModernStyleManager()
@@ -705,23 +710,23 @@ class DICQualityInspector:
 
     def toggle_quality_map(self):
         """Toggle quality map display."""
-        print("DEBUG: toggle_quality_map() called")
+        logger.debug("toggle_quality_map() called")
         if not self.state.has_analysis_result():
-            print("DEBUG: No analysis result available")
+            logger.debug("No analysis result available")
             return
 
         is_showing = self.image_canvas.is_showing_quality_map()
-        print(f"DEBUG: Currently showing quality map: {is_showing}")
+        logger.debug(f"Currently showing quality map: {is_showing}")
 
         if is_showing:
             # Hide quality map
-            print("DEBUG: Hiding quality map")
+            logger.debug("Hiding quality map")
             self.image_canvas.hide_quality_map()
             self.legend_panel.hide_legend()
             self.control_panel.set_quality_map_active(False)
         else:
             # Show quality map
-            print("DEBUG: Showing quality map")
+            logger.debug("Showing quality map")
             result = self.state.get_analysis_result()
             spectrum_type = self.control_panel.get_selected_spectrum()
             self.image_canvas.show_quality_map(result.quality_map, spectrum_type)
@@ -798,22 +803,22 @@ class DICQualityInspector:
 
     def reset_display(self):
         """Reset display and view options."""
-        print("DEBUG: reset_display() called")
+        logger.debug("reset_display() called")
 
         # Hide quality map first, then reset view
-        print("DEBUG: Hiding quality map")
+        logger.debug("Hiding quality map")
         self.image_canvas.hide_quality_map()
-        print("DEBUG: Resetting canvas view")
+        logger.debug("Resetting canvas view")
         self.image_canvas.reset_view()
 
         # Clear ROI display and data
-        print("DEBUG: Clearing ROI")
+        logger.debug("Clearing ROI")
         self.roi_selector.clear()
         self.state.clear_roi()
         self.state.clear_analysis_result()
 
         # Reset UI panels
-        print("DEBUG: Hiding legend and resetting controls")
+        logger.debug("Hiding legend and resetting controls")
         self.legend_panel.hide_legend()
         self.control_panel.set_quality_map_active(False)
 
@@ -823,9 +828,9 @@ class DICQualityInspector:
             self.results_popup = None
 
         # Update UI state to reflect changes
-        print("DEBUG: Updating UI state")
+        logger.debug("Updating UI state")
         self._update_ui_state()
-        print("DEBUG: reset_display() completed")
+        logger.debug("reset_display() completed")
 
     def on_spectrum_changed(self):
         """Handle spectrum type change."""

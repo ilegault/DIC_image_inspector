@@ -5,9 +5,12 @@ from tkinter import ttk
 import cv2
 from PIL import Image, ImageTk
 import numpy as np
+import logging
 from typing import Optional, Tuple
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.modern_styling import ModernStyleManager
+
+logger = logging.getLogger(__name__)
 
 
 class ImageCanvas:
@@ -356,7 +359,7 @@ class ImageCanvas:
             # Display blended image (not original)
             self.display_image(blended, preserve_view=True, is_original=False)
             self.showing_quality_map = True
-            print(f"DEBUG: Quality map displayed, showing_quality_map set to True")
+            logger.debug("Quality map displayed, showing_quality_map set to True")
 
         except Exception as e:
             print(f"Error showing quality map: {e}")
@@ -433,10 +436,10 @@ class ImageCanvas:
             orig_h, orig_w = self.original_image.shape[:2]
             if max(orig_w, orig_h) > 1000:
                 if img_width <= canvas_width and img_height <= canvas_height:
-                    print(f"DEBUG: Image centered directly - Canvas: {canvas_width}x{canvas_height}, "
+                    logger.debug(f"Image centered directly - Canvas: {canvas_width}x{canvas_height}, "
                           f"Display: {img_width}x{img_height}, Position: ({center_x}, {center_y})")
                 else:
-                    print(f"DEBUG: Image scrollable - Canvas: {canvas_width}x{canvas_height}, "
+                    logger.debug(f"Image scrollable - Canvas: {canvas_width}x{canvas_height}, "
                           f"Display: {img_width}x{img_height}, Scroll region: {img_width}x{img_height}")
 
     def _on_mousewheel(self, event):
@@ -876,14 +879,14 @@ class ImageCanvas:
 
     def show_original(self):
         """Show original image without any processing."""
-        print(f"DEBUG: show_original() called")
+        logger.debug("show_original() called")
         if self.original_image is not None:
-            print("DEBUG: Displaying original image")
+            logger.debug("Displaying original image")
             self.display_image(self.original_image, preserve_view=True, is_original=False)
             self.showing_quality_map = False
-            print(f"DEBUG: Set showing_quality_map to False")
+            logger.debug("Set showing_quality_map to False")
         else:
-            print("DEBUG: No original image to show")
+            logger.debug("No original image to show")
 
     def show_edges(self):
         """Show edge detection visualization."""
@@ -962,29 +965,29 @@ class ImageCanvas:
 
     def is_showing_quality_map(self) -> bool:
         """Check if quality map is currently being shown."""
-        print(f"DEBUG: is_showing_quality_map() returning: {self.showing_quality_map}")
+        logger.debug(f"is_showing_quality_map() returning: {self.showing_quality_map}")
         return self.showing_quality_map
 
     def reset_view(self):
         """Reset view to default zoom and position."""
-        print(f"DEBUG: reset_view() called, showing_quality_map={self.showing_quality_map}")
+        logger.debug(f"reset_view() called, showing_quality_map={self.showing_quality_map}")
         if self.displayed_image:
             # Reset zoom level
             self.zoom_level = 1.0
 
             # Always show original image and reset quality map state
-            print("DEBUG: reset_view() calling show_original()")
+            logger.debug("reset_view() calling show_original()")
             self.show_original()
 
     def hide_quality_map(self):
         """Hide the quality map and show original image."""
-        print(f"DEBUG: hide_quality_map() called, showing_quality_map={self.showing_quality_map}")
+        logger.debug(f"hide_quality_map() called, showing_quality_map={self.showing_quality_map}")
         if self.original_image is not None and self.showing_quality_map:
-            print("DEBUG: Calling show_original() to hide quality map")
+            logger.debug("Calling show_original() to hide quality map")
             self.show_original()
             # showing_quality_map is already set to False in show_original()
         else:
-            print(f"DEBUG: Not hiding quality map - original_image={self.original_image is not None}, showing_quality_map={self.showing_quality_map}")
+            logger.debug(f"Not hiding quality map - original_image={self.original_image is not None}, showing_quality_map={self.showing_quality_map}")
 
     def get_image_coordinates(self, canvas_x: int, canvas_y: int) -> Tuple[int, int]:
         """

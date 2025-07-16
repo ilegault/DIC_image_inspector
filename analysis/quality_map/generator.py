@@ -27,6 +27,13 @@ class QualityMapGenerator:
         self.quality_calculator = QualityCalculator()
         self.dic_calculator = DICParameterCalculator()
         self.colormap_generator = ColormapGenerator()
+        
+        # Log the scoring parameters being used
+        logger.info(f"Quality map generator initialized with scoring parameters:")
+        logger.info(f"  MIG normalization: {self.quality_calculator.mig_normalization_factor}")
+        logger.info(f"  Ef normalization: {self.quality_calculator.ef_normalization_factor}")
+        logger.info(f"  MIG multiplier: {self.quality_calculator.mig_score_multiplier}")
+        logger.info(f"  Ef multiplier: {self.quality_calculator.ef_score_multiplier}")
 
         # Default parameters
         self.default_overlap = 0.5
@@ -180,9 +187,9 @@ class QualityMapGenerator:
         
         # Debug output for large images
         if max(w, h) > 1000:
-            logger.info(f"DEBUG: Large image ROI processing - Image size: {w}x{h}")
-            logger.info(f"DEBUG: ROI bounding box: ({x1}, {y1}) to ({x2}, {y2})")
-            logger.info(f"DEBUG: ROI coordinates: {roi.coordinates[:3]}...")  # Show first 3 points
+            logger.debug(f"Large image ROI processing - Image size: {w}x{h}")
+            logger.debug(f"ROI bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+            logger.debug(f"ROI coordinates: {roi.coordinates[:3]}...")  # Show first 3 points
         
         # Clamp to image bounds
         x1, x2 = max(0, x1), min(w, x2)
@@ -195,7 +202,7 @@ class QualityMapGenerator:
         logger.info(f"ROI analysis region: {roi_w}x{roi_h} (vs full image {w}x{h})")
         
         if max(w, h) > 1000:
-            logger.info(f"DEBUG: Clamped bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+            logger.debug(f"Clamped bounding box: ({x1}, {y1}) to ({x2}, {y2})")
         
         # Determine optimal parameters for ROI region
         if subset_size is None:
@@ -214,9 +221,9 @@ class QualityMapGenerator:
         )
         
         if max(w, h) > 1000:
-            logger.info(f"DEBUG: Original ROI coords (first 3): {roi.coordinates[:3]}")
-            logger.info(f"DEBUG: Adjusted ROI coords (first 3): {adjusted_coords[:3]}")
-            logger.info(f"DEBUG: Offset applied: ({x1}, {y1})")
+            logger.debug(f"Original ROI coords (first 3): {roi.coordinates[:3]}")
+            logger.debug(f"Adjusted ROI coords (first 3): {adjusted_coords[:3]}")
+            logger.debug(f"Offset applied: ({x1}, {y1})")
         
         # Create mask for the ROI within the extracted region
         roi_mask = adjusted_roi.create_mask(roi_region.shape)

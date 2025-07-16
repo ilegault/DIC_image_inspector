@@ -329,12 +329,17 @@ DEBUG = {
     'enable_logging': True,
     'log_level': 'INFO',  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     'log_to_file': True,
-    'log_to_console': False,
+    'log_to_console': True,
     'enable_profiling': False,
     'profile_memory': False,
     'enable_debug_mode': False,
     'show_debug_info': False,
     'measure_performance': False,
+    
+    # Fine-grained logging control
+    'pil_log_level': 'WARNING',  # Suppress noisy PIL debug messages
+    'third_party_log_level': 'WARNING',  # General third-party library logging
+    'app_debug_modules': [],  # Specific modules to keep at DEBUG level
 }
 
 # ===== VERSION INFORMATION =====

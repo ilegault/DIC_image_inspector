@@ -274,3 +274,14 @@ class ImageAnalyzer:
             return False
 
         return min_dim >= 50  # Minimum reasonable image size
+
+    def update_quality_scoring_parameters(self, **kwargs):
+        """
+        Update quality scoring parameters.
+        
+        Args:
+            **kwargs: Parameters to update (mig_norm_factor, ef_norm_factor, 
+                     mig_score_multiplier, ef_score_multiplier)
+        """
+        self.quality_calculator.update_scoring_parameters(**kwargs)
+        logger.info("Quality scoring parameters updated")

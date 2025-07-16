@@ -2,7 +2,10 @@
 
 import tkinter as tk
 from typing import List, Tuple, Callable, Dict, Optional
+import logging
 from utils.constants import APP_CONFIG
+
+logger = logging.getLogger(__name__)
 
 
 class ROISelector:
@@ -73,7 +76,7 @@ class ROISelector:
             # Add point if within image bounds
             if image_x >= 0 and image_y >= 0:
                 self.roi_coords.append((image_x, image_y))
-                print(f"Added ROI point {len(self.roi_coords)}: ({image_x:.1f}, {image_y:.1f})")
+                logger.debug(f"Added ROI point {len(self.roi_coords)}: ({image_x:.1f}, {image_y:.1f})")
 
                 # Redraw ROI
                 self._redraw_roi(preview_point=None)
@@ -82,13 +85,13 @@ class ROISelector:
                 self._execute_callback('roi_changed', self.roi_coords.copy())
 
         except Exception as e:
-            print(f"Error adding ROI point: {e}")
+            logger.error(f"Error adding ROI point: {e}")
 
     def _on_right_click(self, event):
         """Handle right mouse click - finish ROI selection."""
         if not self.selection_mode or len(self.roi_coords) < 3:
             if self.selection_mode and len(self.roi_coords) < 3:
-                print("Need at least 3 points for ROI polygon")
+                logger.debug("Need at least 3 points for ROI polygon")
             return
 
         # Finish selection
@@ -114,7 +117,7 @@ class ROISelector:
 
     def _finish_selection(self):
         """Finish ROI selection."""
-        print(f"Finishing ROI polygon with {len(self.roi_coords)} points")
+        logger.debug(f"Finishing ROI polygon with {len(self.roi_coords)} points")
 
         # Exit selection mode
         self.selection_mode = False
@@ -260,7 +263,7 @@ class ROISelector:
 
     def clear(self):
         """Clear the current ROI selection."""
-        print("Clearing ROI selection")
+        logger.debug("Clearing ROI selection")
 
         # Remove visual elements
         if self.roi_polygon:

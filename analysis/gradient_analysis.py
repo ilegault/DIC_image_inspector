@@ -141,7 +141,9 @@ class GradientAnalyzer:
 
     def calculate_gradient_quality_score(self, image: np.ndarray,
                                          mig_norm_factor: float = 50.0,
-                                         ef_norm_factor: float = 100.0) -> Dict[str, float]:
+                                         ef_norm_factor: float = 100.0,
+                                         mig_score_multiplier: float = 1.2,
+                                         ef_score_multiplier: float = 1.0) -> Dict[str, float]:
         """
         Calculate gradient quality score for DIC assessment.
         This method can be used directly by QualityCalculator.
@@ -150,6 +152,8 @@ class GradientAnalyzer:
             image: Input grayscale image
             mig_norm_factor: Normalization factor for MIG (default 50.0 per Pan et al.)
             ef_norm_factor: Normalization factor for Ef
+            mig_score_multiplier: Multiplier for MIG score (default 1.2)
+            ef_score_multiplier: Multiplier for Ef score (default 1.0)
 
         Returns:
             Dictionary with quality scores and metrics
@@ -161,9 +165,9 @@ class GradientAnalyzer:
         normalized_mig = metrics['mig'] / mig_norm_factor
         normalized_ef = metrics['ef'] / ef_norm_factor
 
-        # Calculate quality scores
-        mig_score = min(1.0, normalized_mig * 1.2)  # Slight boost for good patterns
-        ef_score = min(1.0, normalized_ef * 1.0)
+        # Calculate quality scores using the provided multipliers
+        mig_score = min(1.0, normalized_mig * mig_score_multiplier)
+        ef_score = min(1.0, normalized_ef * ef_score_multiplier)
 
         # Distribution quality assessment
         gradient_cv = metrics['gradient_cv']

@@ -3,8 +3,11 @@
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Callable, List
 import numpy as np
+import logging
 from .analysis_result import AnalysisResult
 from .roi_data import ROIData
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -226,9 +229,9 @@ class ApplicationState:
             old_state = self._application_state
             self._application_state = state
             self._notify_observers('application_state', state)
-            print(f"Application state: {old_state} -> {state}")
+            logger.debug(f"Application state: {old_state} -> {state}")
         else:
-            print(f"Invalid application state: {state}")
+            logger.warning(f"Invalid application state: {state}")
 
     def get_application_state(self) -> str:
         """Get current application state."""
