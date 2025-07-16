@@ -7,7 +7,6 @@ Provides easy ways to toggle debug information without restarting the app.
 
 import logging
 from typing import List, Optional
-from .constants import DEBUG
 
 class LoggingController:
     """Controller for managing application logging levels dynamically."""
@@ -177,6 +176,26 @@ def toggle_pil_debug():
     else:
         logging_controller.enable_pil_debug()
 
+def enable_zoom_pan_debug():
+    """Enable detailed debugging for zoom and pan functionality."""
+    logging_controller.set_module_debug(['ui.components.image_canvas'], 'DEBUG')
+    logging_controller.set_app_debug_level('INFO')  # Keep general app at INFO
+    logging_controller.silence_third_party('WARNING')  # Reduce noise
+    print("Zoom/Pan debug mode enabled - detailed logging for image canvas operations")
+
+def disable_zoom_pan_debug():
+    """Disable zoom/pan debugging and return to normal levels."""
+    logging_controller.set_module_debug(['ui.components.image_canvas'], 'INFO')
+    print("Zoom/Pan debug mode disabled - returned to normal logging levels")
+
+def toggle_zoom_pan_debug():
+    """Toggle zoom/pan debug logging on/off."""
+    canvas_logger = logging.getLogger('ui.components.image_canvas')
+    if canvas_logger.level <= logging.DEBUG:
+        disable_zoom_pan_debug()
+    else:
+        enable_zoom_pan_debug()
+
 # Example usage functions that can be called from anywhere in the app
 def show_logging_help():
     """Print help for logging control functions."""
@@ -192,6 +211,9 @@ Quick Mode Functions:
 
 Specific Controls:
 - toggle_pil_debug()                    : Toggle PIL image processing debug
+- toggle_zoom_pan_debug()               : Toggle zoom/pan functionality debug
+- enable_zoom_pan_debug()               : Enable detailed zoom/pan debugging
+- disable_zoom_pan_debug()              : Disable zoom/pan debugging
 - logging_controller.print_current_levels() : Show current logging levels
 - logging_controller.restore_original_levels() : Reset to startup levels
 
@@ -200,8 +222,9 @@ Module-Specific:
 - logging_controller.set_app_debug_level('INFO')      : Set app-wide level
 
 Examples:
->>> from utils.logging_control import normal_mode, toggle_pil_debug
+>>> from utils.logging_control import normal_mode, toggle_zoom_pan_debug
 >>> normal_mode()  # Recommended for daily use
+>>> toggle_zoom_pan_debug()  # When troubleshooting zoom/pan issues
 >>> toggle_pil_debug()  # When troubleshooting image loading
 """
     print(help_text)

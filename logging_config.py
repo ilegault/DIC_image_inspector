@@ -39,6 +39,7 @@ DEBUG_MODULES = [
     # 'core.image_analyzer',      # Image analysis debugging  
     # 'analysis.quality_map',     # Quality map generation debugging
     # 'ui.components.roi_selector', # ROI selection debugging
+    # 'ui.components.image_canvas', # Image canvas zoom/pan debugging
 ]
 
 # Modules to completely silence (set to ERROR level)
@@ -86,6 +87,14 @@ PRESETS = {
         'THIRD_PARTY_LOG_LEVEL': 'WARNING',
         'PIL_LOG_LEVEL': 'DEBUG',
         'description': 'Debug image loading issues specifically'
+    },
+    
+    'zoom_pan_debug': {
+        'APP_LOG_LEVEL': 'INFO',
+        'THIRD_PARTY_LOG_LEVEL': 'WARNING', 
+        'PIL_LOG_LEVEL': 'WARNING',
+        'DEBUG_MODULES': ['ui.components.image_canvas'],
+        'description': 'Debug zoom and pan functionality specifically'
     }
 }
 
@@ -93,7 +102,7 @@ PRESETS = {
 # ACTIVE PRESET (uncomment one to use a preset instead of individual settings)
 # =============================================================================
 
-# ACTIVE_PRESET = 'normal'  # Uncomment and change to use a preset
+ACTIVE_PRESET = 'zoom_pan_debug'  # Uncomment and change to use a preset
 
 # =============================================================================
 # USAGE INSTRUCTIONS

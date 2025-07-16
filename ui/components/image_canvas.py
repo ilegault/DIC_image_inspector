@@ -175,6 +175,8 @@ class ImageCanvas:
             is_original: Whether this is the original image (not a processed/blended version)
         """
         try:
+            logger.debug(f"Display image: preserve_view={preserve_view}, is_original={is_original}")
+            
             # Clear any existing image items
             self.canvas.delete("all")
 
@@ -182,17 +184,22 @@ class ImageCanvas:
             if hasattr(image_data, 'array'):
                 # It's an ImageData object, extract the array
                 image_array = image_data.array
+                logger.debug("Display image: Extracted array from ImageData object")
             else:
                 # It's already a numpy array
                 image_array = image_data
+                logger.debug("Display image: Using numpy array directly")
 
             # Validate image array
             if not isinstance(image_array, np.ndarray):
                 raise ValueError("Image must be a numpy array")
 
+            logger.debug(f"Display image: Original array shape: {image_array.shape}, dtype: {image_array.dtype}")
+
             # Convert to uint8 if necessary
             if image_array.dtype != np.uint8:
                 image_array = np.clip(image_array, 0, 255).astype(np.uint8)
+                logger.debug("Display image: Converted to uint8")
 
             # Store current image
             self.current_image = image_array.copy()
@@ -200,16 +207,20 @@ class ImageCanvas:
             # Store as original image only if this is truly the original
             if is_original:
                 self.original_image = image_array.copy()
+                logger.debug("Display image: Stored as original image")
 
             # Convert grayscale to RGB if needed
             if len(image_array.shape) == 2:
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_GRAY2RGB)
+                logger.debug("Display image: Converted grayscale to RGB")
             elif len(image_array.shape) == 3 and image_array.shape[2] == 4:
                 # Convert RGBA to RGB
                 image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2RGB)
+                logger.debug("Display image: Converted RGBA to RGB")
 
             # Convert numpy array to PIL Image
             pil_image = Image.fromarray(image_array)
+            logger.debug(f"Display image: PIL image size: {pil_image.size}")
 
             # Store as displayed image
             self.displayed_image = pil_image
@@ -218,22 +229,31 @@ class ImageCanvas:
             if not preserve_view:
                 canvas_width = self.canvas.winfo_width()
                 canvas_height = self.canvas.winfo_height()
+                logger.debug(f"Display image: Canvas size: {canvas_width}x{canvas_height}")
 
                 # Use default size if canvas not yet rendered
                 if canvas_width <= 1:
                     canvas_width = 800
+                    logger.debug("Display image: Using default canvas width 800")
                 if canvas_height <= 1:
                     canvas_height = 500
+                    logger.debug("Display image: Using default canvas height 500")
 
                 img_width, img_height = pil_image.size
+                logger.debug(f"Display image: Image size: {img_width}x{img_height}")
 
                 # Calculate scale to fit image in canvas
                 scale_x = canvas_width / img_width
                 scale_y = canvas_height / img_height
                 self.display_scale = min(scale_x, scale_y) * 0.9  # 90% to leave margin
+                logger.debug(f"Display image: Scale factors - x: {scale_x:.3f}, y: {scale_y:.3f}")
+                logger.debug(f"Display image: Final display scale: {self.display_scale:.3f}")
 
                 # Reset zoom level
                 self.zoom_level = 1.0
+                logger.debug("Display image: Reset zoom level to 1.0")
+            else:
+                logger.debug(f"Display image: Preserving view - current zoom: {self.zoom_level}, display_scale: {self.display_scale}")
 
             # Create the photo image
             display_width = int(pil_image.width * self.display_scale * self.zoom_level)
@@ -445,19 +465,27 @@ class ImageCanvas:
     def _on_mousewheel(self, event):
         """Handle mouse wheel zoom."""
         if not self.displayed_image:
+            logger.debug("Mousewheel zoom: No displayed image")
             return "break"
 
         # Store old zoom level and mouse position
         old_zoom = self.zoom_level
         mouse_x = self.canvas.canvasx(event.x)
         mouse_y = self.canvas.canvasy(event.y)
+        
+        logger.debug(f"Mousewheel zoom: event.x={event.x}, event.y={event.y}")
+        logger.debug(f"Mousewheel zoom: canvas coords mouse_x={mouse_x}, mouse_y={mouse_y}")
+        logger.debug(f"Mousewheel zoom: old_zoom={old_zoom}")
 
         # Calculate new zoom level with smaller, more precise increments
         if event.num == 5 or event.delta < 0:  # Zoom out
             self.zoom_level = max(0.1, self.zoom_level - 0.05)
+            logger.debug(f"Mousewheel zoom: Zooming OUT from {old_zoom} to {self.zoom_level}")
         elif event.num == 4 or event.delta > 0:  # Zoom in
             self.zoom_level = min(2.0, self.zoom_level + 0.05)
+            logger.debug(f"Mousewheel zoom: Zooming IN from {old_zoom} to {self.zoom_level}")
         else:
+            logger.debug(f"Mousewheel zoom: Unknown event - num={getattr(event, 'num', 'None')}, delta={getattr(event, 'delta', 'None')}")
             return "break"
 
         # Apply zoom centered on mouse position
@@ -470,17 +498,22 @@ class ImageCanvas:
     def _apply_zoom_at_point(self, old_zoom: float, mouse_x: float, mouse_y: float):
         """Apply zoom transformation centered at a specific point."""
         if not self.displayed_image:
+            logger.debug("Apply zoom: No displayed image")
             return
 
         # Get current scroll position and canvas dimensions
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
+        
+        logger.debug(f"Apply zoom: Canvas dimensions: {canvas_width}x{canvas_height}")
 
         # Use reasonable defaults if canvas not rendered yet
         if canvas_width <= 1:
             canvas_width = 800
+            logger.debug("Apply zoom: Using default canvas width 800")
         if canvas_height <= 1:
             canvas_height = 500
+            logger.debug("Apply zoom: Using default canvas height 500")
 
         # Calculate old and new image dimensions using both display_scale and zoom_level
         old_width = int(self.displayed_image.width * self.display_scale * old_zoom)
@@ -490,6 +523,13 @@ class ImageCanvas:
         base_height = self.displayed_image.height
         new_width = max(1, int(base_width * self.display_scale * self.zoom_level))
         new_height = max(1, int(base_height * self.display_scale * self.zoom_level))
+        
+        logger.debug(f"Apply zoom: Image base size: {base_width}x{base_height}")
+        logger.debug(f"Apply zoom: Display scale: {self.display_scale}")
+        logger.debug(f"Apply zoom: Old zoom: {old_zoom}, New zoom: {self.zoom_level}")
+        logger.debug(f"Apply zoom: Old dimensions: {old_width}x{old_height}")
+        logger.debug(f"Apply zoom: New dimensions: {new_width}x{new_height}")
+        logger.debug(f"Apply zoom: Mouse position: ({mouse_x}, {mouse_y})")
 
         # Resize image
         if new_width == self.displayed_image.width and new_height == self.displayed_image.height:
@@ -512,6 +552,8 @@ class ImageCanvas:
             # Image fits entirely in canvas - center it directly
             center_x = (canvas_width - new_width) // 2
             center_y = (canvas_height - new_height) // 2
+            
+            logger.debug(f"Apply zoom: Image fits in canvas - centering at ({center_x}, {center_y})")
 
             # Set scroll region to canvas size for proper centering
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
@@ -522,13 +564,17 @@ class ImageCanvas:
             self.image_offset_y = center_y
             self.canvas.image_offset_x = center_x
             self.canvas.image_offset_y = center_y
+            
+            logger.debug(f"Apply zoom: Set image offsets to ({center_x}, {center_y})")
 
             # No scrolling needed - image is centered
             self.canvas.xview_moveto(0.0)
             self.canvas.yview_moveto(0.0)
+            logger.debug("Apply zoom: Reset scroll position to (0.0, 0.0)")
 
         else:
             # Image is larger than canvas - use scroll region approach
+            logger.debug(f"Apply zoom: Image larger than canvas - using scroll regions")
             self.canvas.configure(scrollregion=(0, 0, new_width, new_height))
             self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
 
@@ -537,6 +583,7 @@ class ImageCanvas:
             self.image_offset_y = 0
             self.canvas.image_offset_x = 0
             self.canvas.image_offset_y = 0
+            logger.debug("Apply zoom: Set image offsets to (0, 0) for scrollable image")
 
             # For large images, try to maintain the zoom center
             # Use a simpler approach to avoid coordinate system confusion
@@ -547,6 +594,7 @@ class ImageCanvas:
                         # Old image was centered - use canvas center as zoom point
                         center_x_ratio = 0.5
                         center_y_ratio = 0.5
+                        logger.debug("Apply zoom: Old image was centered, using canvas center as zoom point")
                     else:
                         # Old image was scrollable - get current view center
                         current_scroll_x = self.canvas.xview()[0]
@@ -555,6 +603,9 @@ class ImageCanvas:
                         view_height = self.canvas.yview()[1] - self.canvas.yview()[0]
                         center_x_ratio = current_scroll_x + view_width / 2
                         center_y_ratio = current_scroll_y + view_height / 2
+                        logger.debug(f"Apply zoom: Old image scrollable - current scroll: ({current_scroll_x:.3f}, {current_scroll_y:.3f})")
+                        logger.debug(f"Apply zoom: View size: {view_width:.3f}x{view_height:.3f}")
+                        logger.debug(f"Apply zoom: Calculated center ratio: ({center_x_ratio:.3f}, {center_y_ratio:.3f})")
 
                     # Calculate new scroll position to keep the same center
                     # Only calculate scroll if the new image is larger than canvas
@@ -567,16 +618,21 @@ class ImageCanvas:
                         new_scroll_y = max(0, min(1, center_y_ratio - (canvas_height / new_height) / 2))
                     else:
                         new_scroll_y = 0
+                    
+                    logger.debug(f"Apply zoom: New scroll position: ({new_scroll_x:.3f}, {new_scroll_y:.3f})")
 
                     self.canvas.xview_moveto(new_scroll_x)
                     self.canvas.yview_moveto(new_scroll_y)
                 else:
                     # No old dimensions - center the image
+                    logger.debug("Apply zoom: No old dimensions, centering image")
                     self.canvas.xview_moveto(0.5)
                     self.canvas.yview_moveto(0.5)
             except Exception as e:
                 # Fallback to centering if anything goes wrong
-                print(f"Zoom positioning error: {e}")
+                logger.error(f"Apply zoom: Positioning error: {e}")
+                import traceback
+                logger.debug(f"Apply zoom: Traceback: {traceback.format_exc()}")
                 self.canvas.xview_moveto(0.5)
                 self.canvas.yview_moveto(0.5)
 
@@ -590,27 +646,42 @@ class ImageCanvas:
 
     def _start_pan(self, event):
         """Start panning operation."""
+        logger.debug(f"Pan start: event position ({event.x}, {event.y})")
         self.canvas.config(cursor="fleur")
         self.pan_start_x = event.x
         self.pan_start_y = event.y
         self.panning = True
+        
+        # Log current scroll state
+        current_x = self.canvas.xview()[0]
+        current_y = self.canvas.yview()[0]
+        logger.debug(f"Pan start: current scroll position ({current_x:.3f}, {current_y:.3f})")
 
     def _pan_image(self, event):
         """Pan the image."""
         if not self.panning:
+            logger.debug("Pan image: Not in panning mode")
             return
 
         # Calculate movement
-        dx = (event.x - self.pan_start_x) / self.canvas.winfo_width()
-        dy = (event.y - self.pan_start_y) / self.canvas.winfo_height()
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        dx = (event.x - self.pan_start_x) / canvas_width
+        dy = (event.y - self.pan_start_y) / canvas_height
+        
+        logger.debug(f"Pan image: event position ({event.x}, {event.y})")
+        logger.debug(f"Pan image: canvas size {canvas_width}x{canvas_height}")
+        logger.debug(f"Pan image: movement delta ({dx:.3f}, {dy:.3f})")
 
         # Get current view position
         current_x = self.canvas.xview()[0]
         current_y = self.canvas.yview()[0]
+        logger.debug(f"Pan image: current scroll ({current_x:.3f}, {current_y:.3f})")
 
         # Calculate new position
         new_x = max(0, min(1, current_x - dx))
         new_y = max(0, min(1, current_y - dy))
+        logger.debug(f"Pan image: new scroll position ({new_x:.3f}, {new_y:.3f})")
 
         # Apply movement
         self.canvas.xview_moveto(new_x)
@@ -622,6 +693,10 @@ class ImageCanvas:
 
     def _end_pan(self, event):
         """End panning operation."""
+        logger.debug(f"Pan end: final position ({event.x}, {event.y})")
+        final_x = self.canvas.xview()[0]
+        final_y = self.canvas.yview()[0]
+        logger.debug(f"Pan end: final scroll position ({final_x:.3f}, {final_y:.3f})")
         self.panning = False
         self.canvas.config(cursor="")
 
