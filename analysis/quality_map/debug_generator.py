@@ -12,6 +12,7 @@ from core.quality_calculator import QualityCalculator
 from core.dic_parameters import DICParameterCalculator
 from analysis.quality_map.colormap import ColormapGenerator
 from utils.constants import COLOR_SPECTRUMS, QUALITY_THRESHOLDS
+from analysis.gradient_analysis import GradientAnalyzer
 
 if TYPE_CHECKING:
     from models.roi_data import ROIData
@@ -28,6 +29,7 @@ class DebugQualityMapGenerator:
     """
 
     def __init__(self):
+        self.gradient_analyzer = GradientAnalyzer()
         self.quality_calculator = QualityCalculator()
         self.dic_calculator = DICParameterCalculator()
         self.colormap_generator = ColormapGenerator()
@@ -270,10 +272,8 @@ class DebugQualityMapGenerator:
             return 0.0
 
         try:
-            # Calculate gradients
-            grad_x = cv2.Sobel(subset, cv2.CV_64F, 1, 0, ksize=3)
-            grad_y = cv2.Sobel(subset, cv2.CV_64F, 0, 1, ksize=3)
-            gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+            # Calculate gradients using universal gradient analyzer
+            grad_x, grad_y, gradient_magnitude = self.gradient_analyzer.calculate_gradients(subset, 'sobel', normalize=True)
 
             # 1. Gradient content analysis (50% weight)
             mean_gradient = np.mean(gradient_magnitude)

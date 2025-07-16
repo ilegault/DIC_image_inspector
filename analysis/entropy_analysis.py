@@ -5,6 +5,7 @@ import numpy as np
 from typing import Dict, Any, Tuple
 import logging
 from scipy.stats import entropy as scipy_entropy
+from analysis.gradient_analysis import GradientAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class EntropyAnalyzer:
     """
 
     def __init__(self):
+        self.gradient_analyzer = GradientAnalyzer()
         self.histogram_bins = 64  # Bins for entropy calculation
         self.local_window_sizes = [5, 7, 9, 11]  # Multiple scales for local entropy
         self.texture_window_size = 7  # Window size for texture analysis
@@ -232,10 +234,8 @@ class EntropyAnalyzer:
         # Global entropy
         global_entropy = self._calculate_global_entropy(gray)['shannon_entropy']
 
-        # Gradient entropy (simplified)
-        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_mag = np.sqrt(grad_x ** 2 + grad_y ** 2)
+        # Gradient entropy (simplified) using universal gradient analyzer
+        grad_x, grad_y, gradient_mag = self.gradient_analyzer.calculate_gradients(gray, 'sobel', normalize=True)
         gradient_mag_int = np.clip(gradient_mag, 0, 255).astype(np.uint8)
         gradient_entropy = self._calculate_global_entropy(gradient_mag_int)['shannon_entropy']
 

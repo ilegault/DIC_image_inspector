@@ -6,6 +6,7 @@ from typing import Tuple, Dict, Any
 import logging
 
 from models.analysis_result import DICParameters
+from analysis.gradient_analysis import GradientAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class DICParameterCalculator:
     """
 
     def __init__(self):
+        self.gradient_analyzer = GradientAnalyzer()
         # Standard DIC subset sizes to consider
         self.possible_sizes = [11, 15, 21, 31, 41, 51]
         self.min_subset_size = 11
@@ -209,10 +211,8 @@ class DICParameterCalculator:
         """Advanced gradient-based analysis."""
         feature_estimates = []
 
-        # Calculate gradients
-        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+        # Calculate gradients using universal gradient analyzer
+        grad_x, grad_y, gradient_magnitude = self.gradient_analyzer.calculate_gradients(gray, 'sobel', normalize=True)
 
         # Multi-threshold gradient analysis
         for percentile in [75, 80, 85, 90]:

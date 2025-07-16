@@ -2,11 +2,12 @@
 
 import cv2
 import numpy as np
-from typing import Optional, Tuple, List, Union
+from typing import Optional, Tuple, List, Union, Dict
 from PIL import Image
 import logging
 
 from utils.constants import VALIDATION, CANVAS
+from analysis.gradient_analysis import GradientAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class ImageProcessor:
 
     def __init__(self):
         """Initialize the image processor."""
-        pass
+        self.gradient_analyzer = GradientAnalyzer()
 
     @staticmethod
     def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
@@ -246,12 +247,9 @@ class ImageProcessor:
             # Convert to grayscale
             gray = ImageProcessor.convert_to_grayscale(image_region)
 
-            # Calculate gradients
-            grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-            grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-
-            # Calculate magnitude
-            magnitude = cv2.magnitude(grad_x, grad_y)
+            # Calculate gradients using universal gradient analyzer
+            gradient_analyzer = GradientAnalyzer()
+            grad_x, grad_y, magnitude = gradient_analyzer.calculate_gradients(gray, 'sobel', normalize=True)
 
             # Normalize to 0-255 range
             cv2.normalize(magnitude, magnitude, 0, 255, cv2.NORM_MINMAX)

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from typing import Dict, Any, Tuple
 import logging
+from analysis.gradient_analysis import GradientAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class ContrastAnalyzer:
     """
 
     def __init__(self):
+        self.gradient_analyzer = GradientAnalyzer()
         self.local_window_size = 5  # Size for local contrast analysis
         self.contrast_percentiles = [25, 50, 75, 90, 95]  # For distribution analysis
 
@@ -212,10 +214,8 @@ class ContrastAnalyzer:
 
     def _calculate_edge_contrast(self, gray: np.ndarray) -> Dict[str, float]:
         """Calculate contrast at edges and boundaries."""
-        # Calculate gradients
-        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+        # Calculate gradients using the universal gradient analyzer
+        grad_x, grad_y, gradient_magnitude = self.gradient_analyzer.calculate_gradients(gray, 'sobel', normalize=True)
 
         # Edge detection
         edges = cv2.Canny(gray, 50, 150)
