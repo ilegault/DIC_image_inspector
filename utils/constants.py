@@ -10,7 +10,7 @@ APP_NAME = "DIC Image Quality Inspector"
 APP_VERSION = "2.0.0"
 APP_AUTHOR = "DIC Analysis Team"
 
-# Enhanced file operations configuration
+# ===== FILE OPERATIONS CONFIGURATION =====
 FILE_OPERATIONS = {
     'auto_backup': True,
     'backup_dir': 'backups',
@@ -20,6 +20,7 @@ FILE_OPERATIONS = {
     'temp_dir': 'temp',
     'clean_temp_on_exit': True,
     'max_temp_age_hours': 24,
+    'encoding': 'utf-8',
 
     # File format configurations
     'supported_formats': {
@@ -56,11 +57,7 @@ FILE_OPERATIONS = {
             ("JSON files", "*.json"),
             ("All files", "*.*")
         ]
-    },
-
-    'encoding': 'utf-8',
-    'report_extension': '.txt',
-    'csv_extension': '.csv'
+    }
 }
 
 # Supported image formats for file dialogs and processing
@@ -76,7 +73,7 @@ SUPPORTED_IMAGE_FORMATS = [
     ("All files", "*.*")
 ]
 
-# Default filenames and paths
+# Default filenames
 DEFAULT_FILENAMES = {
     'report': 'quality_report',
     'screenshot': 'screenshot',
@@ -96,13 +93,23 @@ EXPORT_FORMATS = {
     'combined': ['pdf', 'html'],
 }
 
-# Enhanced validation rules
+# ===== VALIDATION RULES =====
 VALIDATION = {
+    # Image validation
     'image_max_size_mb': 100,
     'image_min_size_px': 50,
     'image_max_size_px': 8192,
+    'min_image_size': (50, 50),  # Minimum width, height in pixels
+    'max_image_size': (8192, 8192),  # Maximum width, height in pixels
+    'max_file_size': 100 * 1024 * 1024,  # 100MB maximum file size
+    'supported_image_extensions': ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.gif', '.webp', '.ico'],
+
+    # ROI validation
     'roi_min_size_px': 10,
     'roi_max_size_percent': 90,
+    'min_roi_area': 100,  # Minimum ROI area in pixels
+
+    # Analysis parameters validation
     'facet_size_min': 3,
     'facet_size_max': 200,
     'point_distance_min': 1,
@@ -110,19 +117,14 @@ VALIDATION = {
     'quality_threshold_min': 0.0,
     'quality_threshold_max': 1.0,
 
-    # Legacy compatibility for existing code
-    'min_image_size': (50, 50),  # Minimum width, height in pixels
-    'max_image_size': (8192, 8192),  # Maximum width, height in pixels
-    'min_roi_area': 100,  # Minimum ROI area in pixels
-    'max_file_size': 100 * 1024 * 1024,  # 100MB maximum file size
-    'supported_image_extensions': ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.gif', '.webp', '.ico'],
+    # File system validation
     'max_filename_length': 255,
     'reserved_names': ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
                        'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2',
                        'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9']
 }
 
-# Canvas configuration
+# ===== CANVAS CONFIGURATION (CONSOLIDATED) =====
 CANVAS = {
     'default_width': 800,
     'default_height': 600,
@@ -138,15 +140,23 @@ CANVAS = {
     'grid_spacing': 50,
     'ruler_height': 20,
     'crosshair_length': 20,
+    'selection_color': '#3b82f6',
+    'selection_width': 2,
+    'grid_color': '#e5e7eb',
+    'grid_alpha': 0.3,
 }
 
-# Analysis configuration
+# ===== ANALYSIS CONFIGURATION (CONSOLIDATED) =====
 ANALYSIS_CONFIG = {
     'default_method': 'optimized_dic',
     'available_methods': ['dic', 'optimized_dic', 'fast_dic', 'high_quality_dic'],
     'default_facet_size': 19,
     'default_overlap': 0.5,
     'default_point_distance': 4,
+    'max_facet_size': 100,
+    'min_facet_size': 5,
+    'max_point_distance': 20,
+    'min_point_distance': 1,
     'interpolation_method': 'bicubic',
     'correlation_threshold': 0.6,
     'max_iterations': 100,
@@ -155,9 +165,11 @@ ANALYSIS_CONFIG = {
     'max_workers': None,  # Auto-detect CPU cores
     'chunk_size': 1000,
     'memory_limit_mb': 2048,
+    'default_spectrum': 'optimized',
+    'available_spectra': ['optimized', 'jet', 'viridis', 'plasma', 'inferno'],
 }
 
-# Quality assessment thresholds
+# ===== QUALITY ASSESSMENT =====
 QUALITY_THRESHOLDS = {
     'excellent': {'min': 0.9, 'color': '#10b981', 'label': 'Excellent'},
     'good': {'min': 0.7, 'color': '#3b82f6', 'label': 'Good'},
@@ -166,30 +178,30 @@ QUALITY_THRESHOLDS = {
     'very_poor': {'min': 0.0, 'color': '#7f1d1d', 'label': 'Very Poor'},
 }
 
-# Color spectrum configurations
+# ===== COLOR SPECTRUMS =====
 COLOR_SPECTRUMS = {
     'optimized': {
         'name': 'Optimized DIC',
         'description': 'Optimized for DIC analysis visualization',
         'hex_colors': ['#000000', '#8b0000', '#ff4500', '#ffd700', '#00ff00'],
         'colors': [
-            (0, 0, 0, "Critical: Not suitable for DIC"),         # #000000 - Black for worst
-            (139, 0, 0, "Poor: Below threshold"),                # #8b0000 - Dark red
-            (255, 69, 0, "Good: Acceptable for DIC"),            # #ff4500 - Orange red
-            (255, 215, 0, "Very Good: Good for DIC"),            # #ffd700 - Gold
-            (0, 255, 0, "Excellent: Ideal for DIC")              # #00ff00 - Green for best
+            (0, 0, 0, "Critical: Not suitable for DIC"),
+            (139, 0, 0, "Poor: Below threshold"),
+            (255, 69, 0, "Good: Acceptable for DIC"),
+            (255, 215, 0, "Very Good: Good for DIC"),
+            (0, 255, 0, "Excellent: Ideal for DIC")
         ]
     },
     'controlled': {
         'name': 'Controlled Pattern Quality',
         'description': 'High-precision pattern quality assessment',
         'colors': [
-            (0, 0, 0, "Unusable: No correlation possible"),      # Black for worst
-            (139, 0, 0, "Poor: Unreliable correlation"),         # Dark red
-            (255, 140, 0, "Acceptable: Usable with uncertainty"), # Orange
-            (255, 255, 0, "Good: Good correlation quality"),     # Yellow
-            (0, 255, 255, "Very Good: Very reliable"),           # Cyan
-            (0, 255, 0, "Excellent: Optimal pattern")            # Green for best
+            (0, 0, 0, "Unusable: No correlation possible"),
+            (139, 0, 0, "Poor: Unreliable correlation"),
+            (255, 140, 0, "Acceptable: Usable with uncertainty"),
+            (255, 255, 0, "Good: Good correlation quality"),
+            (0, 255, 255, "Very Good: Very reliable"),
+            (0, 255, 0, "Excellent: Optimal pattern")
         ]
     },
     'custom_dic': {
@@ -209,11 +221,11 @@ COLOR_SPECTRUMS = {
         'description': 'Classic jet colormap',
         'hex_colors': ['#000080', '#0000ff', '#00ffff', '#ffff00', '#ff0000'],
         'colors': [
-            (0, 0, 128, "Level 1"),      # #000080
-            (0, 0, 255, "Level 2"),      # #0000ff
-            (0, 255, 255, "Level 3"),    # #00ffff
-            (255, 255, 0, "Level 4"),    # #ffff00
-            (255, 0, 0, "Level 5")       # #ff0000
+            (0, 0, 128, "Level 1"),
+            (0, 0, 255, "Level 2"),
+            (0, 255, 255, "Level 3"),
+            (255, 255, 0, "Level 4"),
+            (255, 0, 0, "Level 5")
         ]
     },
     'viridis': {
@@ -221,10 +233,10 @@ COLOR_SPECTRUMS = {
         'description': 'Perceptually uniform colormap',
         'hex_colors': ['#440154', '#31688e', '#35b779', '#fde725'],
         'colors': [
-            (68, 1, 84, "Level 1"),      # #440154
-            (49, 104, 142, "Level 2"),   # #31688e
-            (53, 183, 121, "Level 3"),   # #35b779
-            (253, 231, 37, "Level 4")    # #fde725
+            (68, 1, 84, "Level 1"),
+            (49, 104, 142, "Level 2"),
+            (53, 183, 121, "Level 3"),
+            (253, 231, 37, "Level 4")
         ]
     },
     'plasma': {
@@ -232,11 +244,11 @@ COLOR_SPECTRUMS = {
         'description': 'High contrast plasma colormap',
         'hex_colors': ['#0d0887', '#7e03a8', '#cc4778', '#f89441', '#f0f921'],
         'colors': [
-            (13, 8, 135, "Level 1"),     # #0d0887
-            (126, 3, 168, "Level 2"),    # #7e03a8
-            (204, 71, 120, "Level 3"),   # #cc4778
-            (248, 148, 65, "Level 4"),   # #f89441
-            (240, 249, 33, "Level 5")    # #f0f921
+            (13, 8, 135, "Level 1"),
+            (126, 3, 168, "Level 2"),
+            (204, 71, 120, "Level 3"),
+            (248, 148, 65, "Level 4"),
+            (240, 249, 33, "Level 5")
         ]
     },
     'inferno': {
@@ -244,17 +256,17 @@ COLOR_SPECTRUMS = {
         'description': 'Inferno colormap for thermal-like visualization',
         'hex_colors': ['#000004', '#420a68', '#932667', '#dd513a', '#fca50a', '#fcffa4'],
         'colors': [
-            (0, 0, 4, "Level 1"),        # #000004
-            (66, 10, 104, "Level 2"),    # #420a68
-            (147, 38, 103, "Level 3"),   # #932667
-            (221, 81, 58, "Level 4"),    # #dd513a
-            (252, 165, 10, "Level 5"),   # #fca50a
-            (252, 255, 164, "Level 6")   # #fcffa4
+            (0, 0, 4, "Level 1"),
+            (66, 10, 104, "Level 2"),
+            (147, 38, 103, "Level 3"),
+            (221, 81, 58, "Level 4"),
+            (252, 165, 10, "Level 5"),
+            (252, 255, 164, "Level 6")
         ]
     }
 }
 
-# Error messages
+# ===== MESSAGES =====
 ERROR_MESSAGES = {
     'file_not_found': 'The specified file could not be found.',
     'file_not_supported': 'The file format is not supported.',
@@ -273,7 +285,6 @@ ERROR_MESSAGES = {
     'invalid_parameters': 'Invalid analysis parameters provided.',
 }
 
-# Success messages
 SUCCESS_MESSAGES = {
     'image_loaded': 'Image loaded successfully.',
     'analysis_complete': 'Analysis completed successfully.',
@@ -287,7 +298,7 @@ SUCCESS_MESSAGES = {
     'cache_cleared': 'Cache cleared successfully.',
 }
 
-# System limits
+# ===== SYSTEM CONFIGURATION =====
 LIMITS = {
     'max_concurrent_analyses': 3,
     'max_undo_history': 20,
@@ -299,7 +310,6 @@ LIMITS = {
     'progress_update_interval_ms': 100,
 }
 
-# Performance settings
 PERFORMANCE = {
     'enable_gpu_acceleration': True,
     'enable_multiprocessing': True,
@@ -311,9 +321,10 @@ PERFORMANCE = {
     'preview_quality': 'medium',
     'memory_optimization': True,
     'garbage_collection_interval': 60,  # seconds
+    'max_image_display_size': 4096,  # Max dimension for display
+    'thread_pool_size': 4,  # Number of worker threads
 }
 
-# Debug settings
 DEBUG = {
     'enable_logging': True,
     'log_level': 'INFO',  # DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -326,7 +337,7 @@ DEBUG = {
     'measure_performance': False,
 }
 
-# Version information
+# ===== VERSION INFORMATION =====
 VERSION_INFO = {
     'major': 2,
     'minor': 0,
@@ -344,104 +355,122 @@ VERSION_INFO = {
     }
 }
 
-# UI Colors and Themes - REPLACE your APP_CONFIG section with this fixed version
+# ===== UI CONFIGURATION =====
 APP_CONFIG = {
     'theme': 'light',  # Default theme
+
+    # Window configuration
+    'window': {
+        'min_width': 800,
+        'min_height': 500,
+        'default_width': 960,
+        'default_height': 650,
+        'resizable': True,
+        'icon': None,  # Set to icon path if available
+    },
+
+    # ROI (Region of Interest) configuration
+    'roi': {
+        'normal_color': '#2563eb',
+        'selection_color': '#dc2626',
+        'line_width': 2,
+        'min_points': 3,
+        'selection_tolerance': 5
+    },
+
+    # Accessibility configuration
+    'accessibility': {
+        'high_contrast_mode': False,
+        'large_text_mode': False,
+        'keyboard_navigation': True,
+        'screen_reader_support': True,
+        'color_blind_friendly': True,
+        'minimum_contrast_ratio': 4.5,
+        'focus_indicators': True,
+        'reduced_motion': False,
+    },
+
+    # Colors dictionary
     'colors': {
-        # Enhanced Modern accent colors (same for both themes)
-        'primary': '#2563eb',  # Professional blue
-        'secondary': '#64748b',  # Modern slate gray
-        'success': '#059669',  # Professional green
-        'warning': '#d97706',  # Professional amber
-        'danger': '#dc2626',  # Professional red
-        'info': '#0891b2',  # Professional cyan
-        'purple': '#7c3aed',  # Professional violet
-        'pink': '#ec4899',  # Keep pink
+        # Modern accent colors (same for both themes)
+        'primary': '#2563eb',
+        'secondary': '#64748b',
+        'success': '#10B981',
+        'warning': '#d97706',
+        'danger': '#dc2626',
+        'info': '#0891b2',
+        'purple': '#7c3aed',
+        'pink': '#ec4899',
 
-        # Modern Clean Button Colors - Cohesive Design System
-        'btn_primary': '#2563eb',      # Primary blue - for main actions
-        'btn_primary_hover': '#1d4ed8', # Primary hover
-        'btn_secondary': '#6b7280',    # Secondary gray - for secondary actions
-        'btn_secondary_hover': '#4b5563', # Secondary hover
-        'btn_success': '#10b981',      # Success green - for positive actions
-        'btn_success_hover': '#059669', # Success hover
-        'btn_warning': '#f59e0b',      # Warning amber - for caution actions
-        'btn_warning_hover': '#d97706', # Warning hover
-        'btn_danger': '#ef4444',       # Danger red - for destructive actions
-        'btn_danger_hover': '#dc2626', # Danger hover
-        
-        # Specialized button colors for specific functions
-        'btn_info': '#3b82f6',         # Info blue - for informational actions
-        'btn_info_hover': '#2563eb',   # Info hover
-        'btn_neutral': '#64748b',      # Neutral - for utility actions
-        'btn_neutral_hover': '#475569', # Neutral hover
+        # Modern Clean Button Colors
+        'btn_primary': '#2563eb',
+        'btn_primary_hover': '#1d4ed8',
+        'btn_secondary': '#6b7280',
+        'btn_secondary_hover': '#4b5563',
+        'btn_success': '#10b981',
+        'btn_success_hover': '#059669',
+        'btn_warning': '#f59e0b',
+        'btn_warning_hover': '#d97706',
+        'btn_danger': '#ef4444',
+        'btn_danger_hover': '#dc2626',
+        'btn_info': '#3b82f6',
+        'btn_info_hover': '#2563eb',
+        'btn_neutral': '#64748b',
+        'btn_neutral_hover': '#475569',
+        'btn_disabled': '#d1d5db',
+        'btn_disabled_text': '#9ca3af',
+        'btn_focus_ring': '#3b82f6',
+        'btn_focus_ring_offset': '#ffffff',
 
-        # Enhanced disabled and focus states
-        'btn_disabled': '#d1d5db',  # Light gray for disabled
-        'btn_disabled_text': '#9ca3af',  # Muted text for disabled
-        'btn_focus_ring': '#3b82f6',  # Focus ring color
-        'btn_focus_ring_offset': '#ffffff',  # Focus ring offset
-
-        # Light mode enhancements
+        # Light theme colors
         'light': {
-            # Light modern background scheme
-            'background': '#f8fafc',  # Very light gray-blue
-            'panel_bg': '#ffffff',  # Pure white panels
-            'panel_border': '#e5e7eb',  # Subtle border
-            'panel_shadow': '#1f293720',  # Subtle shadow
-
-            # Enhanced light mode text colors
-            'text_primary': '#111827',  # Very dark gray
-            'text_secondary': '#4b5563',  # Medium gray
-            'text_muted': '#9ca3af',  # Light gray
-            'text_accent': '#000000',  # Pure black for emphasis
-
-            # Enhanced light mode UI elements
-            'status_bar': '#f3f4f6',  # Light gray for status
-            'canvas_bg': '#ffffff',  # White canvas
-            'hover_bg': '#f9fafb',  # Very light hover
-            'selected_bg': '#dbeafe',  # Light blue selection
+            'background': '#f8fafc',
+            'panel_bg': '#ffffff',
+            'panel_border': '#e5e7eb',
+            'panel_shadow': '#1f293720',
+            'text_primary': '#111827',
+            'text_secondary': '#4b5563',
+            'text_muted': '#9ca3af',
+            'text_accent': '#000000',
+            'status_bar': '#f3f4f6',
+            'canvas_bg': '#ffffff',
+            'hover_bg': '#f9fafb',
+            'selected_bg': '#dbeafe',
         },
 
-        # Dark mode enhancements
+        # Dark theme colors
         'dark': {
-            # Dark modern background scheme
-            'background': '#0f172a',  # Very dark slate
-            'panel_bg': '#1e293b',  # Dark slate panels
-            'panel_border': '#374151',  # Medium slate border
-            'panel_shadow': '#00000060',  # Darker shadow
-
-            # Enhanced dark mode text colors
-            'text_primary': '#f1f5f9',  # Very light gray
-            'text_secondary': '#cbd5e1',  # Light slate
-            'text_muted': '#94a3b8',  # Medium slate
-            'text_accent': '#ffffff',  # Pure white for emphasis
-
-            # Enhanced dark mode UI elements
-            'status_bar': '#374151',  # Medium slate for status
-            'canvas_bg': '#1e293b',  # Dark slate canvas
-            'hover_bg': '#374151',  # Medium slate hover
-            'selected_bg': '#3730a3',  # Dark blue selection
+            'background': '#0f172a',
+            'panel_bg': '#1e293b',
+            'panel_border': '#374151',
+            'panel_shadow': '#00000060',
+            'text_primary': '#f1f5f9',
+            'text_secondary': '#cbd5e1',
+            'text_muted': '#94a3b8',
+            'text_accent': '#ffffff',
+            'status_bar': '#374151',
+            'canvas_bg': '#1e293b',
+            'hover_bg': '#374151',
+            'selected_bg': '#3730a3',
         },
     },
 
-    # Enhanced styling for modern cards - MOVED OUT of colors section
+    # Styling configuration
     'styling': {
-        'border_radius': 8,  # Modern rounded corners
-        'card_shadow': 4,  # Card shadow depth
-        'card_border_width': 1,  # Card border width
-        'button_border_radius': 6,  # Button rounded corners
-        'button_padding_x': 16,  # Button horizontal padding
-        'button_padding_y': 10,  # Button vertical padding
-        'compact_button_size': 36,  # Compact button size
-        'card_padding': 16,  # Card internal padding
-        'card_header_height': 48,  # Card header height
-        'element_spacing': 12,  # Space between elements
-        'section_spacing': 20,  # Space between sections
-        'hover_transition': 200,  # Hover transition in ms
-        'focus_ring_width': 2,  # Focus ring width
-        'shadow_blur': 8,  # Shadow blur radius
-        # Additional styling needed for compatibility
+        'border_radius': 12,
+        'card_shadow': 4,
+        'card_border_width': 1,
+        'button_border_radius': 6,
+        'button_padding_x': 16,
+        'button_padding_y': 10,
+        'compact_button_size': 36,
+        'card_padding': 16,
+        'card_header_height': 48,
+        'element_spacing': 12,
+        'section_spacing': 20,
+        'hover_transition': 200,
+        'focus_ring_width': 2,
+        'shadow_blur': 8,
         'small_button_padding_x': 12,
         'small_button_padding_y': 6,
         'large_button_padding_x': 24,
@@ -450,138 +479,44 @@ APP_CONFIG = {
         'small_spacing': 4,
     },
 
-    # Enhanced font configuration
+    # Font configuration
     'fonts': {
-        'default': ('Segoe UI', 10),  # Default system font
-        'heading': ('Segoe UI', 14, 'bold'),  # Section headings
-        'subheading': ('Segoe UI', 12, 'bold'),  # Subsection headings
-        'button': ('Segoe UI', 10),  # Button text
-        'small': ('Segoe UI', 9),  # Small text
-        'monospace': ('Consolas', 10),  # Code/data display
-        'large': ('Segoe UI', 12),  # Large text
-
-        # Legacy font names for existing code compatibility
-        'body': ('Segoe UI', 10),  # Body text (maps to default)
-        'title': ('Segoe UI', 16, 'bold'),  # Main titles
-        'status': ('Segoe UI', 9),  # Status bar text
-
-        # Additional fonts found in your existing code
-        'body_bold': ('Segoe UI', 11, 'bold'),  # Bold body text
-        'small_bold': ('Segoe UI', 9, 'bold'),  # Small bold text
-        'button_large': ('Segoe UI', 12, 'bold'),  # Large button text
-    },
-
-    # Enhanced window configuration - Compact size for minimized app
-    'window': {
-        'min_width': 800,
-        'min_height': 500,
-        'default_width': 960,  # Half of typical 1920px screen
-        'default_height': 650,  # 60% of typical 1080px screen
-        'resizable': True,
-        'icon': None,  # Set to icon path if available
-    },
-
-    # ROI (Region of Interest) configuration
-    'roi': {
-        'normal_color': '#2563eb',  # Enhanced blue for completed ROI
-        'selection_color': '#dc2626',  # Enhanced red for active selection
-        'line_width': 2,
-        'min_points': 3,  # Minimum points for polygon
-        'selection_tolerance': 5  # Pixels tolerance for selection
-    },
-
-    # Enhanced canvas configuration
-    'canvas': {
-        'default_width': 800,
-        'default_height': 600,
-        'zoom_factor': 1.2,
-        'max_zoom': 2.0,
-        'min_zoom': 0.1,
-        'scroll_speed': 3,
-        'selection_color': '#3b82f6',
-        'selection_width': 2,
-        'grid_color': '#e5e7eb',
-        'grid_alpha': 0.3,
-    },
-
-    # Enhanced analysis configuration
-    'analysis': {
-        'default_facet_size': 19,
-        'default_point_distance': 4,
-        'max_facet_size': 100,
-        'min_facet_size': 5,
-        'max_point_distance': 20,
-        'min_point_distance': 1,
-        'quality_thresholds': {
-            'excellent': 0.9,
-            'good': 0.7,
-            'fair': 0.5,
-            'poor': 0.3,
-        },
-        'default_spectrum': 'optimized',
-        'available_spectra': ['optimized', 'jet', 'viridis', 'plasma', 'inferno'],
-    },
-
-    # File handling configuration
-    'files': {
-        'supported_formats': ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp'],
-        'max_file_size': 50 * 1024 * 1024,  # 50MB
-        'default_save_format': 'png',
-        'compression_quality': 95,
-        'backup_enabled': True,
-        'recent_files_limit': 10,
-    },
-
-    # Performance configuration
-    'performance': {
-        'max_image_size': 4096,  # Max dimension for display
-        'thumbnail_size': 256,  # Thumbnail size
-        'cache_size': 100,  # Number of cached items
-        'thread_pool_size': 4,  # Number of worker threads
-        'progress_update_interval': 100,  # Progress update frequency (ms)
-    },
-
-    # Enhanced accessibility configuration
-    'accessibility': {
-        'high_contrast_mode': False,
-        'large_text_mode': False,
-        'keyboard_navigation': True,
-        'screen_reader_support': True,
-        'color_blind_friendly': True,
-        'minimum_contrast_ratio': 4.5,  # WCAG AA compliance
-        'focus_indicators': True,
-        'reduced_motion': False,
+        'default': ('Segoe UI', 10),
+        'heading': ('Segoe UI', 14, 'bold'),
+        'subheading': ('Segoe UI', 12, 'bold'),
+        'button': ('Segoe UI', 10),
+        'small': ('Segoe UI', 9),
+        'monospace': ('Consolas', 10),
+        'large': ('Segoe UI', 12),
+        'body': ('Segoe UI', 10),
+        'title': ('Segoe UI', 16, 'bold'),
+        'status': ('Segoe UI', 9),
+        'body_bold': ('Segoe UI', 11, 'bold'),
+        'small_bold': ('Segoe UI', 9, 'bold'),
+        'button_large': ('Segoe UI', 12, 'bold'),
     },
 }
 
 
-def get_theme_colors():
-    """
-    Get colors for the current theme.
+# ===== HELPER FUNCTIONS =====
 
-    Returns:
-        dict: Dictionary of color values for current theme
-    """
+def get_theme_colors():
+    """Get colors for the current theme."""
     theme = APP_CONFIG['theme']
     colors = APP_CONFIG['colors'].copy()
 
     # Merge theme-specific colors with general colors
     if theme in colors:
         theme_colors = colors[theme]
-        # Remove theme-specific dictionaries and merge with general colors
         colors.pop('light', None)
         colors.pop('dark', None)
         colors.update(theme_colors)
 
     return colors
 
-def set_theme(theme_name):
-    """
-    Set the application theme.
 
-    Args:
-        theme_name (str): Theme name ('light' or 'dark')
-    """
+def set_theme(theme_name):
+    """Set the application theme."""
     if theme_name in ['light', 'dark']:
         APP_CONFIG['theme'] = theme_name
         return True
@@ -589,15 +524,9 @@ def set_theme(theme_name):
 
 
 def get_color_palette():
-    """
-    Get the complete color palette for the current theme.
-
-    Returns:
-        dict: Complete color palette with accessibility information
-    """
+    """Get the complete color palette for the current theme."""
     colors = get_theme_colors()
 
-    # Add accessibility metadata
     palette = {
         'colors': colors,
         'accessibility': {
@@ -633,17 +562,7 @@ def get_color_palette():
 
 
 def get_button_style(style_type='primary', size='normal', state='normal'):
-    """
-    Get button styling configuration.
-
-    Args:
-        style_type (str): Button style type
-        size (str): Button size ('small', 'normal', 'large')
-        state (str): Button state ('normal', 'hover', 'disabled', 'focus')
-
-    Returns:
-        dict: Button style configuration
-    """
+    """Get button styling configuration."""
     colors = get_theme_colors()
     styling = APP_CONFIG['styling']
 
@@ -680,21 +599,15 @@ def get_button_style(style_type='primary', size='normal', state='normal'):
             'hover_fg': '#ffffff',
         },
         'info': {
-            'bg': colors['info'],
+            'bg': colors['btn_info'],
             'fg': '#ffffff',
-            'hover_bg': colors['info'],
-            'hover_fg': '#ffffff',
-        },
-        'purple': {
-            'bg': colors['accent_purple'],
-            'fg': '#ffffff',
-            'hover_bg': colors['accent_purple_hover'],
+            'hover_bg': colors['btn_info_hover'],
             'hover_fg': '#ffffff',
         },
         'neutral': {
-            'bg': colors['neutral_action'],
+            'bg': colors['btn_neutral'],
             'fg': '#ffffff',
-            'hover_bg': colors['neutral_action_hover'],
+            'hover_bg': colors['btn_neutral_hover'],
             'hover_fg': '#ffffff',
         },
     }
@@ -742,7 +655,7 @@ def get_button_style(style_type='primary', size='normal', state='normal'):
         'relief': 'flat',
         'borderwidth': 0,
         'cursor': 'hand2' if state != 'disabled' else 'arrow',
-        'compound': 'left',  # For buttons with icons
+        'compound': 'left',
         'anchor': 'center',
         'justify': 'center',
     })
@@ -750,7 +663,6 @@ def get_button_style(style_type='primary', size='normal', state='normal'):
     return style
 
 
-# Color validation functions
 def validate_color(color):
     """Validate if a color string is valid."""
     if not isinstance(color, str):
@@ -758,20 +670,14 @@ def validate_color(color):
 
     # Check hex color format
     if color.startswith('#'):
-        if len(color) == 7:  # #RRGGBB
-            try:
-                int(color[1:], 16)
-                return True
-            except ValueError:
-                return False
-        elif len(color) == 4:  # #RGB
+        if len(color) in [4, 7]:  # #RGB or #RRGGBB
             try:
                 int(color[1:], 16)
                 return True
             except ValueError:
                 return False
 
-    # Check named colors (basic set)
+    # Check named colors
     named_colors = {'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'black', 'white'}
     return color.lower() in named_colors
 
@@ -779,21 +685,15 @@ def validate_color(color):
 def get_contrast_ratio(color1, color2):
     """Calculate contrast ratio between two colors (simplified)."""
     # This is a simplified version - in production, use proper color contrast calculation
-    # For now, return a reasonable default
     return 4.5  # WCAG AA minimum
 
 
 def get_current_theme():
-    """
-    Get the current theme name.
-
-    Returns:
-        str: Current theme name ('light' or 'dark')
-    """
+    """Get the current theme name."""
     return APP_CONFIG['theme']
 
 
-# Export commonly used functions and constants
+# ===== EXPORTS =====
 __all__ = [
     # Application metadata
     'APP_NAME',
