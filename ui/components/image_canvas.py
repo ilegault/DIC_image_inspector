@@ -604,8 +604,8 @@ class ImageCanvas:
         # Notify zoom change
         self._notify_zoom_changed()
         
-        # Redraw ROI if active
-        self._redraw_roi()
+        # Redraw ROI after zoom
+        self.redraw_roi()
         
         logger.debug(f"Zoomed {direction} to {self.zoom_level:.2f}x at mouse position ({mouse_x}, {mouse_y})")
         
@@ -662,6 +662,9 @@ class ImageCanvas:
 
         # Update display scale for ROI selector
         self.canvas.display_scale = self.display_scale * self.zoom_level
+        
+        # Redraw ROI after display update
+        self.redraw_roi()
         
         logger.debug(f"Display updated - Size: {new_width}x{new_height}, Zoom: {self.zoom_level:.2f}x")
 
@@ -871,6 +874,9 @@ class ImageCanvas:
         self.panning = False
         self.canvas.config(cursor="")
         logger.debug("Pan ended")
+        
+        # Redraw ROI after panning
+        self.redraw_roi()
 
 
 
