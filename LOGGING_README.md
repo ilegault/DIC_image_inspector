@@ -1,63 +1,74 @@
-# Logging Control System
+# Centralized Debug and Logging Control System
 
 ## Quick Start
 
-The app now has much better control over what gets logged. The noisy PIL (image processing) messages are now suppressed by default.
+The app now uses a centralized debug configuration system in `utils/debug_config.py`. This provides unified control over all debug and logging settings with easy-to-use presets and runtime controls.
 
-### Current Setup (Recommended)
+### Current Setup (Default)
 - **App logging**: INFO level (shows important events)
-- **PIL logging**: WARNING level (hides the verbose import messages)
-- **Third-party libraries**: WARNING level (reduces noise)
+- **Library logging**: WARNING level (reduces noise from PIL, matplotlib, etc.)
+- **Debug flags**: All disabled by default
 
 ## Easy Configuration
 
-### Option 1: Edit `logging_config.py` (Recommended)
+### Option 1: Use Presets (Recommended)
 ```python
-# Simple changes in logging_config.py
-APP_LOG_LEVEL = 'INFO'        # For normal use
-PIL_LOG_LEVEL = 'WARNING'     # Hides PIL noise
-THIRD_PARTY_LOG_LEVEL = 'WARNING'  # Reduces other library noise
+from utils.debug_config import DebugPresets
+
+# Quick preset configurations
+DebugPresets.apply_preset('normal')     # Normal operation (recommended)
+DebugPresets.apply_preset('debug')      # Debug mode for app development
+DebugPresets.apply_preset('zoom_pan')   # Debug zoom/pan specifically
+DebugPresets.apply_preset('verbose')    # Everything at debug level
 ```
 
-### Option 2: Use Presets
-Uncomment this line in `logging_config.py`:
+### Option 2: Edit Configuration File
+Edit `utils/debug_config.py` directly:
 ```python
-ACTIVE_PRESET = 'normal'  # Options: 'quiet', 'normal', 'debug', 'verbose', 'image_debug'
+class DebugConfig:
+    DEBUG_MODE = True           # Enable debug mode
+    ZOOM_PAN_DEBUG = True       # Debug zoom/pan operations
+    IMAGE_LOADING_DEBUG = True  # Debug image loading
+    APP_LOG_LEVEL = 'DEBUG'     # Set app logging level
 ```
 
 ## Common Scenarios
 
-### Daily Use (Current Default)
+### Daily Use (Default)
 ```python
-APP_LOG_LEVEL = 'INFO'
-PIL_LOG_LEVEL = 'WARNING'
-THIRD_PARTY_LOG_LEVEL = 'WARNING'
+DebugPresets.apply_preset('normal')
 ```
-**Result**: Clean logs showing app events, no PIL noise
+**Result**: Clean logs showing app events, no library noise
 
 ### Debugging App Issues
 ```python
-APP_LOG_LEVEL = 'DEBUG'
-PIL_LOG_LEVEL = 'WARNING'
-THIRD_PARTY_LOG_LEVEL = 'WARNING'
+DebugPresets.apply_preset('debug')
 ```
-**Result**: Detailed app debugging, still no PIL noise
+**Result**: Detailed app debugging, libraries still quiet
 
 ### Debugging Image Loading Issues
 ```python
-APP_LOG_LEVEL = 'INFO'
-PIL_LOG_LEVEL = 'DEBUG'
-THIRD_PARTY_LOG_LEVEL = 'WARNING'
+DebugPresets.apply_preset('images')
 ```
-**Result**: Normal app logging + detailed PIL image processing info
+**Result**: Normal app logging + detailed image processing info
+
+### Debugging Zoom/Pan Issues
+```python
+DebugPresets.apply_preset('zoom_pan')
+```
+**Result**: Detailed zoom and pan operation debugging
 
 ### Very Quiet Mode
 ```python
-APP_LOG_LEVEL = 'WARNING'
-PIL_LOG_LEVEL = 'ERROR'
-THIRD_PARTY_LOG_LEVEL = 'ERROR'
+DebugPresets.apply_preset('off')
 ```
 **Result**: Only warnings and errors
+
+### Everything at Debug Level
+```python
+DebugPresets.apply_preset('verbose')
+```
+**Result**: Maximum verbosity for troubleshooting
 
 ## About Those Import Failures
 
@@ -70,33 +81,57 @@ PIL.Image - DEBUG - Image: failed to import MicImagePlugin: No module named 'ole
 
 These are just PIL trying to import optional plugins for rare image formats (FPX and Microsoft Image Composer). Your app works perfectly without them. The `olefile` library is only needed for these specific formats.
 
-## Runtime Control (Advanced)
+## Runtime Control
 
-You can also control logging from within the running app:
+You can control debug settings from within the running app without restarting:
 
 ```python
-from utils.logging_control import normal_mode, debug_mode, toggle_pil_debug
+from utils.debug_config import DebugControl, DebugPresets
 
-normal_mode()      # Set to recommended levels
-debug_mode()       # Enable app debugging
-toggle_pil_debug() # Toggle PIL debugging on/off
+# Apply presets
+DebugPresets.apply_preset('normal')
+DebugPresets.apply_preset('debug')
+
+# Toggle individual flags
+DebugControl.toggle('ZOOM_PAN_DEBUG')
+DebugControl.enable('IMAGE_LOADING_DEBUG')
+DebugControl.disable('VERBOSE_MODE')
+
+# Check current status
+DebugControl.status()
+
+# Get help
+DebugControl.help()
 ```
+
+## Available Debug Flags
+
+- `DEBUG_MODE` - Master debug switch
+- `VERBOSE_MODE` - Extra verbose output
+- `ZOOM_PAN_DEBUG` - Debug zoom/pan operations
+- `IMAGE_LOADING_DEBUG` - Debug image loading
+- `ROI_DEBUG` - Debug ROI selection
+- `ANALYSIS_DEBUG` - Debug image analysis
+- `UI_DEBUG` - Debug UI operations
+- `PERFORMANCE_DEBUG` - Debug performance
 
 ## File Locations
 
-- **Main config**: `logging_config.py` (edit this for quick changes)
-- **Advanced config**: `utils/constants.py` (DEBUG section)
-- **Runtime control**: `utils/logging_control.py` (for programmatic control)
+- **Main config**: `utils/debug_config.py` (centralized configuration)
+- **Migration guide**: `DEBUG_CONFIG_MIGRATION.md` (how to migrate from old system)
+- **Test script**: `test_debug_config.py` (test the configuration system)
 - **Log file**: `dic_inspector.log` (the actual log output)
 
 ## What Changed
 
-1. **PIL logging suppressed**: No more verbose image plugin import messages
-2. **Easy configuration**: Simple `logging_config.py` file for quick changes
-3. **Preset modes**: Pre-configured logging levels for different scenarios
-4. **Runtime control**: Functions to change logging levels without restarting
-5. **Better organization**: Separate app logging from third-party library logging
+1. **Centralized configuration**: All debug settings in one file
+2. **Unified API**: Consistent interface for all debug operations
+3. **Runtime control**: Change settings without restarting
+4. **Preset support**: Quick configuration for common scenarios
+5. **Feature-specific debugging**: Target specific areas of the app
+6. **Better organization**: Clear separation of concerns
+7. **Migration support**: Easy transition from old system
 
-## Restart Required
+## No Restart Required
 
-After editing `logging_config.py`, restart the app to apply changes.
+Changes made through `DebugControl` and `DebugPresets` take effect immediately. Only direct edits to `utils/debug_config.py` require a restart.
