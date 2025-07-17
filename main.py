@@ -1,5 +1,5 @@
 # This script is used to run the application from the command line.
-# __main__.py
+# main.py
 import sys
 import os
 

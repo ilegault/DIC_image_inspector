@@ -5,7 +5,7 @@ import logging
 
 # === CHANGE DEBUG PRESET HERE ===
 # Available presets: 'off', 'normal', 'debug', 'zoom_pan', 'verbose'
-DEBUG_PRESET = ''  # <-- Change this line to change debug level
+DEBUG_PRESET = 'debug'  # <-- Change this line to change debug level
 
 # ===== DEBUG PRESETS REFERENCE =====
 """

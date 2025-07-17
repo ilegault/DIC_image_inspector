@@ -45,11 +45,31 @@ class ImageCanvas:
         self.display_scale = 1.0
         self.photo = None
         self.image_item = None
+        
+        # Image cache for performance (from canvas test.py)
+        self.image_cache = {}
+        self.max_cache_size = 10
+        
+        # Zoom limits (from canvas test.py)
+        self.min_zoom = 0.1
+        self.max_zoom = 5.0
 
         # Pan state
         self.pan_start_x = 0
         self.pan_start_y = 0
         self.panning = False
+
+        # ROI selection state (integrated from canvas test.py style)
+        self.roi_selection_active = False
+        self.ctrl_selection_mode = False  # New: Ctrl+hold selection mode
+        self.roi_coords = []  # List of (x, y) tuples in image coordinates
+        self.roi_polygon = None
+        self.preview_line = None
+        
+        # ROI visual properties
+        self.roi_color = APP_CONFIG['roi']['normal_color']
+        self.selection_color = APP_CONFIG['roi']['selection_color']
+        self.line_width = APP_CONFIG['roi']['line_width']
 
         # Create UI
         self._create_canvas_area()
@@ -144,23 +164,16 @@ class ImageCanvas:
         self.canvas.bind("<Button-4>", self._on_mousewheel)  # Linux scroll up
         self.canvas.bind("<Button-5>", self._on_mousewheel)  # Linux scroll down
 
-        # Pan events
-        self.canvas.bind("<Control-Button-1>", self._start_pan)
-        self.canvas.bind("<Control-B1-Motion>", self._pan_image)
-        self.canvas.bind("<ButtonRelease-1>", self._end_pan)
+        # Pan events - Right click for panning (like canvas test.py)
+        self.canvas.bind("<Button-3>", self._start_pan)  # Right click
+        self.canvas.bind("<B3-Motion>", self._pan_image)  # Right click motion
+        self.canvas.bind("<ButtonRelease-3>", self._end_pan)  # Right click release
 
-        # Keyboard zoom shortcuts
-        self.canvas.bind("<Control-plus>", self._zoom_in_keyboard)
-        self.canvas.bind("<Control-equal>", self._zoom_in_keyboard)  # For keyboards without numpad
-        self.canvas.bind("<Control-minus>", self._zoom_out_keyboard)
-        self.canvas.bind("<Control-0>", self._zoom_fit)
-        self.canvas.bind("<Control-1>", self._zoom_actual)
+        # ROI selection events - Left click for ROI selection
+        self.canvas.bind("<Button-1>", self._on_left_click)
+        self.canvas.bind("<Motion>", self._on_mouse_motion)
 
-        # Key events
-        self.canvas.bind("<KeyRelease-Control_L>", self._reset_cursor)
-        self.canvas.bind("<KeyRelease-Control_R>", self._reset_cursor)
-        self.canvas.bind("<Leave>", self._reset_cursor)
-        self.canvas.bind("<KeyRelease>", self._check_ctrl_release)
+        # Remove keyboard shortcuts to avoid conflicts with Ctrl ROI selection
 
         # Make canvas focusable for key events
         self.canvas.focus_set()
@@ -179,6 +192,9 @@ class ImageCanvas:
             
             # Clear any existing image items
             self.canvas.delete("all")
+            
+            # Clear cache when new image loaded
+            self.image_cache.clear()
 
             # Handle both numpy array and ImageData object
             if hasattr(image_data, 'array'):
@@ -258,24 +274,47 @@ class ImageCanvas:
             # Create the photo image
             display_width = int(pil_image.width * self.display_scale * self.zoom_level)
             display_height = int(pil_image.height * self.display_scale * self.zoom_level)
+            
+            logger.debug(f"Display image: Calculated display size: {display_width}x{display_height}")
+
+            # Ensure minimum size
+            display_width = max(1, display_width)
+            display_height = max(1, display_height)
 
             if display_width != pil_image.width or display_height != pil_image.height:
                 resized_image = pil_image.resize((display_width, display_height), Image.Resampling.LANCZOS)
+                logger.debug(f"Display image: Resized image to {display_width}x{display_height}")
             else:
                 resized_image = pil_image
+                logger.debug("Display image: Using original image size")
 
             self.photo = ImageTk.PhotoImage(resized_image)
+            logger.debug(f"Display image: Created PhotoImage: {self.photo.width()}x{self.photo.height()}")
+            
+            # Keep a reference to prevent garbage collection
+            self.canvas.image = self.photo
 
             # Update canvas size and display image
             canvas_width = self.canvas.winfo_width()
             canvas_height = self.canvas.winfo_height()
+            logger.debug(f"Display image: Canvas actual size: {canvas_width}x{canvas_height}")
 
             if display_width <= canvas_width and display_height <= canvas_height:
                 # Center the image
                 x = (canvas_width - display_width) // 2
                 y = (canvas_height - display_height) // 2
+                logger.debug(f"Display image: Centering image at ({x}, {y})")
+                
                 self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
                 self.image_item = self.canvas.create_image(x, y, anchor='nw', image=self.photo)
+                logger.debug(f"Display image: Created image item {self.image_item}")
+                
+                # Verify the image was created successfully
+                try:
+                    bbox = self.canvas.bbox(self.image_item)
+                    logger.debug(f"Display image: Image item bbox: {bbox}")
+                except Exception as e:
+                    logger.error(f"Display image: Error getting bbox: {e}")
 
                 # Store offsets for coordinate conversion
                 self.image_offset_x = x
@@ -284,8 +323,17 @@ class ImageCanvas:
                 self.canvas.image_offset_y = y
             else:
                 # Image larger than canvas - use scrolling
+                logger.debug(f"Display image: Image larger than canvas, using scrolling")
                 self.canvas.configure(scrollregion=(0, 0, display_width, display_height))
                 self.image_item = self.canvas.create_image(0, 0, anchor='nw', image=self.photo)
+                logger.debug(f"Display image: Created scrollable image item {self.image_item}")
+                
+                # Verify the image was created successfully
+                try:
+                    bbox = self.canvas.bbox(self.image_item)
+                    logger.debug(f"Display image: Scrollable image item bbox: {bbox}")
+                except Exception as e:
+                    logger.error(f"Display image: Error getting scrollable bbox: {e}")
 
                 # No offset when scrolling
                 self.image_offset_x = 0
@@ -303,10 +351,16 @@ class ImageCanvas:
             self.quality_map_data = None
             self.quality_visualization = None
             self.showing_quality_map = False
+            
+            # Force canvas update
+            self.canvas.update_idletasks()
+            logger.debug("Display image: Canvas update completed")
 
         except Exception as e:
-            print(f"Error displaying image: {e}")
+            logger.error(f"Error displaying image: {e}")
             import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            print(f"Error displaying image: {e}")
             traceback.print_exc()
 
     def refresh_theme(self):
@@ -463,37 +517,153 @@ class ImageCanvas:
                           f"Display: {img_width}x{img_height}, Scroll region: {img_width}x{img_height}")
 
     def _on_mousewheel(self, event):
-        """Handle mouse wheel zoom."""
-        if not self.displayed_image:
-            logger.debug("Mousewheel zoom: No displayed image")
+        """Handle mouse wheel zoom (improved from canvas test.py)."""
+        if self.displayed_image is None:
             return "break"
 
-        # Store old zoom level and mouse position
+        # Store old zoom
         old_zoom = self.zoom_level
-        mouse_x = self.canvas.canvasx(event.x)
-        mouse_y = self.canvas.canvasy(event.y)
-        
-        logger.debug(f"Mousewheel zoom: event.x={event.x}, event.y={event.y}")
-        logger.debug(f"Mousewheel zoom: canvas coords mouse_x={mouse_x}, mouse_y={mouse_y}")
-        logger.debug(f"Mousewheel zoom: old_zoom={old_zoom}")
 
-        # Calculate new zoom level with smaller, more precise increments
-        if event.num == 5 or event.delta < 0:  # Zoom out
-            self.zoom_level = max(0.1, self.zoom_level - 0.05)
-            logger.debug(f"Mousewheel zoom: Zooming OUT from {old_zoom} to {self.zoom_level}")
-        elif event.num == 4 or event.delta > 0:  # Zoom in
-            self.zoom_level = min(2.0, self.zoom_level + 0.05)
-            logger.debug(f"Mousewheel zoom: Zooming IN from {old_zoom} to {self.zoom_level}")
+        # Calculate new zoom with multiplicative increments (smoother)
+        # Handle different event types for cross-platform compatibility
+        if hasattr(event, 'delta'):
+            # Windows
+            if event.delta < 0:  # Zoom out
+                self.zoom_level = max(self.min_zoom, self.zoom_level * 0.9)
+                direction = "out"
+            else:  # Zoom in
+                self.zoom_level = min(self.max_zoom, self.zoom_level * 1.1)
+                direction = "in"
         else:
-            logger.debug(f"Mousewheel zoom: Unknown event - num={getattr(event, 'num', 'None')}, delta={getattr(event, 'delta', 'None')}")
+            # Linux - Button-4 is scroll up (zoom in), Button-5 is scroll down (zoom out)
+            if event.num == 5:  # Zoom out
+                self.zoom_level = max(self.min_zoom, self.zoom_level * 0.9)
+                direction = "out"
+            else:  # Zoom in
+                self.zoom_level = min(self.max_zoom, self.zoom_level * 1.1)
+                direction = "in"
+
+        if abs(self.zoom_level - old_zoom) < 0.001:
             return "break"
 
-        # Apply zoom centered on mouse position
-        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
+        # Get mouse position and canvas dimensions
+        mouse_x = event.x
+        mouse_y = event.y
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+
+        # Get current scroll positions
+        xview = self.canvas.xview()
+        yview = self.canvas.yview()
+
+        # Calculate the point in the image that the mouse is over (in pixels of original image)
+        # This is the point we want to keep fixed during zoom
+        scroll_left = xview[0]
+        scroll_top = yview[0]
+        view_width = xview[1] - xview[0]
+        view_height = yview[1] - yview[0]
+
+        # Mouse position as fraction of visible area
+        mouse_frac_x = mouse_x / canvas_width if canvas_width > 0 else 0.5
+        mouse_frac_y = mouse_y / canvas_height if canvas_height > 0 else 0.5
+
+        # Convert to fraction of total image
+        image_frac_x = scroll_left + mouse_frac_x * view_width
+        image_frac_y = scroll_top + mouse_frac_y * view_height
+
+        # Update display with new zoom
+        self._update_display_improved()
+
+        # After zoom, calculate where to scroll to keep the same image point under mouse
+        new_image_width = self.displayed_image.width * self.display_scale * self.zoom_level
+        new_image_height = self.displayed_image.height * self.display_scale * self.zoom_level
+
+        # Only adjust scroll if image is larger than canvas
+        if new_image_width > canvas_width:
+            # Calculate what fraction of the image should be visible
+            new_view_width = canvas_width / new_image_width
+            # Calculate scroll position to keep image point under mouse
+            new_scroll_x = image_frac_x - mouse_frac_x * new_view_width
+            new_scroll_x = max(0, min(new_scroll_x, 1 - new_view_width))
+            self.canvas.xview_moveto(new_scroll_x)
+        else:
+            # Image fits in canvas - center it
+            self.canvas.xview_moveto(0)
+
+        if new_image_height > canvas_height:
+            # Calculate what fraction of the image should be visible
+            new_view_height = canvas_height / new_image_height
+            # Calculate scroll position to keep image point under mouse
+            new_scroll_y = image_frac_y - mouse_frac_y * new_view_height
+            new_scroll_y = max(0, min(new_scroll_y, 1 - new_view_height))
+            self.canvas.yview_moveto(new_scroll_y)
+        else:
+            # Image fits in canvas - center it
+            self.canvas.yview_moveto(0)
 
         # Notify zoom change
         self._notify_zoom_changed()
+        
+        # Redraw ROI if active
+        self._redraw_roi()
+        
+        logger.debug(f"Zoomed {direction} to {self.zoom_level:.2f}x at mouse position ({mouse_x}, {mouse_y})")
+        
         return "break"
+
+    def _update_display_improved(self):
+        """Update the displayed image based on current zoom level (improved from canvas test.py)."""
+        if self.displayed_image is None:
+            return
+
+        # Calculate new size
+        orig_width, orig_height = self.displayed_image.size
+        new_width = int(orig_width * self.display_scale * self.zoom_level)
+        new_height = int(orig_height * self.display_scale * self.zoom_level)
+
+        # Create cache key
+        cache_key = (new_width, new_height)
+
+        # Check cache first
+        if cache_key in self.image_cache:
+            self.photo = self.image_cache[cache_key]
+            logger.debug(f"Using cached image for size {new_width}x{new_height}")
+        else:
+            # Resize image - use NEAREST for speed during interactive zoom
+            if abs(self.zoom_level - 1.0) < 0.001:
+                resized = self.displayed_image
+            else:
+                # Use NEAREST for speed, or BILINEAR for better quality but slower
+                resample = Image.Resampling.BILINEAR if self.zoom_level < 1.0 else Image.Resampling.NEAREST
+                resized = self.displayed_image.resize((new_width, new_height), resample)
+
+            # Convert to PhotoImage
+            self.photo = ImageTk.PhotoImage(resized)
+
+            # Add to cache
+            self.image_cache[cache_key] = self.photo
+
+            # Limit cache size
+            if len(self.image_cache) > self.max_cache_size:
+                # Remove oldest entries
+                oldest_keys = list(self.image_cache.keys())[:-self.max_cache_size]
+                for key in oldest_keys:
+                    del self.image_cache[key]
+                logger.debug(f"Cache cleaned, removed {len(oldest_keys)} entries")
+
+        # Update canvas
+        if self.image_item is None:
+            self.image_item = self.canvas.create_image(0, 0, image=self.photo, anchor='nw')
+        else:
+            self.canvas.itemconfig(self.image_item, image=self.photo)
+
+        # Update scroll region
+        self.canvas.config(scrollregion=self.canvas.bbox('all'))
+
+        # Update display scale for ROI selector
+        self.canvas.display_scale = self.display_scale * self.zoom_level
+        
+        logger.debug(f"Display updated - Size: {new_width}x{new_height}, Zoom: {self.zoom_level:.2f}x")
 
     def _apply_zoom_at_point(self, old_zoom: float, mouse_x: float, mouse_y: float):
         """Apply zoom transformation centered at a specific point."""
@@ -645,163 +815,376 @@ class ImageCanvas:
             self.callbacks['zoom_changed'](self.zoom_level)
 
     def _start_pan(self, event):
-        """Start panning operation."""
-        logger.debug(f"Pan start: event position ({event.x}, {event.y})")
+        """Start panning operation (improved from canvas test.py)."""
         self.canvas.config(cursor="fleur")
         self.pan_start_x = event.x
         self.pan_start_y = event.y
         self.panning = True
-        
-        # Log current scroll state
-        current_x = self.canvas.xview()[0]
-        current_y = self.canvas.yview()[0]
-        logger.debug(f"Pan start: current scroll position ({current_x:.3f}, {current_y:.3f})")
+        logger.debug(f"Pan started at ({event.x}, {event.y})")
 
     def _pan_image(self, event):
-        """Pan the image."""
+        """Pan the image during mouse motion (improved from canvas test.py)."""
         if not self.panning:
-            logger.debug("Pan image: Not in panning mode")
             return
 
-        # Calculate movement
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        dx = (event.x - self.pan_start_x) / canvas_width
-        dy = (event.y - self.pan_start_y) / canvas_height
-        
-        logger.debug(f"Pan image: event position ({event.x}, {event.y})")
-        logger.debug(f"Pan image: canvas size {canvas_width}x{canvas_height}")
-        logger.debug(f"Pan image: movement delta ({dx:.3f}, {dy:.3f})")
+        # Calculate movement in screen pixels
+        dx = event.x - self.pan_start_x
+        dy = event.y - self.pan_start_y
 
-        # Get current view position
-        current_x = self.canvas.xview()[0]
-        current_y = self.canvas.yview()[0]
-        logger.debug(f"Pan image: current scroll ({current_x:.3f}, {current_y:.3f})")
-
-        # Calculate new position
-        new_x = max(0, min(1, current_x - dx))
-        new_y = max(0, min(1, current_y - dy))
-        logger.debug(f"Pan image: new scroll position ({new_x:.3f}, {new_y:.3f})")
-
-        # Apply movement
-        self.canvas.xview_moveto(new_x)
-        self.canvas.yview_moveto(new_y)
-
-        # Update start position
+        # Update pan start position
         self.pan_start_x = event.x
         self.pan_start_y = event.y
 
+        # Get canvas dimensions
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+
+        # Use reasonable defaults if canvas not rendered yet
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 500
+
+        # Get current view bounds
+        x_view = self.canvas.xview()
+        y_view = self.canvas.yview()
+
+        # Calculate the visible fraction of the image
+        x_visible_fraction = x_view[1] - x_view[0]
+        y_visible_fraction = y_view[1] - y_view[0]
+
+        # Calculate movement as a fraction of the visible area
+        if x_visible_fraction < 1.0:  # Only pan if image is larger than canvas
+            x_delta = (dx / canvas_width) * x_visible_fraction
+            new_x = x_view[0] - x_delta
+            new_x = max(0, min(new_x, 1 - x_visible_fraction))
+            self.canvas.xview_moveto(new_x)
+
+        if y_visible_fraction < 1.0:  # Only pan if image is larger than canvas
+            y_delta = (dy / canvas_height) * y_visible_fraction
+            new_y = y_view[0] - y_delta
+            new_y = max(0, min(new_y, 1 - y_visible_fraction))
+            self.canvas.yview_moveto(new_y)
+
     def _end_pan(self, event):
         """End panning operation."""
-        logger.debug(f"Pan end: final position ({event.x}, {event.y})")
-        final_x = self.canvas.xview()[0]
-        final_y = self.canvas.yview()[0]
-        logger.debug(f"Pan end: final scroll position ({final_x:.3f}, {final_y:.3f})")
         self.panning = False
         self.canvas.config(cursor="")
+        logger.debug("Pan ended")
 
-    def _reset_cursor(self, event):
-        """Reset cursor when Ctrl is released."""
-        if not self.panning:
-            self.canvas.config(cursor="")
 
-    def _check_ctrl_release(self, event):
-        """Check if Ctrl key is released and reset cursor."""
-        if not (event.state & 0x0004):  # Ctrl not pressed
-            self.panning = False
-            self.canvas.config(cursor="")
 
-    def _zoom_in_keyboard(self, event):
-        """Zoom in using keyboard shortcut."""
-        if not self.displayed_image:
-            return "break"
 
-        # Get canvas center for zoom point
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        center_x = canvas_width / 2
-        center_y = canvas_height / 2
 
-        # Convert to canvas coordinates
-        mouse_x = self.canvas.canvasx(center_x)
-        mouse_y = self.canvas.canvasy(center_y)
 
-        old_zoom = self.zoom_level
-        self.zoom_level = min(2.0, self.zoom_level + 0.1)
-        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
-        return "break"
 
-    def _zoom_out_keyboard(self, event):
-        """Zoom out using keyboard shortcut."""
-        if not self.displayed_image:
-            return "break"
+    def _add_roi_point(self, event):
+        """Add a point to the ROI selection."""
+        logger.debug(f"_add_roi_point called, roi_selection_active: {self.roi_selection_active}")
+        if not self.roi_selection_active:
+            return
 
-        # Get canvas center for zoom point
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        center_x = canvas_width / 2
-        center_y = canvas_height / 2
+        # Get image coordinates
+        try:
+            image_x, image_y = self._canvas_to_image_coords(event.x, event.y)
+            logger.debug(f"Canvas coords: ({event.x}, {event.y}) -> Image coords: ({image_x:.1f}, {image_y:.1f})")
+            
+            # Add point if within image bounds
+            if image_x >= 0 and image_y >= 0:
+                self.roi_coords.append((image_x, image_y))
+                logger.debug(f"Added ROI point {len(self.roi_coords)}: ({image_x:.1f}, {image_y:.1f})")
+                
+                # Redraw ROI
+                self._redraw_roi()
+                
+                # Notify callbacks
+                if 'roi_changed' in self.callbacks:
+                    self.callbacks['roi_changed'](self.roi_coords.copy())
+            else:
+                logger.debug(f"Point outside image bounds: ({image_x:.1f}, {image_y:.1f})")
 
-        # Convert to canvas coordinates
-        mouse_x = self.canvas.canvasx(center_x)
-        mouse_y = self.canvas.canvasy(center_y)
+        except Exception as e:
+            logger.error(f"Error adding ROI point: {e}")
 
-        old_zoom = self.zoom_level
-        self.zoom_level = max(0.1, self.zoom_level - 0.1)
-        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
-        return "break"
+    def _update_roi_preview(self, event):
+        """Update ROI preview line during mouse motion."""
+        if not self.roi_selection_active or not self.roi_coords:
+            return
 
-    def _zoom_fit(self, event):
-        """Fit image to canvas."""
-        if not self.displayed_image:
-            return "break"
+        try:
+            # Get image coordinates for preview
+            image_x, image_y = self._canvas_to_image_coords(event.x, event.y)
+            
+            # Redraw with preview
+            self._redraw_roi(preview_point=(image_x, image_y))
 
-        # Calculate fit zoom level
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
+        except Exception as e:
+            logger.error(f"Error in ROI preview: {e}")
 
-        if canvas_width <= 1 or canvas_height <= 1:
-            return "break"
+    def _finish_roi_selection(self):
+        """Finish ROI selection."""
+        logger.debug(f"Finishing ROI polygon with {len(self.roi_coords)} points")
 
-        img_width = self.displayed_image.width
-        img_height = self.displayed_image.height
+        # Exit selection mode
+        self.roi_selection_active = False
+        self.ctrl_selection_mode = False
+        self.canvas.config(cursor="")
 
-        # Calculate zoom to fit
-        zoom_x = canvas_width / img_width
-        zoom_y = canvas_height / img_height
-        fit_zoom = min(zoom_x, zoom_y) * 0.9  # 90% to leave some margin
+        # Draw final polygon
+        self._redraw_roi(finalize=True)
 
-        old_zoom = self.zoom_level
-        self.zoom_level = max(0.1, min(2.0, fit_zoom))
+        # Notify callbacks
+        if 'roi_completed' in self.callbacks:
+            self.callbacks['roi_completed'](self.roi_coords.copy())
 
-        # Center the zoom
-        center_x = canvas_width / 2
-        center_y = canvas_height / 2
-        mouse_x = self.canvas.canvasx(center_x)
-        mouse_y = self.canvas.canvasy(center_y)
+    def _redraw_roi(self, preview_point=None, finalize=False):
+        """Redraw the ROI polygon and preview line."""
+        # Remove previous drawings
+        if self.roi_polygon:
+            self.canvas.delete(self.roi_polygon)
+            self.roi_polygon = None
+        if self.preview_line:
+            self.canvas.delete(self.preview_line)
+            self.preview_line = None
 
-        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
-        return "break"
+        if not self.roi_coords:
+            return
 
-    def _zoom_actual(self, event):
-        """Zoom to actual size (100%)."""
-        if not self.displayed_image:
-            return "break"
+        # Convert image coordinates to canvas coordinates
+        canvas_coords = []
+        for image_x, image_y in self.roi_coords:
+            canvas_x, canvas_y = self._image_to_canvas_coords(image_x, image_y)
+            canvas_coords.append((canvas_x, canvas_y))
 
-        # Get canvas center for zoom point
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        center_x = canvas_width / 2
-        center_y = canvas_height / 2
+        # Draw polygon or line
+        if len(canvas_coords) >= 2:
+            # Flatten coordinates for canvas methods
+            flat_coords = [coord for point in canvas_coords for coord in point]
 
-        # Convert to canvas coordinates
-        mouse_x = self.canvas.canvasx(center_x)
-        mouse_y = self.canvas.canvasy(center_y)
+            if finalize and len(canvas_coords) >= 3:
+                # Draw filled polygon
+                self.roi_polygon = self.canvas.create_polygon(
+                    *flat_coords,
+                    outline=self.roi_color,
+                    fill='',
+                    width=self.line_width
+                )
+            else:
+                # Draw line
+                self.roi_polygon = self.canvas.create_line(
+                    *flat_coords,
+                    fill=self.selection_color,
+                    width=self.line_width
+                )
 
-        old_zoom = self.zoom_level
-        self.zoom_level = 1.0
-        self._apply_zoom_at_point(old_zoom, mouse_x, mouse_y)
-        return "break"
+        # Draw preview line
+        if preview_point and canvas_coords:
+            last_canvas_x, last_canvas_y = canvas_coords[-1]
+            preview_canvas_x, preview_canvas_y = self._image_to_canvas_coords(*preview_point)
+
+            self.preview_line = self.canvas.create_line(
+                last_canvas_x, last_canvas_y,
+                preview_canvas_x, preview_canvas_y,
+                fill=self.selection_color,
+                dash=(5, 5),
+                width=self.line_width
+            )
+
+    def _clear_roi(self):
+        """Clear the current ROI selection."""
+        # Remove visual elements
+        if self.roi_polygon:
+            self.canvas.delete(self.roi_polygon)
+            self.roi_polygon = None
+        if self.preview_line:
+            self.canvas.delete(self.preview_line)
+            self.preview_line = None
+
+        # Reset state
+        self.roi_coords = []
+        self.roi_selection_active = False
+        self.ctrl_selection_mode = False
+        self.canvas.config(cursor="")
+
+    def _clear_roi_for_ctrl_selection(self):
+        """Clear ROI for starting a new ctrl selection (preserves ctrl_selection_mode)."""
+        # Remove visual elements
+        if self.roi_polygon:
+            self.canvas.delete(self.roi_polygon)
+            self.roi_polygon = None
+        if self.preview_line:
+            self.canvas.delete(self.preview_line)
+            self.preview_line = None
+
+        # Reset coordinates but preserve ctrl selection state
+        self.roi_coords = []
+
+        # Notify callbacks
+        if 'roi_changed' in self.callbacks:
+            self.callbacks['roi_changed']([])
+
+    def _canvas_to_image_coords(self, canvas_x: int, canvas_y: int):
+        """Convert canvas coordinates to original image coordinates."""
+        # Get canvas-relative coordinates
+        canvas_x = self.canvas.canvasx(canvas_x)
+        canvas_y = self.canvas.canvasy(canvas_y)
+
+        # Get display scale and offset from canvas
+        display_scale = getattr(self.canvas, 'display_scale', self.display_scale * self.zoom_level)
+        offset_x = getattr(self.canvas, 'image_offset_x', 0)
+        offset_y = getattr(self.canvas, 'image_offset_y', 0)
+
+        # Adjust for image offset
+        canvas_x -= offset_x
+        canvas_y -= offset_y
+
+        # Convert to original image coordinates
+        if display_scale <= 0:
+            display_scale = 1.0
+            
+        image_x = canvas_x / display_scale
+        image_y = canvas_y / display_scale
+
+        return image_x, image_y
+
+    def _image_to_canvas_coords(self, image_x: float, image_y: float):
+        """Convert original image coordinates to canvas coordinates."""
+        # Get display scale and offset from canvas
+        display_scale = getattr(self.canvas, 'display_scale', self.display_scale * self.zoom_level)
+        offset_x = getattr(self.canvas, 'image_offset_x', 0)
+        offset_y = getattr(self.canvas, 'image_offset_y', 0)
+
+        # Convert from original image coordinates to canvas coordinates
+        if display_scale <= 0:
+            display_scale = 1.0
+            
+        canvas_x = image_x * display_scale + offset_x
+        canvas_y = image_y * display_scale + offset_y
+
+        return canvas_x, canvas_y
+
+    # Public ROI methods for integration with existing ROI selector
+    def start_roi_selection(self):
+        """Start ROI selection mode (for external calls)."""
+        self._clear_roi()
+        self.roi_selection_active = True
+        self.canvas.config(cursor="crosshair")
+
+    def clear_roi(self):
+        """Clear ROI selection (for external calls)."""
+        self._clear_roi()
+
+    def get_roi_coordinates(self):
+        """Get current ROI coordinates."""
+        return self.roi_coords.copy()
+
+    def has_roi(self):
+        """Check if ROI is currently defined."""
+        return len(self.roi_coords) >= 3
+
+    def update_roi_display(self, roi_data):
+        """Update ROI display with new data."""
+        if hasattr(roi_data, 'coordinates'):
+            self.roi_coords = roi_data.coordinates.copy()
+            self._redraw_roi(finalize=True)
+        else:
+            self._clear_roi()
+
+    def redraw_roi(self):
+        """Redraw the ROI polygon after view changes (zoom, pan)."""
+        if self.roi_coords and not self.roi_selection_active:
+            self._redraw_roi(finalize=True)
+
+    def _on_left_click(self, event):
+        """Handle left mouse click - add ROI point or focus canvas."""
+        # Check if Ctrl is held down for Ctrl selection mode
+        ctrl_held = (event.state & 0x4) != 0  # Check Ctrl modifier
+        logger.debug(f"Left click detected, ctrl_held: {ctrl_held}, roi_selection_active: {self.roi_selection_active}")
+        
+        if ctrl_held and not self.roi_selection_active:
+            # Start Ctrl selection mode
+            logger.debug("Starting Ctrl selection from left click")
+            self.start_ctrl_selection()
+        
+        if self.roi_selection_active:
+            # Add ROI point
+            logger.debug("Adding ROI point from left click")
+            self._add_roi_point(event)
+        else:
+            # Just focus the canvas for other interactions
+            logger.debug("Focusing canvas")
+            self.canvas.focus_set()
+
+    def _on_mouse_motion(self, event):
+        """Handle mouse motion - show preview line during ROI selection."""
+        if self.roi_selection_active and self.roi_coords:
+            self._update_roi_preview(event)
+
+    def start_ctrl_selection(self):
+        """Start Ctrl+hold ROI selection mode."""
+        if not self.ctrl_selection_mode and not self.roi_selection_active:
+            logger.debug("Starting Ctrl ROI selection mode")
+            self.ctrl_selection_mode = True
+            
+            # Clear any existing ROI (but preserve ctrl_selection_mode)
+            self._clear_roi_for_ctrl_selection()
+            
+            # Enter selection mode
+            self.roi_selection_active = True
+            self.canvas.config(cursor="crosshair")
+            
+            # Notify callbacks
+            self._execute_callback('roi_changed', [])
+        else:
+            logger.debug(f"Ctrl selection already active (ctrl_mode: {self.ctrl_selection_mode}, roi_active: {self.roi_selection_active}), ignoring duplicate start call")
+
+    def end_ctrl_selection(self):
+        """End Ctrl+hold ROI selection mode."""
+        logger.debug(f"end_ctrl_selection called: ctrl_mode={self.ctrl_selection_mode}, roi_active={self.roi_selection_active}, points={len(self.roi_coords)}")
+        if self.ctrl_selection_mode:
+            logger.debug(f"Ending Ctrl ROI selection mode with {len(self.roi_coords)} points")
+            self.ctrl_selection_mode = False
+            
+            # Auto-complete ROI if we have enough points (minimum 3 for a polygon)
+            if len(self.roi_coords) >= 3:
+                logger.debug("Auto-completing ROI polygon by connecting last point to first")
+                # The polygon will be automatically closed when we finish selection
+                self._finish_roi_selection()
+            else:
+                # Not enough points, cancel selection
+                logger.debug("Not enough points for ROI, canceling selection")
+                self._clear_roi()
+        else:
+            logger.debug("end_ctrl_selection called but ctrl_selection_mode is False")
+
+    def handle_key_event(self, event_type: str, key: str):
+        """
+        Handle key events from parent window.
+        
+        Args:
+            event_type: 'press' or 'release'
+            key: Key name (e.g., 'Control_L', 'Control_R')
+        """
+        logger.debug(f"ImageCanvas.handle_key_event: {event_type} {key}")
+        if key in ['Control_L', 'Control_R']:
+            if event_type == 'press':
+                logger.debug("Starting Ctrl selection from handle_key_event")
+                self.start_ctrl_selection()
+            elif event_type == 'release':
+                logger.debug("Ending Ctrl selection from handle_key_event")
+                self.end_ctrl_selection()
+
+    def _execute_callback(self, callback_name: str, *args):
+        """Execute callback if it exists."""
+        if callback_name in self.callbacks:
+            try:
+                self.callbacks[callback_name](*args)
+            except Exception as e:
+                logger.error(f"Error executing callback {callback_name}: {e}")
+
+
+
+
 
     # Public zoom control methods
     def zoom_in(self):
@@ -1026,6 +1409,10 @@ class ImageCanvas:
 
     def clear(self):
         """Clear the canvas."""
+        logger.debug("Canvas clear() method called")
+        import traceback
+        logger.debug(f"Clear called from: {traceback.format_stack()[-2].strip()}")
+        
         self.canvas.delete('all')
         self.displayed_image = None
         self.original_image = None
@@ -1037,6 +1424,7 @@ class ImageCanvas:
         self.display_scale = 1.0
         self.photo = None
         self.image_item = None
+        logger.debug("Canvas cleared")
 
     def is_showing_quality_map(self) -> bool:
         """Check if quality map is currently being shown."""

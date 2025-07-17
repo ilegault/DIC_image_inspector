@@ -32,6 +32,7 @@ class ROISelector:
         self.roi_polygon = None
         self.preview_line = None
         self.selection_mode = False
+        self.ctrl_selection_mode = False  # New: Ctrl+hold selection mode
 
         # Visual properties
         self.roi_color = APP_CONFIG['roi']['normal_color']
@@ -44,7 +45,6 @@ class ROISelector:
     def _bind_events(self):
         """Bind canvas events for ROI selection."""
         self.canvas.bind("<Button-1>", self._on_left_click)
-        self.canvas.bind("<Button-3>", self._on_right_click)
         self.canvas.bind("<Motion>", self._on_mouse_motion)
 
     def start_roi_selection(self):
@@ -59,8 +59,73 @@ class ROISelector:
         # Notify callbacks
         self._execute_callback('roi_changed', [])
 
+    def start_ctrl_selection(self):
+        """Start Ctrl+hold ROI selection mode."""
+        if not self.ctrl_selection_mode and not self.selection_mode:
+            logger.debug("Starting Ctrl ROI selection mode")
+            self.ctrl_selection_mode = True
+            
+            # Clear any existing ROI
+            self.clear()
+            
+            # Enter selection mode
+            self.selection_mode = True
+            self.canvas.config(cursor="crosshair")
+            
+            # Notify callbacks
+            self._execute_callback('roi_changed', [])
+
+    def end_ctrl_selection(self):
+        """End Ctrl+hold ROI selection mode."""
+        if self.ctrl_selection_mode:
+            logger.debug("Ending Ctrl ROI selection mode")
+            self.ctrl_selection_mode = False
+            
+            # Auto-complete ROI if we have enough points
+            if len(self.roi_coords) >= 3:
+                self._finish_selection()
+            else:
+                # Not enough points, cancel selection
+                self.clear()
+
+    def _on_ctrl_press(self, event):
+        """Handle Ctrl key press - start Ctrl selection mode."""
+        if not self.ctrl_selection_mode and not self.selection_mode:
+            logger.debug("Starting Ctrl ROI selection mode")
+            self.ctrl_selection_mode = True
+            
+            # Clear any existing ROI
+            self.clear()
+            
+            # Enter selection mode
+            self.selection_mode = True
+            self.canvas.config(cursor="crosshair")
+            
+            # Notify callbacks
+            self._execute_callback('roi_changed', [])
+
+    def _on_ctrl_release(self, event):
+        """Handle Ctrl key release - finish Ctrl selection mode."""
+        if self.ctrl_selection_mode:
+            logger.debug("Ending Ctrl ROI selection mode")
+            self.ctrl_selection_mode = False
+            
+            # Auto-complete ROI if we have enough points
+            if len(self.roi_coords) >= 3:
+                self._finish_selection()
+            else:
+                # Not enough points, cancel selection
+                self.clear()
+
     def _on_left_click(self, event):
         """Handle left mouse click - add ROI point."""
+        # Check if Ctrl is held down for Ctrl selection mode
+        ctrl_held = (event.state & 0x4) != 0  # Check Ctrl modifier
+        
+        if ctrl_held and not self.selection_mode:
+            # Start Ctrl selection mode
+            self.start_ctrl_selection()
+        
         if not self.selection_mode:
             return
 
@@ -87,15 +152,7 @@ class ROISelector:
         except Exception as e:
             logger.error(f"Error adding ROI point: {e}")
 
-    def _on_right_click(self, event):
-        """Handle right mouse click - finish ROI selection."""
-        if not self.selection_mode or len(self.roi_coords) < 3:
-            if self.selection_mode and len(self.roi_coords) < 3:
-                logger.debug("Need at least 3 points for ROI polygon")
-            return
 
-        # Finish selection
-        self._finish_selection()
 
     def _on_mouse_motion(self, event):
         """Handle mouse motion - show preview line."""
@@ -276,6 +333,7 @@ class ROISelector:
         # Reset state
         self.roi_coords = []
         self.selection_mode = False
+        self.ctrl_selection_mode = False
         self.canvas.config(cursor="")
 
         # Notify callbacks
@@ -313,6 +371,20 @@ class ROISelector:
             for ((x0, y0), (x1, y1)) in zip(self.roi_coords, self.roi_coords[1:] + [self.roi_coords[0]])
         ))
         return area
+
+    def handle_key_event(self, event_type: str, key: str):
+        """
+        Handle key events from parent window.
+        
+        Args:
+            event_type: 'press' or 'release'
+            key: Key name (e.g., 'Control_L', 'Control_R')
+        """
+        if key in ['Control_L', 'Control_R']:
+            if event_type == 'press':
+                self.start_ctrl_selection()
+            elif event_type == 'release':
+                self.end_ctrl_selection()
 
     def _execute_callback(self, callback_name: str, *args):
         """Execute callback if it exists."""

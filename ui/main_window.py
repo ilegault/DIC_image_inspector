@@ -12,7 +12,7 @@ import logging
 
 from ui.components.control_panel import ControlPanel
 from ui.components.image_canvas import ImageCanvas
-from ui.components.roi_selector import ROISelector
+# ROI selector now integrated into ImageCanvas
 from ui.components.legend_panel import LegendPanel
 from ui.components.results_popup import ResultsPopup
 from ui.dialogs.help_dialog import HelpDialog
@@ -313,18 +313,16 @@ class DICQualityInspector:
         right_panel = tk.Frame(content_frame, bg=colors['panel_bg'], relief='flat', bd=0)
         right_panel.pack(side='left', fill='both', expand=True)
 
-        # Create image canvas with zoom callback
+        # Create image canvas with integrated ROI functionality
         canvas_callbacks = {
-            'zoom_changed': self._on_zoom_changed
-        }
-        self.image_canvas = ImageCanvas(right_panel, canvas_callbacks)
-
-        # Create ROI selector
-        roi_callbacks = {
+            'zoom_changed': self._on_zoom_changed,
             'roi_changed': self.on_roi_changed,
             'roi_completed': self.on_roi_completed
         }
-        self.roi_selector = ROISelector(self.image_canvas.canvas, roi_callbacks)
+        self.image_canvas = ImageCanvas(right_panel, canvas_callbacks)
+
+        # Keep reference to ROI selector for compatibility (now integrated in canvas)
+        self.roi_selector = self.image_canvas
 
         # Create legend panel (initially on image canvas parent)
         self.legend_panel = LegendPanel(right_panel)
@@ -542,6 +540,33 @@ class DICQualityInspector:
 
         # Window close handler
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        # Key bindings for Ctrl+hold ROI selection
+        self.root.bind("<KeyPress-Control_L>", self._on_ctrl_key_press)
+        self.root.bind("<KeyPress-Control_R>", self._on_ctrl_key_press)
+        self.root.bind("<KeyRelease-Control_L>", self._on_ctrl_key_release)
+        self.root.bind("<KeyRelease-Control_R>", self._on_ctrl_key_release)
+        
+        # Make root focusable for key events
+        self.root.focus_set()
+
+    def _on_ctrl_key_press(self, event):
+        """Handle Ctrl key press for ROI selection."""
+        logger.debug(f"Ctrl key press detected: {event.keysym}")
+        if hasattr(self, 'roi_selector') and self.roi_selector:
+            # Check if we have an image loaded
+            if self.state.get_image() is not None:
+                logger.debug("Calling roi_selector.handle_key_event('press', ...)")
+                self.roi_selector.handle_key_event('press', event.keysym)
+            else:
+                logger.debug("No image loaded, ignoring Ctrl key press")
+
+    def _on_ctrl_key_release(self, event):
+        """Handle Ctrl key release for ROI selection."""
+        logger.debug(f"Ctrl key release detected: {event.keysym}")
+        if hasattr(self, 'roi_selector') and self.roi_selector:
+            logger.debug("Calling roi_selector.handle_key_event('release', ...)")
+            self.roi_selector.handle_key_event('release', event.keysym)
 
     def _update_ui_state(self):
         """Update UI components based on current state."""
@@ -813,7 +838,7 @@ class DICQualityInspector:
 
         # Clear ROI display and data
         logger.debug("Clearing ROI")
-        self.roi_selector.clear()
+        self.roi_selector.clear_roi()  # Use clear_roi() instead of clear()
         self.state.clear_roi()
         self.state.clear_analysis_result()
 
@@ -866,6 +891,7 @@ class DICQualityInspector:
     def _on_zoom_changed(self, zoom_level: float):
         """Handle zoom level change from image canvas."""
         self.control_panel.update_zoom_level(zoom_level)
+        # ROI redraw is now handled automatically in the integrated canvas
 
     def _get_image_info(self) -> Optional[Dict[str, Any]]:
         """Get image information for report."""
@@ -907,7 +933,7 @@ class DICQualityInspector:
                 roi_info += f", {roi_data.calculate_area():.0f} px²"
             self.control_panel.update_roi_info(roi_info)
         else:
-            self.roi_selector.clear()
+            self.roi_selector.clear_roi()  # Use clear_roi() instead of clear()
             self.control_panel.update_roi_info("ROI: Not Selected (analyzing full image)")
         self._update_ui_state()
 
