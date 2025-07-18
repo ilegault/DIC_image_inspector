@@ -297,7 +297,9 @@ class LiveAnalyzeMode:
         """Analyze quality of ROI region."""
         try:
             # Use the quality calculator
-            quality_map, overall_score = self.quality_calculator.calculate_quality_map(roi_array)
+            result = self.quality_calculator.calculate_quality_score(roi_array)
+            overall_score = result.get('overall_score', 0.0)
+            quality_map = result.get('quality_map', roi_array)
 
             # Store current results
             self.current_quality_map = quality_map
@@ -369,10 +371,9 @@ class LiveAnalyzeMode:
             from .quality_overlay import QualityOverlay
 
             if not self.quality_overlay and self.roi_bounds:
-                x1, y1, x2, y2 = self.roi_bounds
                 self.quality_overlay = QualityOverlay(
                     self.root,
-                    x1, y1, x2 - x1, y2 - y1
+                    self.roi_bounds
                 )
 
             if self.quality_overlay:

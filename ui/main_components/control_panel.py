@@ -766,10 +766,10 @@ class ControlPanel:
         # Enhanced state configurations with live analysis
         state_configs = {
             'no_image': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'theme_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu'],
                 'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn',
                            'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
-                           'zoom_actual_btn', 'live_analysis_btn', 'live_freq_menu'],
+                           'zoom_actual_btn'],
                 'special': {'roi_btn': {'text': ' Select ROI'}}
             },
             'image_loaded': {

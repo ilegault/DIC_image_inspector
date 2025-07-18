@@ -912,14 +912,6 @@ class DICQualityInspector:
     def start_live_analysis(self):
         """Start live analysis mode."""
         try:
-            # Check if image is loaded
-            if not self.state.has_image():
-                messagebox.showwarning(
-                    "No Image",
-                    "Please load an image first before starting live analysis."
-                )
-                return
-
             # Initialize live mode if not already done
             if not self.live_mode:
                 self.live_mode = LiveAnalyzeMode(self.root, self)
