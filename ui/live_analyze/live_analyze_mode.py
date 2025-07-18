@@ -1,4 +1,4 @@
-# ui/live_analyze/live_analyze_mode.py - Live Analysis Mode Implementation
+# ui/live_analyze/live_analyze_mode.py - Optimized Implementation
 
 import tkinter as tk
 from tkinter import messagebox
@@ -10,41 +10,29 @@ import time
 from collections import deque
 import logging
 import cv2
+import hashlib
 
-from .transparent_roi_selector import TransparentROISelector
-from .quality_overlay import QualityOverlay
-from .stats_window import StatsWindow
-
-logger = logging.getLogger(__name__)
-
-# ui/live_analyze/live_analyze_mode.py - FIXED Live Analysis Mode Implementation
-
-import tkinter as tk
-from PIL import ImageGrab, Image, ImageTk
-import numpy as np
-from typing import Optional, Tuple, List, Callable
-import threading
-import time
-from collections import deque
-import logging
+from ui.live_analyze.transparent_roi_selector import TransparentROISelector
+from ui.live_analyze.quality_overlay import QualityOverlay
+from ui.live_analyze.stats_window import StatsWindow
 
 logger = logging.getLogger(__name__)
 
 
 class LiveAnalyzeMode:
     """
-    FIXED Live Analysis Mode for real-time DIC quality assessment.
+    Optimized Live Analysis Mode for real-time DIC quality assessment.
 
-    CRITICAL REQUIREMENT: Screen darkening must NEVER affect image analysis results.
-
-    Order of Operations:
-    1. FIRST: Capture original screen without any overlays
-    2. THEN: Show transparent overlay for ROI selection
-    3. ANALYSIS: Always use fresh captures, hiding overlays before each capture
+    Key optimizations:
+    - Grid-based quality map calculation for visualization
+    - Accurate quality scores using full DIC parameters
+    - Smart caching for identical frames
+    - Performance monitoring and auto-adjustment
+    - Efficient display updates
     """
 
     def __init__(self, root, main_app):
-        """Initialize Live Analyze Mode."""
+        """Initialize Live Analyze Mode with optimizations."""
         self.root = root
         self.main_app = main_app
 
@@ -62,9 +50,24 @@ class LiveAnalyzeMode:
         self.roi_coords = []
         self.roi_bounds = None  # (x1, y1, x2, y2)
 
-        # CRITICAL FIX: ROI-specific frequency control
+        # ROI-specific frequency control
         self.update_frequency = 1000  # Default 1 second for ROI updates
         self.roi_timer_id = None  # Separate timer for ROI updates
+
+        # Optimization settings
+        self.calculation_mode = 'balanced'  # 'fast', 'balanced', 'full'
+        self._last_roi_hash = None
+        self._last_quality_result = None
+        self._last_calc_time = 0
+        self._cache_validity_ms = 50  # Cache valid for 50ms
+
+        # Performance monitoring
+        self.perf_stats = {
+            'capture_times': deque(maxlen=50),
+            'calc_times': deque(maxlen=50),
+            'display_times': deque(maxlen=50),
+            'total_times': deque(maxlen=50)
+        }
 
         # Screen capture data
         self.original_screen_capture = None
@@ -83,237 +86,446 @@ class LiveAnalyzeMode:
         self.on_roi_selected_callback = None
         self.on_analysis_complete_callback = None
 
-        logger.info("LiveAnalyzeMode initialized with ROI-specific frequency control")
+        logger.info("LiveAnalyzeMode initialized with optimizations")
 
     def _create_fallback_analyzer(self):
         """Create fallback analyzer if none available."""
 
         class FallbackAnalyzer:
             def calculate_quality_map(self, image):
-                # Simple gradient-based analysis
                 if len(image.shape) == 3:
                     gray = np.mean(image, axis=2).astype(np.uint8)
                 else:
                     gray = image.astype(np.uint8)
 
-                # Calculate gradients
-                grad_x = np.gradient(gray.astype(np.float32), axis=1)
-                grad_y = np.gradient(gray.astype(np.float32), axis=0)
+                # Basic gradient analysis
+                grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+                grad_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
                 gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
-
-                # Normalize to 0-1 range
-                quality_map = gradient_magnitude / 255.0
-                quality_map = np.clip(quality_map, 0, 1)
+                quality_map = gradient_magnitude / (gradient_magnitude.max() + 1e-6)
 
                 overall_score = float(np.mean(quality_map))
                 return quality_map, overall_score
 
+            def calculate_subset_quality(self, subset):
+                std_val = np.std(subset)
+                return min(1.0, std_val / 128.0)
+
+            def calculate_live_analysis_quality(self, image, grid_size=None):
+                # Simplified version for fallback
+                quality_map, score = self.calculate_quality_map(image)
+                return quality_map, score
+
         return FallbackAnalyzer()
 
     def start_live_analysis(self, on_roi_selected=None, on_analysis_complete=None):
-        """Start live analysis with ROI-specific frequency control."""
-        logger.info("Starting live analysis with ROI-specific updates")
+        """Start live analysis process."""
+        if self.is_active:
+            logger.warning("Live analysis already active")
+            return
 
-        # Store callbacks
+        logger.info("Starting live analysis...")
+
+        # Set callbacks
         self.on_roi_selected_callback = on_roi_selected
         self.on_analysis_complete_callback = on_analysis_complete
 
-        # Set active state
+        # Reset state
         self.is_active = True
         self.is_paused = False
+        self.roi_coords = []
+        self.roi_bounds = None
+        self.analysis_history.clear()
 
-        # CRITICAL: Capture original screen FIRST, before any overlays
+        # Auto-select calculation mode based on frequency
+        self._auto_select_calculation_mode()
+
+        # Capture original screen state BEFORE showing overlays
+        self._capture_original_screen()
+
+        # Show ROI selector
+        self._show_roi_selector()
+
+    def _auto_select_calculation_mode(self):
+        """Automatically select calculation mode based on frequency."""
+        if self.update_frequency < 500:
+            self.calculation_mode = 'fast'
+        elif self.update_frequency < 2000:
+            self.calculation_mode = 'balanced'
+        else:
+            self.calculation_mode = 'full'
+
+        logger.info(f"Auto-selected {self.calculation_mode} mode for {self.update_frequency}ms updates")
+
+    def _capture_original_screen(self):
+        """Capture the original screen state."""
         try:
-            self.original_screen_capture = self._capture_full_screen()
-            logger.info("Original screen captured successfully")
+            logger.info("Capturing original screen...")
+            self.original_screen_capture = ImageGrab.grab()
         except Exception as e:
-            logger.error(f"Failed to capture original screen: {e}")
-            self._show_error("Failed to capture screen. Please try again.")
-            return
+            logger.error(f"Failed to capture screen: {e}")
+            self._show_error("Failed to capture screen. Please check permissions.")
 
-        # Start ROI selection
-        self._start_roi_selection()
-
-    def _capture_full_screen(self):
-        """Capture full screen without any overlays."""
+    def _show_roi_selector(self):
+        """Show the ROI selection overlay."""
         try:
-            # Ensure no overlays are present
-            self._hide_all_overlays()
+            # Create ROI selector if not exists
+            if not self.roi_selector_overlay:
+                # TransparentROISelector expects the original screenshot
+                if not self.original_screen_capture:
+                    logger.error("No original screen capture available")
+                    self._show_error("Failed to capture screen for ROI selection")
+                    return
 
-            # Small delay to ensure clean capture
-            self.root.update()
-            time.sleep(0.1)
+                self.roi_selector_overlay = TransparentROISelector(
+                    self.root,
+                    self.original_screen_capture,  # Pass the screenshot
+                    on_roi_selected=self._on_roi_selection_complete,  # Correct parameter name
+                    on_cancelled=self._on_roi_selection_cancel  # Correct parameter name
+                )
 
-            # Capture full screen
-            screenshot = ImageGrab.grab()
-            logger.info(f"Full screen captured: {screenshot.size}")
-
-            return screenshot
-
-        except Exception as e:
-            logger.error(f"Error capturing full screen: {e}")
-            raise
-
-    def _start_roi_selection(self):
-        """Start ROI selection with transparent overlay."""
-        try:
-            # Create ROI selector overlay
-            self.roi_selector_overlay = TransparentROISelector(
-                self.root,
-                self.original_screen_capture,
-                on_roi_selected=self._on_roi_selection_complete,
-                on_cancelled=self._on_roi_selection_cancelled
-            )
-
-            self.roi_selector_overlay.show()
-            logger.info("ROI selector overlay shown")
+            # Note: TransparentROISelector shows itself automatically in __init__
+            # No need to call start_selection()
 
         except Exception as e:
-            logger.error(f"Error starting ROI selection: {e}")
-            self._show_error(f"Failed to start ROI selection: {str(e)}")
-            self.stop_live_analysis()
+            logger.error(f"Failed to show ROI selector: {e}")
+            self._show_error(f"Failed to show ROI selector: {str(e)}")
 
-    def _on_roi_selection_complete(self, screen_coords):
+    def _on_roi_selection_complete(self, coords: List[Tuple[int, int]]):
         """Handle ROI selection completion."""
-        logger.info(f"ROI selection complete with {len(screen_coords)} points")
+        logger.info(f"ROI selection complete with {len(coords)} points")
 
-        # Store ROI coordinates and calculate bounds
-        self.roi_coords = screen_coords
-        self.roi_bounds = self._calculate_roi_bounds(screen_coords)
-
-        # Close ROI selector
-        if self.roi_selector_overlay:
-            self.roi_selector_overlay.close()
-            self.roi_selector_overlay = None
-
-        # Notify callback
-        if self.on_roi_selected_callback:
-            self.on_roi_selected_callback(screen_coords)
-
-        # CRITICAL: Start ROI-specific analysis loop
-        self._start_roi_analysis_loop()
-
-    def _on_roi_selection_cancelled(self):
-        """Handle ROI selection cancellation."""
-        logger.info("ROI selection cancelled")
-        self.stop_live_analysis()
-
-    def _start_roi_analysis_loop(self):
-        """Start the ROI-specific analysis loop."""
-        if not self.roi_bounds:
-            logger.error("No ROI bounds available for analysis")
+        if len(coords) < 3:
+            self._show_error("Please select at least 3 points for ROI")
             return
 
-        logger.info(f"Starting ROI analysis loop at {self.update_frequency}ms intervals")
+        # Store ROI coordinates
+        self.roi_coords = coords
+        self.roi_bounds = self._calculate_roi_bounds(coords)
 
-        # Show monitoring windows
-        self._show_stats_window()
-        self._show_quality_overlay()
+        logger.info(f"ROI bounds: {self.roi_bounds}")
 
-        # CRITICAL: Start ROI-specific timer
-        self._schedule_next_roi_analysis()
+        # Hide selector
+        if self.roi_selector_overlay:
+            self.roi_selector_overlay.hide()
+
+        # Callback
+        if self.on_roi_selected_callback:
+            self.on_roi_selected_callback(coords, self.roi_bounds)
+
+        # Create overlay windows
+        self._create_overlay_windows()
+
+        # Start ROI analysis with timer
+        self._start_roi_analysis_timer()
+
+    def _calculate_roi_bounds(self, coords):
+        """Calculate ROI bounds from coordinates."""
+        if not coords:
+            return None
+
+        x_coords = [coord[0] for coord in coords]
+        y_coords = [coord[1] for coord in coords]
+
+        x1, x2 = min(x_coords), max(x_coords)
+        y1, y2 = min(y_coords), max(y_coords)
+
+        # Add small padding
+        padding = 5
+        x1 = max(0, x1 - padding)
+        y1 = max(0, y1 - padding)
+        x2 = x2 + padding
+        y2 = y2 + padding
+
+        return (x1, y1, x2, y2)
+
+    def _create_overlay_windows(self):
+        """Create the overlay windows for display."""
+        try:
+            # Create quality overlay
+            if not self.quality_overlay and self.roi_bounds:
+                self.quality_overlay = QualityOverlay(
+                    self.root,
+                    self.roi_bounds,
+                    getattr(self.main_app, 'colormap_generator', None)
+                )
+
+            # Create stats window
+            if not self.stats_window:
+                self.stats_window = StatsWindow(self.root, self)
+                self.stats_window.show()
+
+        except Exception as e:
+            logger.error(f"Error creating overlay windows: {e}")
+
+    def _start_roi_analysis_timer(self):
+        """Start the ROI analysis timer."""
+        if not self.roi_bounds:
+            logger.warning("No ROI bounds set, cannot start analysis")
+            return
+
+        logger.info(f"Starting ROI analysis timer with {self.update_frequency}ms frequency")
+
+        # Perform first analysis immediately
+        self._perform_roi_analysis()
 
     def _schedule_next_roi_analysis(self):
-        """Schedule the next ROI analysis - ONLY affects ROI updates."""
-        if not self.is_active or self.is_paused:
-            return
-
-        try:
-            # CRITICAL: This timer ONLY controls ROI analysis frequency
+        """Schedule the next ROI analysis."""
+        if self.is_active and not self.is_paused:
             self.roi_timer_id = self.root.after(
                 self.update_frequency,
                 self._perform_roi_analysis
             )
-            logger.debug(f"Next ROI analysis scheduled in {self.update_frequency}ms")
-
-        except Exception as e:
-            logger.error(f"Error scheduling ROI analysis: {e}")
 
     def _perform_roi_analysis(self):
-        """Perform analysis ONLY on the ROI region at specified frequency."""
-        if not self.is_active or self.is_paused:
+        """Perform optimized ROI analysis with performance monitoring."""
+        if self.is_paused or not self.roi_bounds:
             return
 
+        total_start = time.time()
+
         try:
-            # CRITICAL: Capture ONLY the ROI region
-            roi_image = self._capture_roi_region()
+            # Phase 1: Capture screen
+            capture_start = time.time()
 
-            if roi_image is None:
-                logger.warning("Failed to capture ROI region")
-                self._schedule_next_roi_analysis()
-                return
+            # Hide overlays before capture
+            if self.quality_overlay:
+                self.quality_overlay.hide()
 
-            # Analyze ROI quality
-            roi_array = np.array(roi_image)
-            quality_map, overall_score = self._analyze_roi_quality(roi_array)
+            # Brief delay to ensure overlay is hidden
+            self.root.update_idletasks()
+            time.sleep(0.01)
 
-            # Update displays
-            self._update_roi_displays(quality_map, overall_score)
+            # Capture only ROI area for efficiency
+            screenshot = ImageGrab.grab(bbox=self.roi_bounds)
+            roi_array = np.array(screenshot)
 
-            # Store in history
+            capture_time = time.time() - capture_start
+            self.perf_stats['capture_times'].append(capture_time)
+
+            # Phase 2: Check cache
+            roi_hash = self._get_roi_hash(roi_array)
+            current_time_ms = time.time() * 1000
+
+            if (self._last_roi_hash == roi_hash and
+                    self._last_quality_result is not None and
+                    (current_time_ms - self._last_calc_time) < self._cache_validity_ms):
+
+                # Use cached result
+                quality_map, overall_score = self._last_quality_result
+                calc_time = 0
+                logger.debug("Using cached quality result")
+
+            else:
+                # Phase 3: Calculate quality
+                calc_start = time.time()
+
+                quality_map, overall_score = self._calculate_optimized_quality(roi_array)
+
+                calc_time = time.time() - calc_start
+                self.perf_stats['calc_times'].append(calc_time)
+
+                # Update cache
+                self._last_roi_hash = roi_hash
+                self._last_quality_result = (quality_map, overall_score)
+                self._last_calc_time = current_time_ms
+
+            # Phase 4: Update displays
+            display_start = time.time()
+
+            # Store results
+            self.current_quality_map = quality_map
+            self.current_score = overall_score
+
+            # Add to history
+            timestamp = time.time()
             self.analysis_history.append({
-                'timestamp': time.time(),
+                'timestamp': timestamp,
                 'score': overall_score,
-                'quality_map': quality_map,
                 'roi_size': roi_array.shape[:2]
             })
 
-            # Notify callback
+            # Update displays
+            self._update_displays(quality_map, overall_score)
+
+            # Show overlay again
+            if self.quality_overlay:
+                self.quality_overlay.show()
+
+            display_time = time.time() - display_start
+            self.perf_stats['display_times'].append(display_time)
+
+            # Total time
+            total_time = time.time() - total_start
+            self.perf_stats['total_times'].append(total_time)
+
+            # Performance monitoring
+            if total_time > (self.update_frequency * 0.5 / 1000):  # >50% of update frequency
+                logger.warning(f"Performance warning - Total: {total_time * 1000:.1f}ms "
+                               f"(Capture: {capture_time * 1000:.1f}ms, "
+                               f"Calc: {calc_time * 1000:.1f}ms, "
+                               f"Display: {display_time * 1000:.1f}ms)")
+
+            # Callback
             if self.on_analysis_complete_callback:
                 self.on_analysis_complete_callback(quality_map, overall_score)
 
         except Exception as e:
-            logger.error(f"ROI analysis error: {e}")
+            logger.error(f"Error in ROI analysis: {e}")
 
         finally:
-            # CRITICAL: Schedule next ROI update at specified frequency
+            # Schedule next analysis
             self._schedule_next_roi_analysis()
 
-    def _capture_roi_region(self):
-        """Capture ONLY the ROI region safely."""
+    def _get_roi_hash(self, roi_array: np.ndarray) -> int:
+        """Generate fast hash of ROI for caching."""
+        # Downsample for faster hashing if large
+        if roi_array.size > 10000:
+            sample = roi_array[::10, ::10]
+        else:
+            sample = roi_array
+
+        return hash((
+            roi_array.shape,
+            round(float(np.mean(sample)), 2),
+            round(float(np.std(sample)), 2)
+        ))
+
+    def _calculate_optimized_quality(self, roi_array: np.ndarray) -> tuple:
+        """Calculate quality using optimized method based on current mode."""
         try:
-            # CRITICAL: Hide overlays before capture
-            self._hide_all_overlays()
+            # Convert to grayscale
+            if len(roi_array.shape) == 3:
+                gray = cv2.cvtColor(roi_array, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = roi_array.copy()
 
-            # Small delay to ensure overlays are hidden
-            self.root.update()
-            time.sleep(0.02)  # Minimal delay
-
-            # Capture only the ROI bounding box
-            x1, y1, x2, y2 = self.roi_bounds
-            roi_capture = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-
-            # Restore overlays
-            self._show_all_overlays()
-
-            return roi_capture
-
-        except Exception as e:
-            logger.error(f"Error capturing ROI region: {e}")
-            self._show_all_overlays()  # Ensure overlays are restored
-            return None
-
-    def _analyze_roi_quality(self, roi_array):
-        """Analyze quality of ROI region."""
-        try:
-            # Use the quality calculator
-            result = self.quality_calculator.calculate_quality_score(roi_array)
-            overall_score = result.get('overall_score', 0.0)
-            quality_map = result.get('quality_map', roi_array)
-
-            # Store current results
-            self.current_quality_map = quality_map
-            self.current_score = overall_score
+            # Check if calculator has optimized method
+            if hasattr(self.quality_calculator, 'calculate_live_analysis_quality'):
+                # Use optimized method with appropriate grid size
+                grid_size = self._get_optimal_grid_size(gray.shape)
+                quality_map, overall_score = self.quality_calculator.calculate_live_analysis_quality(
+                    gray, grid_size=grid_size
+                )
+            else:
+                # Fall back to mode-specific calculation
+                if self.calculation_mode == 'fast':
+                    quality_map, overall_score = self._calculate_fast_quality(gray)
+                elif self.calculation_mode == 'balanced':
+                    quality_map, overall_score = self._calculate_balanced_quality(gray)
+                else:  # full
+                    quality_map, overall_score = self._calculate_full_quality(gray)
 
             return quality_map, overall_score
 
         except Exception as e:
-            logger.error(f"Error analyzing ROI quality: {e}")
-            # Return fallback results
-            return np.zeros(roi_array.shape[:2]), 0.0
+            logger.error(f"Error in optimized quality calculation: {e}")
+            return np.zeros(roi_array.shape[:2], dtype=np.float32), 0.0
 
-    def _update_roi_displays(self, quality_map, overall_score):
-        """Update displays with ROI analysis results."""
+    def _get_optimal_grid_size(self, image_shape: tuple) -> tuple:
+        """Determine optimal grid size based on image size and mode."""
+        h, w = image_shape[:2]
+        min_dim = min(h, w)
+
+        if self.calculation_mode == 'fast':
+            # Always use small grid for speed
+            return (5, 5)
+        elif self.calculation_mode == 'balanced':
+            # Adaptive grid based on size
+            if min_dim < 100:
+                return (5, 5)
+            elif min_dim < 300:
+                return (10, 10)
+            elif min_dim < 600:
+                return (15, 15)
+            else:
+                return (20, 20)
+        else:  # full
+            # Larger grid for more detail
+            if min_dim < 200:
+                return (10, 10)
+            elif min_dim < 400:
+                return (20, 20)
+            else:
+                return (30, 30)
+
+    def _calculate_fast_quality(self, gray: np.ndarray) -> tuple:
+        """Fast quality calculation using simple gradient analysis."""
+        # Simple gradient-based quality map
+        grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+
+        # Normalize
+        quality_map = gradient_magnitude / (gradient_magnitude.max() + 1e-6)
+        quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
+
+        # Calculate accurate score if possible
+        if hasattr(self.quality_calculator, 'calculate_subset_quality'):
+            overall_score = self.quality_calculator.calculate_subset_quality(gray)
+        else:
+            overall_score = np.mean(quality_map)
+
+        return quality_map, overall_score
+
+    def _calculate_balanced_quality(self, gray: np.ndarray) -> tuple:
+        """Balanced quality calculation using grid approach."""
+        h, w = gray.shape
+        grid_size = self._get_optimal_grid_size(gray.shape)
+        grid_rows, grid_cols = grid_size
+
+        # Calculate cell dimensions
+        cell_h = h // grid_rows
+        cell_w = w // grid_cols
+
+        # Initialize quality grid
+        quality_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+
+        # Process each grid cell
+        for i in range(grid_rows):
+            for j in range(grid_cols):
+                y_start = i * cell_h
+                y_end = min((i + 1) * cell_h, h)
+                x_start = j * cell_w
+                x_end = min((j + 1) * cell_w, w)
+
+                cell = gray[y_start:y_end, x_start:x_end]
+
+                # Calculate quality for this cell
+                if hasattr(self.quality_calculator, 'calculate_subset_quality'):
+                    cell_quality = self.quality_calculator.calculate_subset_quality(cell)
+                else:
+                    cell_quality = np.std(cell) / 128.0
+
+                quality_grid[i, j] = cell_quality
+
+        # Upscale to full size
+        quality_map = cv2.resize(quality_grid, (w, h), interpolation=cv2.INTER_CUBIC)
+        quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
+        quality_map = np.clip(quality_map, 0, 1)
+
+        # Calculate overall score using full analysis if available
+        if hasattr(self.quality_calculator, 'analyze_comprehensive'):
+            try:
+                full_metrics = self.quality_calculator.analyze_comprehensive(gray)
+                overall_score = self.quality_calculator.calculate_overall_quality_score(full_metrics)
+            except:
+                overall_score = np.mean(quality_map)
+        else:
+            overall_score = np.mean(quality_map)
+
+        return quality_map, overall_score
+
+    def _calculate_full_quality(self, gray: np.ndarray) -> tuple:
+        """Full quality calculation using original method."""
+        if hasattr(self.quality_calculator, 'calculate_quality_map'):
+            return self.quality_calculator.calculate_quality_map(gray)
+        else:
+            # Fall back to balanced
+            return self._calculate_balanced_quality(gray)
+
+    def _update_displays(self, quality_map: np.ndarray, overall_score: float):
+        """Update all display components."""
         try:
             # Update quality overlay
             if self.quality_overlay:
@@ -327,94 +539,27 @@ class LiveAnalyzeMode:
                     list(self.analysis_history)
                 )
 
+            logger.debug(f"Displays updated - Score: {overall_score:.3f}")
+
         except Exception as e:
-            logger.error(f"Error updating ROI displays: {e}")
+            logger.error(f"Error updating displays: {e}")
 
-    def _calculate_roi_bounds(self, coords):
-        """Calculate bounding box for ROI coordinates."""
-        if not coords:
-            return None
-
-        x_coords = [coord[0] for coord in coords]
-        y_coords = [coord[1] for coord in coords]
-
-        x1, x2 = min(x_coords), max(x_coords)
-        y1, y2 = min(y_coords), max(y_coords)
-
-        # Add padding for better capture
-        padding = 5
-        x1 = max(0, x1 - padding)
-        y1 = max(0, y1 - padding)
-        x2 = x2 + padding
-        y2 = y2 + padding
-
-        return (x1, y1, x2, y2)
-
-    def _show_stats_window(self):
-        """Show statistics window."""
-        try:
-            from .stats_window import StatsWindow
-
-            if not self.stats_window:
-                self.stats_window = StatsWindow(self.root, self)
-
-            self.stats_window.show()
-
-        except ImportError:
-            logger.warning("StatsWindow not available")
-        except Exception as e:
-            logger.error(f"Error showing stats window: {e}")
-
-    def _show_quality_overlay(self):
-        """Show quality overlay over ROI."""
-        try:
-            from .quality_overlay import QualityOverlay
-
-            if not self.quality_overlay and self.roi_bounds:
-                self.quality_overlay = QualityOverlay(
-                    self.root,
-                    self.roi_bounds
-                )
-
-            if self.quality_overlay:
-                self.quality_overlay.show()
-
-        except ImportError:
-            logger.warning("QualityOverlay not available")
-        except Exception as e:
-            logger.error(f"Error showing quality overlay: {e}")
-
-    def _hide_all_overlays(self):
-        """Hide all overlays during capture."""
-        try:
-            if self.quality_overlay:
-                self.quality_overlay.hide()
-        except Exception as e:
-            logger.error(f"Error hiding overlays: {e}")
-
-    def _show_all_overlays(self):
-        """Show all overlays after capture."""
-        try:
-            if self.quality_overlay:
-                self.quality_overlay.show()
-        except Exception as e:
-            logger.error(f"Error showing overlays: {e}")
-
-    def _show_error(self, message):
-        """Show error message to user."""
-        try:
-            from tkinter import messagebox
-            messagebox.showerror("Live Analysis Error", message)
-        except:
-            print(f"Live Analysis Error: {message}")
-
-    # Public control methods
     def set_update_frequency(self, frequency_ms):
-        """Set ROI analysis update frequency (ROI-specific only)."""
+        """Set ROI analysis update frequency with auto-optimization."""
         old_frequency = self.update_frequency
-        self.update_frequency = max(100, frequency_ms)  # Minimum 100ms
+        self.update_frequency = max(100, frequency_ms)
 
-        logger.info(f"ROI analysis frequency: {old_frequency}ms -> {self.update_frequency}ms")
+        # Auto-adjust calculation mode
+        self._auto_select_calculation_mode()
+
+        # Adjust cache validity based on frequency
+        if frequency_ms < 500:
+            self._cache_validity_ms = min(100, frequency_ms // 2)
+        else:
+            self._cache_validity_ms = 50
+
+        logger.info(f"ROI frequency: {old_frequency}ms -> {self.update_frequency}ms "
+                    f"(Mode: {self.calculation_mode}, Cache: {self._cache_validity_ms}ms)")
 
         # Restart timer with new frequency if active
         if self.is_active and not self.is_paused and self.roi_timer_id:
@@ -451,22 +596,21 @@ class LiveAnalyzeMode:
         logger.info("ROI analysis resumed")
 
     def stop_live_analysis(self):
-        """Stop live analysis and clean up completely."""
-        logger.info("Stopping live analysis")
+        """Stop live analysis and clean up."""
+        logger.info("Stopping live analysis...")
 
-        # Set inactive state
         self.is_active = False
         self.is_paused = False
 
-        # Cancel ROI timer
+        # Cancel timer
         if self.roi_timer_id:
             try:
                 self.root.after_cancel(self.roi_timer_id)
+                self.roi_timer_id = None
             except:
                 pass
-            self.roi_timer_id = None
 
-        # Close all overlays and windows
+        # Clean up windows
         try:
             if self.roi_selector_overlay:
                 self.roi_selector_overlay.close()
@@ -479,709 +623,81 @@ class LiveAnalyzeMode:
             if self.stats_window:
                 self.stats_window.close()
                 self.stats_window = None
+
         except Exception as e:
-            logger.error(f"Error closing overlays: {e}")
+            logger.error(f"Error cleaning up windows: {e}")
 
-        # Clear data
-        self.roi_coords = []
-        self.roi_bounds = None
-        self.current_quality_map = None
-        self.current_score = None
-        self.analysis_history.clear()
-        self.original_screen_capture = None
+        # Log performance summary
+        self.log_performance_summary()
 
-        logger.info("Live analysis stopped and cleaned up")
+        logger.info("Live analysis stopped")
 
-    def get_current_results(self):
-        """Get current analysis results."""
-        if self.current_quality_map is not None and self.current_score is not None:
-            return {
-                'quality_map': self.current_quality_map,
-                'overall_score': self.current_score,
-                'roi_bounds': self.roi_bounds,
-                'roi_coords': self.roi_coords,
-                'history': list(self.analysis_history)
+    def get_performance_stats(self) -> dict:
+        """Get performance statistics."""
+        stats = {}
+
+        for key, values in self.perf_stats.items():
+            if values:
+                stats[key] = {
+                    'mean': np.mean(values) * 1000,  # Convert to ms
+                    'max': np.max(values) * 1000,
+                    'min': np.min(values) * 1000,
+                    'latest': values[-1] * 1000
+                }
+
+        # Calculate actual vs requested frequency
+        if self.perf_stats['total_times']:
+            avg_cycle_time = np.mean(self.perf_stats['total_times']) * 1000  # ms
+            actual_frequency = 1000 / avg_cycle_time if avg_cycle_time > 0 else 0
+            requested_frequency = 1000 / self.update_frequency
+
+            stats['frequency'] = {
+                'requested': requested_frequency,
+                'actual': actual_frequency,
+                'efficiency': (actual_frequency / requested_frequency * 100) if requested_frequency > 0 else 0
             }
-        return None
 
-    def start_live_analyze(self):
-        """Start live analysis mode with proper capture order"""
-        try:
-            # 1. CRITICAL: Capture screen FIRST, before ANY overlay
-            print("Capturing original screen...")
-            self.original_screen_capture = self.capture_full_screen()
-            
-            # 2. Minimize main window
-            self.main_app.root.withdraw()
-            
-            # 3. Small delay to ensure window is hidden
-            time.sleep(0.1)
-            
-            # 4. NOW show the transparent overlay for ROI selection
-            self.show_roi_selector()
-            
-            # 5. Set active state
-            self.is_active = True
-            
-        except Exception as e:
-            self.handle_error(f"Failed to start live analyze: {e}")
-            self.main_app.root.deiconify()
-    
-    def capture_full_screen(self):
-        """Capture the full screen WITHOUT any overlays"""
-        # Use PIL ImageGrab for cross-platform compatibility
-        # This captures the screen as it appears to the user
-        screenshot = ImageGrab.grab()
-        return screenshot
-    
-    def show_roi_selector(self):
-        """Show ROI selector overlay AFTER capturing original screen"""
-        self.roi_selector_overlay = TransparentROISelector(
-            self.root, 
-            self.original_screen_capture,  # Pass the pre-captured screen
-            completion_callback=self.on_roi_selected
-        )
-    
-    def _capture_original_screen(self):
-        """CRITICAL: Capture the original screen without any overlays."""
-        try:
-            logger.info("Capturing original screen (no overlays)")
-            # Capture entire screen
-            self.original_screen_capture = ImageGrab.grab()
-            logger.info(f"Original screen captured: {self.original_screen_capture.size}")
-        except Exception as e:
-            logger.error(f"Failed to capture original screen: {e}")
-            raise
-    
-    def _show_roi_selector(self):
-        """Show the transparent ROI selector overlay."""
-        if not self.original_screen_capture:
-            logger.error("No original screen capture available")
-            return
-        
-        try:
-            logger.info("Showing ROI selector overlay")
-            self.roi_selector_overlay = TransparentROISelector(
-                self.root, 
-                self.original_screen_capture,
-                completion_callback=self._on_roi_selection_complete
-            )
-        except Exception as e:
-            logger.error(f"Failed to show ROI selector: {e}")
-            self.stop_live_analysis()
-    
-    def on_roi_selected(self, roi_coords: List[Tuple[int, int]]):
-        """Handle ROI selection completion"""
-        # Store ROI coordinates
-        self.roi_coords = roi_coords
-        
-        # Calculate ROI bounding box
-        self.roi_bounds_dict = self.calculate_roi_bounds(roi_coords)
-        
-        # Convert to tuple format for compatibility
-        if roi_coords:
-            x_coords = [point[0] for point in roi_coords]
-            y_coords = [point[1] for point in roi_coords]
-            self.roi_bounds = (
-                min(x_coords), min(y_coords),
-                max(x_coords), max(y_coords)
-            )
-        
-        # Close ROI selector overlay
+        return stats
+
+    def log_performance_summary(self):
+        """Log a summary of performance statistics."""
+        stats = self.get_performance_stats()
+
+        if stats:
+            logger.info("=== Live Analysis Performance Summary ===")
+            logger.info(f"Mode: {self.calculation_mode}")
+            logger.info(f"Update Frequency: {self.update_frequency}ms")
+            logger.info(f"Cache Validity: {self._cache_validity_ms}ms")
+
+            if 'capture_times' in stats:
+                logger.info(f"Capture: {stats['capture_times']['mean']:.1f}ms avg "
+                            f"({stats['capture_times']['min']:.1f}-{stats['capture_times']['max']:.1f}ms)")
+            if 'calc_times' in stats:
+                logger.info(f"Calculation: {stats['calc_times']['mean']:.1f}ms avg "
+                            f"({stats['calc_times']['min']:.1f}-{stats['calc_times']['max']:.1f}ms)")
+            if 'display_times' in stats:
+                logger.info(f"Display: {stats['display_times']['mean']:.1f}ms avg "
+                            f"({stats['display_times']['min']:.1f}-{stats['display_times']['max']:.1f}ms)")
+            if 'total_times' in stats:
+                logger.info(f"Total: {stats['total_times']['mean']:.1f}ms avg "
+                            f"({stats['total_times']['min']:.1f}-{stats['total_times']['max']:.1f}ms)")
+            if 'frequency' in stats:
+                logger.info(f"Actual Frequency: {stats['frequency']['actual']:.1f}Hz "
+                            f"({stats['frequency']['efficiency']:.0f}% efficiency)")
+            logger.info("=======================================")
+
+    def _on_roi_selection_cancel(self):
+        """Handle ROI selection cancellation."""
+        logger.info("ROI selection cancelled")
+
         if self.roi_selector_overlay:
-            self.roi_selector_overlay.close()
-            self.roi_selector_overlay = None
-        
-        # Start live analysis loop
-        self.start_analysis_loop()
-        
-        # Show results window
-        self.show_results_window()
-    
-    def calculate_roi_bounds(self, coords):
-        """Calculate bounding box of ROI"""
-        if not coords:
-            return {'x': 0, 'y': 0, 'width': 100, 'height': 100}
-        
-        x_coords = [x for x, y in coords]
-        y_coords = [y for x, y in coords]
-        return {
-            'x': min(x_coords),
-            'y': min(y_coords),
-            'width': max(x_coords) - min(x_coords),
-            'height': max(y_coords) - min(y_coords)
-        }
-    
-    def _start_continuous_analysis(self):
-        """Start the continuous analysis loop."""
-        if not self.roi_bounds:
-            logger.error("No ROI bounds available for analysis")
-            return
-        
-        logger.info("Starting continuous analysis")
-        
-        # Show stats window
-        self._show_stats_window()
-        
-        # Start analysis timer
-        self._schedule_next_analysis()
-    
-    def start_analysis_loop(self):
-        """Start the live analysis update loop"""
-        # Cancel any existing timer
-        if self.update_timer_id:
-            try:
-                self.root.after_cancel(self.update_timer_id)
-            except:
-                pass  # Timer may have already been cancelled or executed
-            self.update_timer_id = None
-        
-        # Perform first analysis immediately
-        self.perform_live_analysis()
-    
-    def perform_live_analysis(self):
-        """Perform analysis on current screen content"""
-        if not self.is_active or self.is_paused:
-            return
-        
+            self.roi_selector_overlay.hide()
+
+        self.stop_live_analysis()
+
+    def _show_error(self, message):
+        """Show error message to user."""
         try:
-            # CRITICAL: Capture current screen WITHOUT any overlays
-            current_screen = self.capture_screen_region_safely()
-            
-            # Extract ROI from captured screen
-            roi_image = self.extract_roi_from_screen(current_screen)
-            
-            # Convert to numpy array for analysis
-            roi_array = np.array(roi_image)
-            
-            # Generate quality map
-            quality_map, visualization = self.generate_quality_analysis(roi_array)
-            
-            # Calculate overall score
-            quality_score = self.calculate_overall_score(quality_map)
-            
-            # Update displays
-            self.update_all_displays(quality_map, visualization, quality_score)
-            
-            # Store in history
-            self.analysis_history.append({
-                'timestamp': time.time(),
-                'score': quality_score,
-                'quality_map': quality_map
-            })
-            
-        except Exception as e:
-            print(f"Analysis error: {e}")
-            logger.error(f"Analysis error: {e}")
-        
-        finally:
-            # Schedule next update
-            if self.is_active and not self.is_paused:
-                try:
-                    self.update_timer_id = self.root.after(
-                        self.update_frequency,
-                        self.perform_live_analysis
-                    )
-                except Exception as e:
-                    logger.error(f"Error scheduling next analysis: {e}")
-                    self.update_timer_id = None
-    
-    def capture_screen_region_safely(self):
-        """Capture screen region ensuring no overlay interference"""
-        # CRITICAL: Hide any quality overlay before capture
-        if self.quality_overlay:
-            self.quality_overlay.hide()
-        
-        # Small delay to ensure overlay is hidden
-        time.sleep(0.05)
-        
-        # Capture the screen region
-        if hasattr(self, 'roi_bounds_dict') and self.roi_bounds_dict:
-            bbox = (
-                self.roi_bounds_dict['x'],
-                self.roi_bounds_dict['y'],
-                self.roi_bounds_dict['x'] + self.roi_bounds_dict['width'],
-                self.roi_bounds_dict['y'] + self.roi_bounds_dict['height']
-            )
-        elif self.roi_bounds:
-            x1, y1, x2, y2 = self.roi_bounds
-            bbox = (x1, y1, x2, y2)
-        else:
-            bbox = None
-        
-        screenshot = ImageGrab.grab(bbox=bbox)
-        
-        # Show quality overlay again
-        if self.quality_overlay:
-            self.quality_overlay.show()
-        
-        return screenshot
-    
-    def _schedule_next_analysis(self):
-        """Schedule the next analysis iteration."""
-        if not self.is_active or self.is_paused:
-            return
-        
-        # Cancel any existing timer
-        if self.update_timer_id:
-            try:
-                self.root.after_cancel(self.update_timer_id)
-            except:
-                pass  # Timer may have already been cancelled or executed
-            self.update_timer_id = None
-        
-        # Schedule next analysis
-        try:
-            self.update_timer_id = self.root.after(self.update_frequency, self._perform_analysis)
-        except Exception as e:
-            logger.error(f"Error scheduling next analysis: {e}")
-            self.update_timer_id = None
-    
-    def _perform_analysis(self):
-        """
-        Perform a single analysis iteration.
-        
-        CRITICAL: Always capture fresh screen data, hiding overlays first.
-        """
-        if not self.is_active or self.is_paused:
-            return
-        
-        try:
-            # CRITICAL: Hide all overlays before capturing
-            self._hide_overlays_temporarily()
-            
-            # Small delay to ensure overlays are hidden
-            self.root.after(50, self._capture_and_analyze)
-            
-        except Exception as e:
-            logger.error(f"Error in analysis iteration: {e}")
-            self._schedule_next_analysis()
-    
-    def _hide_overlays_temporarily(self):
-        """Temporarily hide all overlays for clean capture."""
-        if self.quality_overlay:
-            self.quality_overlay.hide()
-        if self.stats_window:
-            self.stats_window.hide()
-    
-    def _show_overlays_after_capture(self):
-        """Show overlays again after capture."""
-        if self.quality_overlay:
-            self.quality_overlay.show()
-        if self.stats_window:
-            self.stats_window.show()
-    
-    def _capture_and_analyze(self):
-        """Capture screen and perform analysis."""
-        try:
-            # CRITICAL: Capture fresh screen without overlays
-            current_screen = ImageGrab.grab()
-            
-            # Extract ROI from current screen
-            if self.roi_bounds:
-                x1, y1, x2, y2 = self.roi_bounds
-                roi_image = current_screen.crop((x1, y1, x2, y2))
-            else:
-                roi_image = current_screen
-            
-            # Convert to numpy array for analysis
-            roi_array = np.array(roi_image)
-            
-            # Perform quality analysis
-            self._analyze_roi(roi_array)
-            
-            # Show overlays again
-            self._show_overlays_after_capture()
-            
-            # Schedule next analysis
-            self._schedule_next_analysis()
-            
-        except Exception as e:
-            logger.error(f"Error in capture and analysis: {e}")
-            self._show_overlays_after_capture()
-            self._schedule_next_analysis()
-    
-    def _analyze_roi(self, roi_array: np.ndarray):
-        """Analyze the ROI and update results."""
-        try:
-            # Convert to grayscale if needed
-            if len(roi_array.shape) == 3:
-                roi_gray = np.mean(roi_array, axis=2).astype(np.uint8)
-            else:
-                roi_gray = roi_array
-            
-            # Perform quality analysis
-            if hasattr(self.quality_calculator, 'calculate_quality_map'):
-                quality_map, overall_score = self.quality_calculator.calculate_quality_map(roi_gray)
-            else:
-                # Fallback method
-                overall_score = self._calculate_basic_quality(roi_gray)
-                quality_map = np.ones_like(roi_gray, dtype=np.float32) * overall_score
-            
-            # Store results
-            self.current_quality_map = quality_map
-            self.current_score = overall_score
-            
-            # Add to history
-            timestamp = time.time()
-            self.analysis_history.append({
-                'timestamp': timestamp,
-                'score': overall_score,
-                'roi_size': roi_gray.shape
-            })
-            
-            # Update displays
-            self._update_quality_overlay(quality_map)
-            self._update_stats_window(overall_score, timestamp)
-            
-            # Callback
-            if self.on_analysis_complete_callback:
-                self.on_analysis_complete_callback(quality_map, overall_score)
-            
-            logger.debug(f"Analysis complete: score={overall_score:.3f}")
-            
-        except Exception as e:
-            logger.error(f"Error in ROI analysis: {e}")
-    
-    def _calculate_basic_quality(self, image: np.ndarray) -> float:
-        """Calculate basic quality score as fallback."""
-        try:
-            # Simple gradient-based quality measure
-            grad_x = np.gradient(image.astype(np.float32), axis=1)
-            grad_y = np.gradient(image.astype(np.float32), axis=0)
-            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            
-            # Normalize to 0-1 range
-            quality_score = np.mean(gradient_magnitude) / 255.0
-            return min(1.0, max(0.0, quality_score))
-            
-        except Exception as e:
-            logger.error(f"Error in basic quality calculation: {e}")
-            return 0.0
-    
-    def extract_roi_from_screen(self, screen_capture):
-        """Extract the exact ROI polygon from screen capture"""
-        import cv2
-        from PIL import Image, ImageDraw
-        
-        # Convert PIL Image to numpy array
-        screen_array = np.array(screen_capture)
-        
-        # Create mask for ROI polygon
-        mask = Image.new('L', screen_capture.size, 0)
-        draw = ImageDraw.Draw(mask)
-        
-        # Adjust coordinates relative to capture region
-        if hasattr(self, 'roi_bounds_dict') and self.roi_bounds_dict:
-            adjusted_coords = [
-                (x - self.roi_bounds_dict['x'], y - self.roi_bounds_dict['y']) 
-                for x, y in self.roi_coords
-            ]
-        else:
-            # Use original coordinates if no bounds dict
-            adjusted_coords = self.roi_coords
-        
-        # Draw polygon mask
-        if adjusted_coords:
-            draw.polygon(adjusted_coords, fill=255)
-        
-        # Apply mask
-        mask_array = np.array(mask)
-        masked_image = cv2.bitwise_and(screen_array, screen_array, mask=mask_array)
-        
-        return Image.fromarray(masked_image)
-    
-    def generate_quality_analysis(self, roi_array):
-        """Generate quality map and visualization from ROI array"""
-        try:
-            # Convert to grayscale if needed
-            if len(roi_array.shape) == 3:
-                roi_gray = np.mean(roi_array, axis=2).astype(np.uint8)
-            else:
-                roi_gray = roi_array
-            
-            # Perform quality analysis
-            if hasattr(self.quality_calculator, 'calculate_quality_map'):
-                quality_map, overall_score = self.quality_calculator.calculate_quality_map(roi_gray)
-            else:
-                # Fallback method
-                overall_score = self._calculate_basic_quality(roi_gray)
-                quality_map = np.ones_like(roi_gray, dtype=np.float32) * overall_score
-            
-            # Generate visualization
-            visualization = self._generate_colored_quality_map(quality_map)
-            
-            return quality_map, visualization
-            
-        except Exception as e:
-            logger.error(f"Error in quality analysis: {e}")
-            # Return fallback values
-            fallback_map = np.zeros((100, 100), dtype=np.float32)
-            fallback_viz = np.zeros((100, 100, 3), dtype=np.uint8)
-            return fallback_map, fallback_viz
-    
-    def _generate_colored_quality_map(self, quality_map):
-        """Generate colored quality map visualization"""
-        try:
-            if self.colormap_generator and hasattr(self.colormap_generator, 'apply_colormap'):
-                return self.colormap_generator.apply_colormap(quality_map, spectrum_type='optimized')
-            else:
-                # Default colormap using OpenCV
-                normalized = (quality_map * 255).astype(np.uint8)
-                colored = cv2.applyColorMap(normalized, cv2.COLORMAP_JET)
-                return cv2.cvtColor(colored, cv2.COLOR_BGR2RGB)
-        except Exception as e:
-            logger.error(f"Error generating colored quality map: {e}")
-            # Return a proper 3-channel image as fallback
-            normalized = (quality_map * 255).astype(np.uint8)
-            return np.stack([normalized, normalized, normalized], axis=-1)
-    
-    def calculate_overall_score(self, quality_map):
-        """Calculate overall quality score from quality map"""
-        try:
-            return float(np.mean(quality_map))
-        except Exception as e:
-            logger.error(f"Error calculating overall score: {e}")
-            return 0.0
-    
-    def update_all_displays(self, quality_map, visualization, quality_score):
-        """Update all display components with new analysis results"""
-        try:
-            # Update quality overlay
-            self._update_quality_overlay(quality_map)
-            
-            # Update stats window
-            timestamp = time.time()
-            self._update_stats_window(quality_score, timestamp)
-            
-            # Store current results
-            self.current_quality_map = quality_map
-            self.current_score = quality_score
-            
-        except Exception as e:
-            logger.error(f"Error updating displays: {e}")
-    
-    def show_results_window(self):
-        """Show the results/statistics window"""
-        self._show_stats_window()
-    
-    def show_quality_overlay(self, quality_map, visualization):
-        """Show quality map overlay at ROI location"""
-        if not self.quality_overlay and self.roi_bounds:
-            self._create_quality_overlay()
-        
-        if self.quality_overlay:
-            self.quality_overlay.update_quality_map(quality_map)
-    
-    def display_quality_visualization(self, visualization):
-        """Display quality visualization on overlay canvas"""
-        if self.quality_overlay:
-            self.quality_overlay.update_quality_map(visualization)
-    
-    def _update_quality_overlay(self, quality_map: np.ndarray):
-        """Update the quality overlay display."""
-        if not self.quality_overlay and self.roi_bounds:
-            self._create_quality_overlay()
-        
-        if self.quality_overlay:
-            self.quality_overlay.update_quality_map(quality_map)
-    
-    def _create_quality_overlay(self):
-        """Create the quality overlay window."""
-        if not self.roi_bounds:
-            return
-        
-        try:
-            self.quality_overlay = QualityOverlay(
-                self.root,
-                self.roi_bounds,
-                self.colormap_generator
-            )
-        except Exception as e:
-            logger.error(f"Failed to create quality overlay: {e}")
-    
-    def _update_stats_window(self, score: float, timestamp: float):
-        """Update the statistics window."""
-        if self.stats_window:
-            self.stats_window.update_stats(score, timestamp, list(self.analysis_history))
-    
-    def _show_stats_window(self):
-        """Show the statistics window."""
-        try:
-            self.stats_window = StatsWindow(self.root, self)
-        except Exception as e:
-            logger.error(f"Failed to create stats window: {e}")
-    
-    def toggle_pause(self):
-        """Toggle pause state of live analysis"""
-        self.is_paused = not self.is_paused
-        
-        if self.is_paused:
-            # Cancel current timer
-            if self.update_timer_id:
-                try:
-                    self.root.after_cancel(self.update_timer_id)
-                except:
-                    pass  # Timer may have already been cancelled or executed
-                self.update_timer_id = None
-            
-            # Update UI to show paused state
-            if self.stats_window:
-                self.stats_window.pause_button.configure(text="Resume")
-        else:
-            # Resume analysis
-            self.perform_live_analysis()
-            
-            # Update UI
-            if self.stats_window:
-                self.stats_window.pause_button.configure(text="Pause")
-    
-    def exit_live_mode(self):
-        """Exit live analysis mode cleanly"""
-        # Set inactive
-        self.is_active = False
-        
-        # Stop analysis timer
-        if self.update_timer_id:
-            self.root.after_cancel(self.update_timer_id)
-            self.update_timer_id = None
-        
-        # Close all overlay windows
-        if self.quality_overlay:
-            self.quality_overlay.close()
-            self.quality_overlay = None
-        
-        if self.stats_window:
-            self.stats_window.close()
-            self.stats_window = None
-        
-        if self.roi_selector_overlay:
-            self.roi_selector_overlay.close()
-            self.roi_selector_overlay = None
-        
-        # Ask to save results
-        if self.analysis_history and self.prompt_save_results():
-            self.save_analysis_session()
-        
-        # Restore main window
-        self.main_app.root.deiconify()
-        
-        # Optionally transfer last analysis to main app
-        if self.current_quality_map is not None:
-            self.transfer_to_main_app()
-    
-    def handle_error(self, error_message):
-        """Handle errors during live analysis"""
-        logger.error(error_message)
-        print(f"Error: {error_message}")
-        
-        # Show error dialog if possible
-        try:
-            import tkinter.messagebox as messagebox
-            messagebox.showerror("Live Analysis Error", error_message)
+            messagebox.showerror("Live Analysis Error", message)
         except:
-            pass
-    
-    def prompt_save_results(self):
-        """Prompt user to save analysis results"""
-        try:
-            import tkinter.messagebox as messagebox
-            return messagebox.askyesno(
-                "Save Results", 
-                "Do you want to save the live analysis results?"
-            )
-        except:
-            return False
-    
-    def save_analysis_session(self):
-        """Save the current analysis session"""
-        try:
-            from tkinter import filedialog
-            filepath = filedialog.asksaveasfilename(
-                title="Save Live Analysis Session",
-                defaultextension=".json",
-                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-            )
-            
-            if filepath:
-                base_filepath = filepath.rsplit('.', 1)[0]
-                return self.export_results(base_filepath)
-        except Exception as e:
-            logger.error(f"Error saving analysis session: {e}")
-            return False
-    
-    def transfer_to_main_app(self):
-        """Transfer current analysis results to main application"""
-        try:
-            if hasattr(self.main_app, 'load_analysis_results'):
-                self.main_app.load_analysis_results({
-                    'quality_map': self.current_quality_map,
-                    'overall_score': self.current_score,
-                    'roi_coords': self.roi_coords,
-                    'roi_bounds': self.roi_bounds
-                })
-        except Exception as e:
-            logger.error(f"Error transferring results to main app: {e}")
-    
-    def pause_analysis(self):
-        """Pause the live analysis."""
-        self.is_paused = True
-        if self.update_timer_id:
-            self.root.after_cancel(self.update_timer_id)
-            self.update_timer_id = None
-        logger.info("Live analysis paused")
-    
-    def resume_analysis(self):
-        """Resume the live analysis."""
-        if not self.is_active:
-            return
-        
-        self.is_paused = False
-        self._schedule_next_analysis()
-        logger.info("Live analysis resumed")
-    
-    def get_current_results(self) -> Optional[dict]:
-        """Get current analysis results."""
-        if not self.current_quality_map is None and self.current_score is not None:
-            return {
-                'quality_map': self.current_quality_map,
-                'overall_score': self.current_score,
-                'roi_bounds': self.roi_bounds,
-                'roi_coords': self.roi_coords,
-                'history': list(self.analysis_history)
-            }
-        return None
-    
-    def export_results(self, filepath: str):
-        """Export current results to file."""
-        results = self.get_current_results()
-        if not results:
-            logger.warning("No results to export")
-            return False
-        
-        try:
-            import json
-            import pickle
-            
-            # Export as JSON for metadata
-            metadata = {
-                'overall_score': results['overall_score'],
-                'roi_bounds': results['roi_bounds'],
-                'roi_coords': results['roi_coords'],
-                'history': results['history'],
-                'timestamp': time.time()
-            }
-            
-            with open(f"{filepath}_metadata.json", 'w') as f:
-                json.dump(metadata, f, indent=2)
-            
-            # Export quality map as pickle
-            with open(f"{filepath}_quality_map.pkl", 'wb') as f:
-                pickle.dump(results['quality_map'], f)
-            
-            logger.info(f"Results exported to {filepath}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to export results: {e}")
-            return False
+            print(f"Live Analysis Error: {message}")

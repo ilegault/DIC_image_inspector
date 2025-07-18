@@ -572,6 +572,176 @@ class QualityCalculator:
         
         return min(1.0, entropy_score)
 
+    def calculate_live_analysis_quality(self, image: np.ndarray, grid_size: tuple = None) -> tuple:
+        """
+        Calculate quality for live analysis with accurate score but simplified quality map.
+
+        This method maintains full accuracy for the numerical score using all DIC parameters
+        (MIG, Ef, etc.) while generating a simplified quality map for visualization performance.
+
+        Args:
+            image: Grayscale image array
+            grid_size: Optional (rows, cols) for quality map grid. Auto-determined if None.
+
+        Returns:
+            Tuple of (quality_map, overall_score) where:
+            - quality_map: Simplified visualization map (0-1 range)
+            - overall_score: Accurate quality score using full DIC calculations
+        """
+        try:
+            # Ensure grayscale
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = image.copy()
+
+            h, w = gray.shape
+
+            # Step 1: Calculate ACCURATE overall score for the entire image
+            # This uses calculate_subset_quality which already includes all your DIC parameters
+            overall_score = self.calculate_subset_quality(gray)
+
+            logger.info(f"Full quality score: {overall_score:.3f} (using MIG={self.mig_normalization_factor}, "
+                        f"Ef={self.ef_normalization_factor})")
+
+            # Step 2: Generate simplified quality map for visualization only
+            logger.info("Generating simplified quality map for visualization...")
+
+            # Auto-determine grid size based on image dimensions
+            if grid_size is None:
+                if min(h, w) < 100:
+                    grid_size = (5, 5)
+                elif min(h, w) < 300:
+                    grid_size = (10, 10)
+                elif min(h, w) < 600:
+                    grid_size = (15, 15)
+                else:
+                    grid_size = (20, 20)
+
+            grid_rows, grid_cols = grid_size
+
+            # Calculate cell dimensions
+            cell_h = h // grid_rows
+            cell_w = w // grid_cols
+
+            # Initialize quality grid
+            quality_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+
+            # Process each grid cell
+            for i in range(grid_rows):
+                for j in range(grid_cols):
+                    # Extract cell region
+                    y_start = i * cell_h
+                    y_end = min((i + 1) * cell_h, h)
+                    x_start = j * cell_w
+                    x_end = min((j + 1) * cell_w, w)
+
+                    cell = gray[y_start:y_end, x_start:x_end]
+
+                    # Calculate quality for this cell using your existing method
+                    # This uses all your DIC parameters (MIG, Ef, etc.)
+                    cell_quality = self.calculate_subset_quality(cell)
+                    quality_grid[i, j] = cell_quality
+
+            # Upscale grid to full image size for visualization
+            quality_map = cv2.resize(quality_grid, (w, h), interpolation=cv2.INTER_CUBIC)
+
+            # Apply light smoothing for visual appeal
+            quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
+
+            # Ensure range is 0-1
+            quality_map = np.clip(quality_map, 0, 1)
+
+            logger.info(f"Live analysis complete: score={overall_score:.3f}, "
+                        f"grid={grid_size}, image={gray.shape}")
+
+            return quality_map, overall_score
+
+        except Exception as e:
+            logger.error(f"Error in calculate_live_analysis_quality: {e}")
+            # Return fallback values
+            return np.zeros_like(gray, dtype=np.float32), 0.0
+
+    def calculate_live_analysis_quality_parallel(self, image: np.ndarray, grid_size: tuple = None) -> tuple:
+        """
+        Parallel version of calculate_live_analysis_quality for better performance.
+
+        Uses ThreadPoolExecutor to process grid cells in parallel while maintaining
+        accuracy of DIC calculations.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        try:
+            # Ensure grayscale
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = image.copy()
+
+            h, w = gray.shape
+
+            # Step 1: Calculate accurate overall score (same as before)
+            full_metrics = self.analyze_comprehensive(gray)
+            overall_score = self.calculate_overall_quality_score(full_metrics)
+
+            # Step 2: Generate quality map using parallel processing
+            if grid_size is None:
+                if min(h, w) < 100:
+                    grid_size = (5, 5)
+                elif min(h, w) < 300:
+                    grid_size = (10, 10)
+                elif min(h, w) < 600:
+                    grid_size = (15, 15)
+                else:
+                    grid_size = (20, 20)
+
+            grid_rows, grid_cols = grid_size
+            cell_h = h // grid_rows
+            cell_w = w // grid_cols
+
+            # Initialize quality grid
+            quality_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+
+            # Prepare cell data for parallel processing
+            cell_tasks = []
+            for i in range(grid_rows):
+                for j in range(grid_cols):
+                    y_start = i * cell_h
+                    y_end = min((i + 1) * cell_h, h)
+                    x_start = j * cell_w
+                    x_end = min((j + 1) * cell_w, w)
+
+                    cell = gray[y_start:y_end, x_start:x_end]
+                    cell_tasks.append(((i, j), cell))
+
+            # Process cells in parallel
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_cell = {}
+
+                for (i, j), cell in cell_tasks:
+                    future = executor.submit(self.calculate_subset_quality, cell)
+                    future_to_cell[future] = (i, j)
+
+                # Collect results
+                for future in as_completed(future_to_cell):
+                    i, j = future_to_cell[future]
+                    try:
+                        quality_grid[i, j] = future.result()
+                    except Exception as e:
+                        logger.error(f"Error processing cell ({i},{j}): {e}")
+                        quality_grid[i, j] = 0.0
+
+            # Upscale and smooth
+            quality_map = cv2.resize(quality_grid, (w, h), interpolation=cv2.INTER_CUBIC)
+            quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
+            quality_map = np.clip(quality_map, 0, 1)
+
+            return quality_map, overall_score
+
+        except Exception as e:
+            logger.error(f"Error in calculate_live_analysis_quality_parallel: {e}")
+            return np.zeros_like(gray, dtype=np.float32), 0.0
+
     def assess_quality_level(self, score: float, spectrum_type: str = 'optimized') -> Tuple[str, str]:
         """
         Assess quality level based on score and spectrum type.

@@ -6,6 +6,9 @@ from typing import Dict, Any, Tuple, List, Optional
 import logging
 from scipy import ndimage
 from scipy.signal import convolve2d
+from functools import lru_cache
+import hashlib
+
 
 logger = logging.getLogger(__name__)
 
@@ -720,3 +723,44 @@ class GradientAnalyzer:
                 quality_map[i // window_size, j // window_size] = quality_scores['gradient_score']
 
         return quality_map
+
+class GradientAnalyzerCache:
+    """Cache wrapper for expensive gradient calculations."""
+
+    def __init__(self, max_cache_size=10):
+        self.cache = {}
+        self.max_size = max_cache_size
+        self.access_order = []
+
+    def _get_image_hash(self, image: np.ndarray) -> str:
+        """Generate hash for image array."""
+        # Use a fast hash of image characteristics
+        return hashlib.md5(
+            f"{image.shape}_{image.mean():.2f}_{image.std():.2f}".encode()
+        ).hexdigest()
+
+    def get_gradients(self, image: np.ndarray) -> tuple:
+        """Get cached gradients or compute new ones."""
+        img_hash = self._get_image_hash(image)
+
+        if img_hash in self.cache:
+            # Move to end (most recently used)
+            self.access_order.remove(img_hash)
+            self.access_order.append(img_hash)
+            logger.debug(f"Using cached gradients for hash {img_hash[:8]}")
+            return self.cache[img_hash]
+
+        # Compute new gradients
+        grad_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+
+        # Add to cache
+        self.cache[img_hash] = (grad_x, grad_y)
+        self.access_order.append(img_hash)
+
+        # Remove oldest if cache is full
+        if len(self.cache) > self.max_size:
+            oldest = self.access_order.pop(0)
+            del self.cache[oldest]
+
+        return grad_x, grad_y

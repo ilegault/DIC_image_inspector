@@ -23,7 +23,7 @@ from models.analysis_result import AnalysisResult
 from core.image_analyzer import ImageAnalyzer
 from core.report_generator import ReportGenerator
 from utils.file_operations import FileOperationsManager
-from ui.live_analyze import LiveAnalyzeMode
+from ui.live_analyze.live_analyze_mode import LiveAnalyzeMode
 
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.modern_styling import ModernStyleManager

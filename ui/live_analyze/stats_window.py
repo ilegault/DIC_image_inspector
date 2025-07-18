@@ -1,7 +1,7 @@
 # ui/live_analyze/stats_window.py - Statistics Window for Live Analysis
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
