@@ -1,4 +1,4 @@
-# ui/components/control_panel.py - Fixed UI Component with Dark Mode
+# ui/main_components/control_panel.py - Fixed UI Component with Dark Mode
 
 import tkinter as tk
 from tkinter import ttk
@@ -663,7 +663,7 @@ class ControlPanel:
         """Refresh all UI elements with new theme colors."""
         colors = get_theme_colors()
 
-        # Update all frames including new scrollable components
+        # Update all frames including new scrollable main_components
         for widget in [self.control_frame, self.inner_frame, self.scrollable_frame]:
             widget.configure(bg=colors['panel_bg'])
 

@@ -303,7 +303,7 @@ class ContrastAnalyzer:
             range_utilization = metrics.get('range_utilization', 0.0)
             edge_strength = metrics.get('edge_strength', 0.0)
 
-            # Score individual components
+            # Score individual main_components
             # RMS contrast scoring (optimal: 0.2-0.6)
             if 0.2 <= rms_contrast <= 0.6:
                 rms_score = 1.0

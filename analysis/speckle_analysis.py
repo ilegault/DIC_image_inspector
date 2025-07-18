@@ -96,7 +96,7 @@ class SpeckleAnalyzer:
         return binary
 
     def _analyze_connected_components(self, binary: np.ndarray, image_shape: Tuple[int, int]) -> Dict[str, Any]:
-        """Analyze connected components to identify speckles."""
+        """Analyze connected main_components to identify speckles."""
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
             binary, connectivity=8
         )

@@ -107,7 +107,7 @@ def _setup_logging_from_config(config: Dict):
 
     # Special case for zoom/pan debug
     if config['zoom_pan_debug']:
-        logging.getLogger('ui.components.image_canvas').setLevel(logging.DEBUG)
+        logging.getLogger('ui.main_components.image_canvas').setLevel(logging.DEBUG)
 
     # Set library levels
     libraries = ['PIL', 'matplotlib', 'numpy', 'scipy', 'cv2', 'urllib3', 'requests']

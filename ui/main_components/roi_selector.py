@@ -1,4 +1,4 @@
-# ui/components/roi_selector.py - Clean ROI Selection Component
+# ui/main_components/roi_selector.py - Clean ROI Selection Component
 
 import tkinter as tk
 from typing import List, Tuple, Callable, Dict, Optional

@@ -22,7 +22,7 @@ class ImageAnalyzer:
     """
     Main orchestrator for DIC image quality analysis.
 
-    This class coordinates all analysis components and provides a clean
+    This class coordinates all analysis main_components and provides a clean
     interface for the UI layer. It handles the complete analysis workflow
     from image preprocessing to final results generation.
     """

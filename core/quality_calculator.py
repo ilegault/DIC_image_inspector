@@ -279,7 +279,7 @@ class QualityCalculator:
                 gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, 2
             )
 
-            # Find connected components (speckles)
+            # Find connected main_components (speckles)
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
 
             if num_labels > 1:

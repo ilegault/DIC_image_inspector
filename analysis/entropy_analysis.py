@@ -606,7 +606,7 @@ class EntropyAnalyzer:
             mutual_info_h = metrics.get('mutual_information_h', 0.0)
             entropy_uniformity = metrics.get('entropy_uniformity', 0.0)
 
-            # Score components
+            # Score main_components
             # Shannon entropy scoring (optimal: 3-6 bits)
             if 3.0 <= shannon_entropy <= 6.0:
                 shannon_score = 1.0

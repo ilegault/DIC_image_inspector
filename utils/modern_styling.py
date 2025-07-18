@@ -2,7 +2,7 @@
 
 """
 Modern styling utilities for the DIC Image Quality Inspector.
-Provides consistent modern styling across all UI components.
+Provides consistent modern styling across all UI main_components.
 """
 
 import tkinter as tk

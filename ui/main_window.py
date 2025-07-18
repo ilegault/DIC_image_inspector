@@ -10,11 +10,11 @@ import numpy as np
 from PIL import Image
 import logging
 
-from ui.components.control_panel import ControlPanel
-from ui.components.image_canvas import ImageCanvas
+from ui.main_components.control_panel import ControlPanel
+from ui.main_components.image_canvas import ImageCanvas
 # ROI selector now integrated into ImageCanvas
-from ui.components.legend_panel import LegendPanel
-from ui.components.results_popup import ResultsPopup
+from ui.main_components.legend_panel import LegendPanel
+from ui.main_components.results_popup import ResultsPopup
 from ui.dialogs.help_dialog import HelpDialog
 from ui.dialogs.screenshot_dialog import ScreenshotDialog
 
@@ -34,7 +34,7 @@ class DICQualityInspector:
     """
     Main application window for DIC Image Quality Inspector.
 
-    Orchestrates all UI components and manages application flow.
+    Orchestrates all UI main_components and manages application flow.
     """
 
     def __init__(self, root: tk.Tk):
@@ -48,7 +48,7 @@ class DICQualityInspector:
         # Initialize state management
         self.state = ApplicationState()
 
-        # Initialize components
+        # Initialize main_components
         self.control_panel = None
         self.image_canvas = None
         self.roi_selector = None
@@ -424,7 +424,7 @@ class DICQualityInspector:
         # Update all frames recursively
         self._update_widget_theme(self.root, colors)
 
-        # Update specific components
+        # Update specific main_components
         if self.control_panel:
             self.control_panel.refresh_theme()
 
@@ -569,7 +569,7 @@ class DICQualityInspector:
             self.roi_selector.handle_key_event('release', event.keysym)
 
     def _update_ui_state(self):
-        """Update UI components based on current state."""
+        """Update UI main_components based on current state."""
         state = self.state.get_application_state()
         self.control_panel.update_state(state)
 

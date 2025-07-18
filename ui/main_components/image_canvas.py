@@ -1,4 +1,4 @@
-# ui/components/image_canvas.py - Clean Image Display Component
+# ui/main_components/image_canvas.py - Clean Image Display Component
 
 import tkinter as tk
 from tkinter import ttk
@@ -466,7 +466,7 @@ class ImageCanvas:
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
             self.image_item = self.canvas.create_image(center_x, center_y, anchor='nw', image=self.photo)
 
-            # Store offset for other components
+            # Store offset for other main_components
             self.image_offset_x = center_x
             self.image_offset_y = center_y
             self.canvas.image_offset_x = center_x
@@ -732,7 +732,7 @@ class ImageCanvas:
             self.canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
             self.image_item = self.canvas.create_image(center_x, center_y, anchor='nw', image=self.photo)
 
-            # Store offset for other components
+            # Store offset for other main_components
             self.image_offset_x = center_x
             self.image_offset_y = center_y
             self.canvas.image_offset_x = center_x

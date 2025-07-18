@@ -1,4 +1,4 @@
-# ui/components/legend_panel.py - Legend Component with Dark Mode
+# ui/main_components/legend_panel.py - Legend Component with Dark Mode
 
 import tkinter as tk
 from typing import Dict, List, Tuple

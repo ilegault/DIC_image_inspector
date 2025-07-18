@@ -418,7 +418,7 @@ class GradientAnalyzer:
         grad_x = gradient_maps['sobel']['x']
         grad_y = gradient_maps['sobel']['y']
 
-        # Calculate structure tensor components
+        # Calculate structure tensor main_components
         Ixx = grad_x * grad_x
         Iyy = grad_y * grad_y
         Ixy = grad_x * grad_y

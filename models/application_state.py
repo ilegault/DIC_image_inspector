@@ -503,7 +503,7 @@ class ApplicationState:
             if self._application_state == 'analysis_complete' and not self.has_analysis_result():
                 return False
 
-            # Validate individual components
+            # Validate individual main_components
             if self._image and not isinstance(self._image, ImageData):
                 return False
 
