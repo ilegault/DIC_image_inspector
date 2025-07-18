@@ -517,7 +517,7 @@ class ImageCanvas:
                           f"Display: {img_width}x{img_height}, Scroll region: {img_width}x{img_height}")
 
     def _on_mousewheel(self, event):
-        """Handle mouse wheel zoom (improved from canvas test.py)."""
+        """Handle mouse wheel zoom."""
         if self.displayed_image is None:
             return "break"
 
