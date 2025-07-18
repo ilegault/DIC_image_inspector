@@ -954,10 +954,10 @@ class DICQualityInspector:
             self.live_mode.set_update_frequency(frequency_ms)
             logger.info(f"Live analysis frequency updated to: {frequency_ms}ms")
 
-    def on_live_roi_selected(self, roi_coords):
+    def on_live_roi_selected(self, roi_coords, roi_bounds):
         """Callback when ROI is selected in live analysis."""
         self.status_var.set(f"Live ROI selected ({len(roi_coords)} points) - Analysis active")
-        logger.info(f"Live analysis ROI selected: {len(roi_coords)} points")
+        logger.info(f"Live analysis ROI selected: {len(roi_coords)} points, bounds: {roi_bounds}")
 
     def on_live_analysis_complete(self, quality_map, overall_score):
         """Callback when live analysis is complete."""
@@ -1011,19 +1011,3 @@ class DICQualityInspector:
     def run(self):
         """Start the application."""
         self.root.mainloop()
-
-
-# Application entry point
-def main():
-    """Main entry point for the application."""
-    root = tk.Tk()
-    app = DICQualityInspector(root)
-
-    # Set window close protocol
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
-
-    app.run()
-
-
-if __name__ == "__main__":
-    main()

@@ -400,27 +400,64 @@ class LiveAnalyzeMode:
             else:
                 gray = roi_array.copy()
 
+            # Convert screen ROI coordinates to image-relative coordinates
+            roi_coords_relative = None
+            if self.roi_coords and len(self.roi_coords) >= 3:
+                x1, y1, x2, y2 = self.roi_bounds
+                roi_coords_relative = [(x - x1, y - y1) for x, y in self.roi_coords]
+
             # Check if calculator has optimized method
             if hasattr(self.quality_calculator, 'calculate_live_analysis_quality'):
-                # Use optimized method with appropriate grid size
+                # Use optimized method with ROI coordinates
                 grid_size = self._get_optimal_grid_size(gray.shape)
                 quality_map, overall_score = self.quality_calculator.calculate_live_analysis_quality(
-                    gray, grid_size=grid_size
+                    gray, roi_coords=roi_coords_relative, grid_size=grid_size
                 )
             else:
-                # Fall back to mode-specific calculation
-                if self.calculation_mode == 'fast':
-                    quality_map, overall_score = self._calculate_fast_quality(gray)
-                elif self.calculation_mode == 'balanced':
-                    quality_map, overall_score = self._calculate_balanced_quality(gray)
-                else:  # full
-                    quality_map, overall_score = self._calculate_full_quality(gray)
+                # Fall back to mode-specific calculation with ROI masking
+                quality_map, overall_score = self._calculate_quality_with_roi_mask(gray, roi_coords_relative)
 
             return quality_map, overall_score
 
         except Exception as e:
             logger.error(f"Error in optimized quality calculation: {e}")
             return np.zeros(roi_array.shape[:2], dtype=np.float32), 0.0
+
+    def _calculate_quality_with_roi_mask(self, gray: np.ndarray, roi_coords: Optional[List[Tuple[int, int]]]) -> tuple:
+        """Calculate quality with ROI masking fallback."""
+        # Create ROI mask if coordinates provided
+        if roi_coords and len(roi_coords) >= 3:
+            mask = np.zeros(gray.shape[:2], dtype=np.uint8)
+            pts = np.array(roi_coords, dtype=np.int32)
+
+            # Clamp coordinates to image bounds
+            h, w = gray.shape
+            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
+            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
+
+            cv2.fillPoly(mask, [pts], 255)
+
+            # Apply mask to image
+            masked_gray = cv2.bitwise_and(gray, gray, mask=mask)
+        else:
+            masked_gray = gray
+            mask = None
+
+        # Calculate quality based on current mode
+        if self.calculation_mode == 'fast':
+            quality_map, overall_score = self._calculate_fast_quality(masked_gray)
+        elif self.calculation_mode == 'balanced':
+            quality_map, overall_score = self._calculate_balanced_quality(masked_gray)
+        else:  # full
+            quality_map, overall_score = self._calculate_full_quality(masked_gray)
+
+        # If we used a mask, calculate score only from ROI pixels
+        if mask is not None:
+            roi_pixels = quality_map[mask > 0]
+            if len(roi_pixels) > 0:
+                overall_score = float(np.mean(roi_pixels))
+
+        return quality_map, overall_score
 
     def _get_optimal_grid_size(self, image_shape: tuple) -> tuple:
         """Determine optimal grid size based on image size and mode."""

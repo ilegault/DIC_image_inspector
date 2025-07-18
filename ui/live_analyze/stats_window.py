@@ -283,12 +283,29 @@ class StatsWindow:
         else:
             self.live_analyze_mode.pause_analysis()
             self.pause_button.configure(text="Resume")
-    
+
     def _stop_analysis(self):
         """Stop the live analysis."""
-        self.live_analyze_mode.stop_live_analysis()
-        self.pause_button.configure(text="Pause", state='disabled')
-        self.stop_button.configure(state='disabled')
+        try:
+            # Stop analysis first
+            if hasattr(self, 'live_analyze_mode') and self.live_analyze_mode:
+                self.live_analyze_mode.stop_live_analysis()
+
+            # Then update buttons safely
+            try:
+                if hasattr(self, 'pause_button') and self.pause_button and self.pause_button.winfo_exists():
+                    self.pause_button.configure(text="Pause", state='disabled')
+            except (tk.TclError, AttributeError):
+                pass  # Button already destroyed or doesn't exist
+
+            try:
+                if hasattr(self, 'stop_button') and self.stop_button and self.stop_button.winfo_exists():
+                    self.stop_button.configure(state='disabled')
+            except (tk.TclError, AttributeError):
+                pass  # Button already destroyed or doesn't exist
+
+        except Exception as e:
+            logger.error(f"Error in stop analysis: {e}")
     
     def _export_results(self):
         """Export the current results."""

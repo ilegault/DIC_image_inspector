@@ -2,7 +2,7 @@
 
 import cv2
 import numpy as np
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 import logging
 from analysis.gradient_analysis import GradientAnalyzer
 
@@ -572,95 +572,86 @@ class QualityCalculator:
         
         return min(1.0, entropy_score)
 
-    def calculate_live_analysis_quality(self, image: np.ndarray, grid_size: tuple = None) -> tuple:
+    def calculate_live_analysis_quality(self, image: np.ndarray, roi_coords: Optional[List[Tuple[int, int]]] = None,
+                                        grid_size: Optional[Tuple[int, int]] = None) -> Tuple[np.ndarray, float]:
         """
-        Calculate quality for live analysis with accurate score but simplified quality map.
-
-        This method maintains full accuracy for the numerical score using all DIC parameters
-        (MIG, Ef, etc.) while generating a simplified quality map for visualization performance.
+        Calculate quality map for live analysis with optional ROI masking.
 
         Args:
-            image: Grayscale image array
-            grid_size: Optional (rows, cols) for quality map grid. Auto-determined if None.
+            image: Input image array
+            roi_coords: Optional polygon ROI coordinates (image-relative)
+            grid_size: Optional grid size for quality map
 
         Returns:
-            Tuple of (quality_map, overall_score) where:
-            - quality_map: Simplified visualization map (0-1 range)
-            - overall_score: Accurate quality score using full DIC calculations
+            Tuple of (quality_map, overall_score)
         """
-        try:
-            # Ensure grayscale
-            if len(image.shape) == 3:
-                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            else:
-                gray = image.copy()
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image.copy()
 
+        # Create ROI mask if coordinates provided
+        roi_mask = None
+        if roi_coords and len(roi_coords) >= 3:
+            roi_mask = np.zeros(gray.shape[:2], dtype=np.uint8)
+            pts = np.array(roi_coords, dtype=np.int32)
+
+            # Clamp coordinates to image bounds
             h, w = gray.shape
+            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
+            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
 
-            # Step 1: Calculate ACCURATE overall score for the entire image
-            # This uses calculate_subset_quality which already includes all your DIC parameters
-            overall_score = self.calculate_subset_quality(gray)
+            cv2.fillPoly(roi_mask, [pts], 255)
 
-            logger.info(f"Full quality score: {overall_score:.3f} (using MIG={self.mig_normalization_factor}, "
-                        f"Ef={self.ef_normalization_factor})")
+            # Apply mask to image for analysis
+            masked_gray = cv2.bitwise_and(gray, gray, mask=roi_mask)
+        else:
+            masked_gray = gray
 
-            # Step 2: Generate simplified quality map for visualization only
-            logger.info("Generating simplified quality map for visualization...")
+        # Calculate quality map using gradient analysis (fast for live mode)
+        grad_x = cv2.Sobel(masked_gray, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(masked_gray, cv2.CV_32F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
 
-            # Auto-determine grid size based on image dimensions
-            if grid_size is None:
-                if min(h, w) < 100:
-                    grid_size = (5, 5)
-                elif min(h, w) < 300:
-                    grid_size = (10, 10)
-                elif min(h, w) < 600:
-                    grid_size = (15, 15)
-                else:
-                    grid_size = (20, 20)
+        # Normalize
+        max_grad = gradient_magnitude.max()
+        if max_grad > 0:
+            quality_map = gradient_magnitude / max_grad
+        else:
+            quality_map = np.zeros_like(gradient_magnitude)
 
-            grid_rows, grid_cols = grid_size
+        # Apply smoothing
+        quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
 
-            # Calculate cell dimensions
-            cell_h = h // grid_rows
-            cell_w = w // grid_cols
+        # Calculate overall score
+        if roi_mask is not None:
+            # Score only from ROI pixels
+            roi_pixels = quality_map[roi_mask > 0]
+            overall_score = float(np.mean(roi_pixels)) if len(roi_pixels) > 0 else 0.0
+        else:
+            # Score from entire image
+            overall_score = float(np.mean(quality_map))
 
-            # Initialize quality grid
-            quality_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+        # Log the analysis details
+        logger.info(f"Full quality score: {overall_score:.3f} (using MIG={self.mig_norm}, Ef={self.ef_norm})")
+        logger.info(f"Generating simplified quality map for visualization...")
+        logger.info(
+            f"Live analysis complete: score={overall_score:.3f}, grid={grid_size if grid_size else 'auto'}, image={gray.shape}")
 
-            # Process each grid cell
-            for i in range(grid_rows):
-                for j in range(grid_cols):
-                    # Extract cell region
-                    y_start = i * cell_h
-                    y_end = min((i + 1) * cell_h, h)
-                    x_start = j * cell_w
-                    x_end = min((j + 1) * cell_w, w)
+        return quality_map, overall_score
 
-                    cell = gray[y_start:y_end, x_start:x_end]
+    def _calculate_quality_map_with_mask(self, gray: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Calculate quality map only for masked regions."""
+        # Use gradient-based quality for speed
+        grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
 
-                    # Calculate quality for this cell using your existing method
-                    # This uses all your DIC parameters (MIG, Ef, etc.)
-                    cell_quality = self.calculate_subset_quality(cell)
-                    quality_grid[i, j] = cell_quality
+        # Normalize and apply mask
+        quality_map = gradient_magnitude / (gradient_magnitude.max() + 1e-6)
+        quality_map = quality_map * (mask / 255.0)  # Apply mask
 
-            # Upscale grid to full image size for visualization
-            quality_map = cv2.resize(quality_grid, (w, h), interpolation=cv2.INTER_CUBIC)
-
-            # Apply light smoothing for visual appeal
-            quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
-
-            # Ensure range is 0-1
-            quality_map = np.clip(quality_map, 0, 1)
-
-            logger.info(f"Live analysis complete: score={overall_score:.3f}, "
-                        f"grid={grid_size}, image={gray.shape}")
-
-            return quality_map, overall_score
-
-        except Exception as e:
-            logger.error(f"Error in calculate_live_analysis_quality: {e}")
-            # Return fallback values
-            return np.zeros_like(gray, dtype=np.float32), 0.0
+        return quality_map
 
     def calculate_live_analysis_quality_parallel(self, image: np.ndarray, grid_size: tuple = None) -> tuple:
         """
