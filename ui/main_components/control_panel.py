@@ -37,6 +37,7 @@ class ControlPanel:
             'step_size': tk.StringVar(value='4'),
             'subset_size': tk.StringVar(value='19')
         }
+        self.live_freq_var = tk.StringVar(value="1 second")
 
         self._create_panel()
 
@@ -69,7 +70,7 @@ class ControlPanel:
             bg=colors['panel_bg'],
             troughcolor=colors['hover_bg'],
             activebackground=colors['selected_bg'],
-            width=12  # Narrower scrollbar to save space
+            width=12
         )
 
         self.scrollable_frame = tk.Frame(self.canvas, bg=colors['panel_bg'])
@@ -87,7 +88,7 @@ class ControlPanel:
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        # Add padding inside the scrollable panel (minimal padding for more space)
+        # Add padding inside the scrollable panel
         self.inner_frame = tk.Frame(
             self.scrollable_frame,
             bg=colors['panel_bg']
@@ -99,6 +100,7 @@ class ControlPanel:
 
         # Create sections
         self._create_primary_controls()
+        self._create_live_analysis_section()  # ADDED: Live analysis section
         self._create_secondary_controls()
         self._create_navigation_and_analysis_controls()
 
@@ -759,44 +761,43 @@ class ControlPanel:
         except Exception:
             pass
 
-    def update_state(self, state: str):
-        """Update button states based on application state."""
-        self.current_state = state
-
-        # Define button states for each application state
+    def update_state(self, state):
+        """Enhanced state update including live analysis controls."""
+        # Enhanced state configurations with live analysis
         state_configs = {
             'no_image': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'reset_btn', 'theme_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'theme_btn'],
                 'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn',
-                             'reset_display_btn',
-                             'zoom_in_btn', 'zoom_out_btn', 'zoom_actual_btn'],
-                'special': {}
+                           'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
+                           'zoom_actual_btn', 'live_analysis_btn', 'live_freq_menu'],
+                'special': {'roi_btn': {'text': ' Select ROI'}}
             },
             'image_loaded': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn',
-                            'reset_display_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_actual_btn', 'theme_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn',
+                           'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
+                           'zoom_actual_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
                 'special': {'roi_btn': {'text': ' Select ROI'}}
             },
             'roi_selected': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn', 'reset_btn',
-                            'reset_display_btn',
-                            'zoom_in_btn', 'zoom_out_btn', 'zoom_actual_btn', 'theme_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn',
+                           'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
+                           'zoom_actual_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
                 'special': {'roi_btn': {'text': ' New ROI'}}
             },
             'analyzing': {
                 'enabled': ['help_btn', 'theme_btn'],
-                'disabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn',
-                             'save_btn', 'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
-                             'zoom_actual_btn'],
+                'disabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn',
+                           'results_btn', 'save_btn', 'reset_btn', 'reset_display_btn', 'zoom_in_btn',
+                           'zoom_out_btn', 'zoom_actual_btn', 'live_analysis_btn', 'live_freq_menu'],
                 'special': {'analyze_btn': {'text': ' Analyzing...'}}
             },
             'analysis_complete': {
-                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn',
-                            'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
-                            'zoom_actual_btn', 'theme_btn'],
+                'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn',
+                           'results_btn', 'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
+                           'zoom_in_btn', 'zoom_out_btn', 'zoom_actual_btn', 'theme_btn',
+                           'live_analysis_btn', 'live_freq_menu'],
                 'disabled': [],
                 'special': {
                     'analyze_btn': {'text': ' Analyze'},
@@ -854,3 +855,91 @@ class ControlPanel:
         """Update zoom level display."""
         percentage = int(zoom_level * 100)
         self.zoom_level_var.set(f"{percentage}%")
+
+    def _create_live_analysis_section(self):
+        """Create live analysis section in control panel."""
+        colors = get_theme_colors()
+
+        # Live Analysis Card
+        live_card = self._create_modern_card(self.inner_frame, "🔴 Live Analysis")
+
+        # Live Analysis button
+        live_btn_frame = tk.Frame(live_card, bg=colors['panel_bg'])
+        live_btn_frame.pack(fill='x', padx=16, pady=(16, 8))
+
+        self.live_analysis_btn = self._create_modern_button(
+            live_btn_frame,
+            "🔴 Start Live Analysis",
+            colors.get('btn_success', '#10b981'),
+            command=lambda: self._execute_callback('start_live_analysis'),
+            style='primary'
+        )
+        self.live_analysis_btn.pack(fill='x')
+        self.buttons['live_analysis_btn'] = self.live_analysis_btn
+
+        # Frequency control
+        freq_frame = tk.Frame(live_card, bg=colors['panel_bg'])
+        freq_frame.pack(fill='x', padx=16, pady=(0, 16))
+
+        freq_label = tk.Label(
+            freq_frame,
+            text="ROI Update Frequency:",
+            font=APP_CONFIG['fonts']['small_bold'],
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg']
+        )
+        freq_label.pack(anchor='w', pady=(0, 4))
+
+        # Frequency selector with mapping
+        frequencies = ["0.1 sec", "0.5 sec", "1 second", "2 seconds", "5 seconds"]
+
+        self.freq_mapping = {
+            "0.1 sec": 100,
+            "0.5 sec": 500,
+            "1 second": 1000,
+            "2 seconds": 2000,
+            "5 seconds": 5000
+        }
+
+        freq_selector_frame = tk.Frame(freq_frame, bg=colors['panel_bg'])
+        freq_selector_frame.pack(fill='x')
+
+        self.freq_menu = tk.OptionMenu(
+            freq_selector_frame,
+            self.live_freq_var,
+            *frequencies,
+            command=self.on_live_frequency_change
+        )
+        self.freq_menu.config(
+            bg=colors['canvas_bg'],
+            fg=colors['text_primary'],
+            font=APP_CONFIG['fonts']['small'],
+            relief='flat',
+            bd=1,
+            highlightthickness=0,
+            activebackground=colors['hover_bg']
+        )
+        self.freq_menu.pack(fill='x')
+        self.buttons['live_freq_menu'] = self.freq_menu
+
+    def on_live_frequency_change(self, selected_freq):
+        """Handle live analysis frequency change."""
+        frequency_ms = self.freq_mapping.get(selected_freq, 1000)
+        self._execute_callback('live_frequency_changed', frequency_ms)
+
+    def update_live_analysis_button(self, is_active):
+        """Update live analysis button appearance."""
+        colors = get_theme_colors()
+
+        if is_active:
+            self.live_analysis_btn.config(
+                text="⏹️ Stop Live Analysis",
+                bg=colors.get('btn_danger', '#dc2626'),
+                command=lambda: self._execute_callback('stop_live_analysis')
+            )
+        else:
+            self.live_analysis_btn.config(
+                text="🔴 Start Live Analysis",
+                bg=colors.get('btn_success', '#10b981'),
+                command=lambda: self._execute_callback('start_live_analysis')
+            )

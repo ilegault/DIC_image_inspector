@@ -23,6 +23,7 @@ from models.analysis_result import AnalysisResult
 from core.image_analyzer import ImageAnalyzer
 from core.report_generator import ReportGenerator
 from utils.file_operations import FileOperationsManager
+from ui.live_analyze import LiveAnalyzeMode
 
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.modern_styling import ModernStyleManager
@@ -64,6 +65,9 @@ class DICQualityInspector:
 
         # Style manager
         self.style_manager = ModernStyleManager()
+
+        # Initialize live analysis mode
+        self.live_mode = None
 
         # Create UI
         self._create_ui()
@@ -304,7 +308,11 @@ class DICQualityInspector:
             'spectrum_changed': self.on_spectrum_changed,
             'zoom_in': self.zoom_in,
             'zoom_out': self.zoom_out,
-            'zoom_actual': self.zoom_actual
+            'zoom_actual': self.zoom_actual,
+            # ADDED: Live analysis callbacks
+            'start_live_analysis': self.start_live_analysis,
+            'stop_live_analysis': self.stop_live_analysis,
+            'live_frequency_changed': self.on_live_frequency_changed
         }
 
         self.control_panel = ControlPanel(left_panel, control_callbacks)
@@ -900,6 +908,68 @@ class DICQualityInspector:
     def _get_roi_info(self) -> Optional[Dict[str, Any]]:
         """Get ROI information for report."""
         return self.state.get_roi_info()
+
+    def start_live_analysis(self):
+        """Start live analysis mode."""
+        try:
+            # Check if image is loaded
+            if not self.state.has_image():
+                messagebox.showwarning(
+                    "No Image",
+                    "Please load an image first before starting live analysis."
+                )
+                return
+
+            # Initialize live mode if not already done
+            if not self.live_mode:
+                self.live_mode = LiveAnalyzeMode(self.root, self)
+
+            # Update control panel button
+            if hasattr(self.control_panel, 'update_live_analysis_button'):
+                self.control_panel.update_live_analysis_button(True)
+
+            # Start live analysis
+            self.live_mode.start_live_analysis(
+                on_roi_selected=self.on_live_roi_selected,
+                on_analysis_complete=self.on_live_analysis_complete
+            )
+
+            self.status_var.set("Live analysis started - Select ROI region")
+
+        except Exception as e:
+            messagebox.showerror("Live Analysis Error", f"Failed to start: {str(e)}")
+            logger.error(f"Error starting live analysis: {e}")
+
+    def stop_live_analysis(self):
+        """Stop live analysis mode."""
+        try:
+            if self.live_mode:
+                self.live_mode.stop_live_analysis()
+
+            # Update control panel button
+            if hasattr(self.control_panel, 'update_live_analysis_button'):
+                self.control_panel.update_live_analysis_button(False)
+
+            self.status_var.set("Live analysis stopped")
+
+        except Exception as e:
+            messagebox.showerror("Live Analysis Error", f"Failed to stop: {str(e)}")
+            logger.error(f"Error stopping live analysis: {e}")
+
+    def on_live_frequency_changed(self, frequency_ms):
+        """Handle live analysis frequency change."""
+        if self.live_mode:
+            self.live_mode.set_update_frequency(frequency_ms)
+            logger.info(f"Live analysis frequency updated to: {frequency_ms}ms")
+
+    def on_live_roi_selected(self, roi_coords):
+        """Callback when ROI is selected in live analysis."""
+        self.status_var.set(f"Live ROI selected ({len(roi_coords)} points) - Analysis active")
+        logger.info(f"Live analysis ROI selected: {len(roi_coords)} points")
+
+    def on_live_analysis_complete(self, quality_map, overall_score):
+        """Callback when live analysis is complete."""
+        self.status_var.set(f"Live analysis active - Score: {overall_score:.3f}")
 
     # State change observers
     def _on_analysis_result_changed(self, result: AnalysisResult):
