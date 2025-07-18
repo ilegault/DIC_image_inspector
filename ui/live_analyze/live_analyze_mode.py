@@ -285,20 +285,27 @@ class LiveAnalyzeMode:
         total_start = time.time()
 
         try:
-            # Phase 1: Capture screen
+            # Phase 1: Capture screen with MINIMAL window interference
             capture_start = time.time()
 
-            # Hide overlays before capture
-            if self.quality_overlay:
-                self.quality_overlay.hide()
-
-            # Brief delay to ensure overlay is hidden
-            self.root.update_idletasks()
-            time.sleep(0.01)
-
-            # Capture only ROI area for efficiency
-            screenshot = ImageGrab.grab(bbox=self.roi_bounds)
-            roi_array = np.array(screenshot)
+            # Use fast minimize/restore approach to avoid flickering
+            # This is much faster than withdraw/deiconify and reduces flicker
+            windows_minimized = self._minimize_analysis_windows()
+            
+            try:
+                # Very brief pause to ensure minimize takes effect
+                if windows_minimized:
+                    time.sleep(0.01)  # Minimal delay
+                
+                # Capture current screen (now without analysis windows)
+                screenshot = ImageGrab.grab(bbox=self.roi_bounds)
+                roi_array = np.array(screenshot)
+                
+                logger.debug(f"Screen captured - {len(windows_minimized)} windows minimized")
+                
+            finally:
+                # Immediately restore windows
+                self._restore_analysis_windows(windows_minimized)
 
             capture_time = time.time() - capture_start
             self.perf_stats['capture_times'].append(capture_time)
@@ -345,12 +352,11 @@ class LiveAnalyzeMode:
                 'roi_size': roi_array.shape[:2]
             })
 
-            # Update displays
+            # Update displays (EFFICIENT - only content changes)
             self._update_displays(quality_map, overall_score)
 
-            # Show overlay again
-            if self.quality_overlay:
-                self.quality_overlay.show()
+            # NO NEED TO SHOW/HIDE - windows stay visible throughout
+            # This eliminates the flickering "turn off/on" effect
 
             display_time = time.time() - display_start
             self.perf_stats['display_times'].append(display_time)
@@ -376,6 +382,42 @@ class LiveAnalyzeMode:
         finally:
             # Schedule next analysis
             self._schedule_next_roi_analysis()
+
+    def _minimize_analysis_windows(self):
+        """Minimize analysis windows quickly for clean capture."""
+        minimized_windows = []
+        
+        # Minimize quality overlay
+        if self.quality_overlay and hasattr(self.quality_overlay, 'overlay'):
+            try:
+                overlay = self.quality_overlay.overlay
+                if overlay.winfo_exists() and overlay.state() == 'normal':
+                    overlay.iconify()  # Fast minimize
+                    minimized_windows.append(('quality_overlay', overlay))
+            except Exception as e:
+                logger.debug(f"Error minimizing quality overlay: {e}")
+        
+        # Minimize stats window
+        if self.stats_window and hasattr(self.stats_window, 'window'):
+            try:
+                window = self.stats_window.window
+                if window.winfo_exists() and window.state() == 'normal':
+                    window.iconify()  # Fast minimize
+                    minimized_windows.append(('stats_window', window))
+            except Exception as e:
+                logger.debug(f"Error minimizing stats window: {e}")
+        
+        return minimized_windows
+
+    def _restore_analysis_windows(self, minimized_windows):
+        """Restore analysis windows immediately after capture."""
+        for window_type, window in minimized_windows:
+            try:
+                if window.winfo_exists():
+                    window.deiconify()  # Fast restore
+                    window.lift()  # Bring to front
+            except Exception as e:
+                logger.debug(f"Error restoring {window_type}: {e}")
 
     def _get_roi_hash(self, roi_array: np.ndarray) -> int:
         """Generate fast hash of ROI for caching."""
@@ -405,6 +447,12 @@ class LiveAnalyzeMode:
             if self.roi_coords and len(self.roi_coords) >= 3:
                 x1, y1, x2, y2 = self.roi_bounds
                 roi_coords_relative = [(x - x1, y - y1) for x, y in self.roi_coords]
+                
+                # Debug logging
+                logger.debug(f"ROI bounds: {self.roi_bounds}")
+                logger.debug(f"Original ROI coords: {self.roi_coords}")
+                logger.debug(f"Relative ROI coords: {roi_coords_relative}")
+                logger.debug(f"Captured image shape: {gray.shape}")
 
             # Check if calculator has optimized method
             if hasattr(self.quality_calculator, 'calculate_live_analysis_quality'):

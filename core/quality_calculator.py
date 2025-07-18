@@ -633,7 +633,7 @@ class QualityCalculator:
             overall_score = float(np.mean(quality_map))
 
         # Log the analysis details
-        logger.info(f"Full quality score: {overall_score:.3f} (using MIG={self.mig_norm}, Ef={self.ef_norm})")
+        logger.info(f"Full quality score: {overall_score:.3f} (using MIG={self.mig_normalization_factor}, Ef={self.ef_normalization_factor})")
         logger.info(f"Generating simplified quality map for visualization...")
         logger.info(
             f"Live analysis complete: score={overall_score:.3f}, grid={grid_size if grid_size else 'auto'}, image={gray.shape}")

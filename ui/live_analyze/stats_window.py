@@ -14,15 +14,14 @@ logger = logging.getLogger(__name__)
 
 class StatsWindow:
     """
-    Statistics window for live analysis mode.
+    TRULY STATIC Statistics window for live analysis mode.
     
-    Displays real-time statistics, history graphs, and control buttons.
-    Can be hidden during screen captures to ensure clean analysis data.
+    Window created ONCE, only data content updates. No window recreation or layout changes.
     """
     
     def __init__(self, parent_window, live_analyze_mode):
         """
-        Initialize the statistics window.
+        Initialize the statistics window ONCE - never recreate.
         
         Args:
             parent_window: Parent tkinter window
@@ -31,40 +30,188 @@ class StatsWindow:
         self.parent = parent_window
         self.live_analyze_mode = live_analyze_mode
         
-        # Create window
-        self.window = tk.Toplevel(parent_window)
-        self.window.title("Live Analysis Statistics")
-        self.window.geometry("600x500")
-        self.window.attributes('-topmost', True)
-        
-        # Make window resizable
-        self.window.resizable(True, True)
-        
-        # Configure grid weights
-        self.window.grid_rowconfigure(1, weight=1)
-        self.window.grid_columnconfigure(0, weight=1)
-        
-        # Create UI components
-        self._create_control_panel()
-        self._create_stats_display()
-        self._create_graph_display()
-        
         # Data for plotting
         self.timestamps = []
         self.scores = []
-        self.max_history_points = 50
+        self.max_history_points = 100
+        self.start_time = time.time()
+        self.graph_update_counter = 0
         
         # Update timer
         self.update_timer_id = None
         self.graph_update_interval = 2000  # Update graph every 2 seconds
         
+        # Create window structure ONCE
+        self._create_static_window()
+        
+        logger.info("TrulyStaticStatsWindow created ONCE")
+    
+    def _create_static_window(self):
+        """Create ALL window elements ONCE - never called again."""
+        # Create window ONCE
+        self.window = tk.Toplevel(self.parent)
+        self.window.title("📊 Static Statistics Dashboard")
+        self.window.geometry("650x550+200+200")
+        self.window.attributes('-topmost', True)
+        
+        # Prevent accidental destruction - CRITICAL for static behavior
+        self.window.protocol("WM_DELETE_WINDOW", lambda: self.window.withdraw())
+        
+        # Header (NEVER changes)
+        header_frame = tk.Frame(self.window, bg='navy', height=40)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="📊 Static Dashboard - Window Created Once",
+            bg='navy',
+            fg='white',
+            font=('Arial', 12, 'bold')
+        ).pack(side='left', padx=10, pady=8)
+        
+        # Main content (NEVER changes structure)
+        main_frame = tk.Frame(self.window)
+        main_frame.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # Statistics display (ONLY text content changes via StringVar)
+        stats_frame = tk.LabelFrame(main_frame, text="📈 Live Statistics", font=('Arial', 10, 'bold'))
+        stats_frame.pack(fill='x', pady=(0, 5))
+        
+        stats_grid = tk.Frame(stats_frame)
+        stats_grid.pack(fill='x', padx=10, pady=5)
+        
+        # Create ALL labels ONCE - only StringVar content changes
+        tk.Label(stats_grid, text="Current Score:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky='w', padx=5)
+        self.current_score_var = tk.StringVar(value="0.000")
+        tk.Label(stats_grid, textvariable=self.current_score_var, font=('Arial', 9, 'bold'), fg='blue').grid(row=0, column=1, sticky='w', padx=5)
+        
+        tk.Label(stats_grid, text="Average Score:", font=('Arial', 9, 'bold')).grid(row=0, column=2, sticky='w', padx=15)
+        self.avg_score_var = tk.StringVar(value="0.000")
+        tk.Label(stats_grid, textvariable=self.avg_score_var, font=('Arial', 9, 'bold'), fg='green').grid(row=0, column=3, sticky='w', padx=5)
+        
+        tk.Label(stats_grid, text="Analysis Count:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky='w', padx=5)
+        self.count_var = tk.StringVar(value="0")
+        tk.Label(stats_grid, textvariable=self.count_var, font=('Arial', 9, 'bold'), fg='purple').grid(row=1, column=1, sticky='w', padx=5)
+        
+        tk.Label(stats_grid, text="Runtime:", font=('Arial', 9, 'bold')).grid(row=1, column=2, sticky='w', padx=15)
+        self.runtime_var = tk.StringVar(value="00:00")
+        tk.Label(stats_grid, textvariable=self.runtime_var, font=('Arial', 9, 'bold'), fg='orange').grid(row=1, column=3, sticky='w', padx=5)
+        
+        # Control panel (NEVER changes structure)
+        control_frame = tk.LabelFrame(main_frame, text="🎛️ Controls", font=('Arial', 10, 'bold'))
+        control_frame.pack(fill='x', pady=(0, 5))
+        
+        controls_grid = tk.Frame(control_frame)
+        controls_grid.pack(fill='x', padx=10, pady=5)
+        
+        # Create ALL buttons ONCE - only state/text changes
+        self.pause_button = tk.Button(
+            controls_grid, 
+            text="Pause", 
+            command=self._toggle_pause,
+            bg='orange',
+            fg='white',
+            font=('Arial', 9, 'bold')
+        )
+        self.pause_button.grid(row=0, column=0, padx=5, pady=2, sticky='ew')
+        
+        self.stop_button = tk.Button(
+            controls_grid, 
+            text="Stop", 
+            command=self._stop_analysis,
+            bg='red',
+            fg='white',
+            font=('Arial', 9, 'bold')
+        )
+        self.stop_button.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
+        
+        self.export_button = tk.Button(
+            controls_grid, 
+            text="Export", 
+            command=self._export_results,
+            bg='green',
+            fg='white',
+            font=('Arial', 9, 'bold')
+        )
+        self.export_button.grid(row=0, column=2, padx=5, pady=2, sticky='ew')
+        
+        # Frequency control (ONLY value changes)
+        tk.Label(controls_grid, text="Update Freq (sec):", font=('Arial', 9, 'bold')).grid(row=0, column=3, padx=15, sticky='w')
+        self.freq_var = tk.StringVar(value="1.0")
+        freq_spinbox = tk.Spinbox(
+            controls_grid,
+            from_=0.1,
+            to=10.0,
+            increment=0.1,
+            width=6,
+            textvariable=self.freq_var,
+            command=self._update_frequency
+        )
+        freq_spinbox.grid(row=0, column=4, padx=5, sticky='w')
+        
+        # Configure grid weights for buttons
+        for i in range(5):
+            controls_grid.grid_columnconfigure(i, weight=1)
+        
+        # Graph display (NEVER changes structure)
+        self._create_static_graph_display(main_frame)
+        
+        # Status bar (NEVER changes structure)
+        status_frame = tk.Frame(self.window, bg='gray20', height=25)
+        status_frame.pack(fill='x')
+        status_frame.pack_propagate(False)
+        
+        # Status text (ONLY content changes via StringVar)
+        self.status_var = tk.StringVar(value="Static window created - waiting for data...")
+        tk.Label(
+            status_frame,
+            textvariable=self.status_var,
+            bg='gray20',
+            fg='lightgreen',
+            font=('Arial', 8)
+        ).pack(side='left', padx=5, pady=2)
+        
+        # Graph update counter (ONLY content changes via StringVar)
+        self.graph_update_count_var = tk.StringVar(value="Graph Updates: 0")
+        tk.Label(
+            status_frame,
+            textvariable=self.graph_update_count_var,
+            bg='gray20',
+            fg='lightblue',
+            font=('Arial', 8)
+        ).pack(side='right', padx=5, pady=2)
+        
         # Start graph updates
         self._schedule_graph_update()
         
-        # Window close handler
-        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
+        logger.info("Static stats window structure created ONCE")
+    
+    def _create_static_graph_display(self, parent_frame):
+        """Create the graph display area ONCE."""
+        graph_frame = tk.LabelFrame(parent_frame, text="📈 Quality History", font=('Arial', 10, 'bold'))
+        graph_frame.pack(fill='both', expand=True, pady=(0, 5))
         
-        logger.info("StatsWindow initialized")
+        # Create matplotlib figure ONCE
+        self.fig, self.ax = plt.subplots(figsize=(8, 3))
+        self.fig.patch.set_facecolor('white')
+        
+        # Configure plot ONCE
+        self.ax.set_xlabel('Time (seconds)')
+        self.ax.set_ylabel('Quality Score')
+        self.ax.set_title('Real-time Quality Score History')
+        self.ax.grid(True, alpha=0.3)
+        self.ax.set_ylim(0, 1)
+        
+        # Create empty line plot ONCE
+        self.line, = self.ax.plot([], [], 'b-', linewidth=2, label='Quality Score')
+        self.ax.legend()
+        
+        # Embed plot in tkinter ONCE
+        self.canvas = FigureCanvasTkAgg(self.fig, graph_frame)
+        self.canvas.get_tk_widget().pack(fill='both', expand=True, padx=5, pady=5)
+        
+        logger.info("Static graph display created ONCE")
     
     def _create_control_panel(self):
         """Create the control panel with buttons and settings."""
@@ -195,7 +342,7 @@ class StatsWindow:
     
     def update_stats(self, score: float, timestamp: float, history: List[Dict[str, Any]]):
         """
-        Update the statistics display.
+        Update ONLY the StringVar content - NO window changes.
         
         Args:
             score: Current quality score
@@ -203,21 +350,14 @@ class StatsWindow:
             history: List of historical analysis data
         """
         try:
-            # Update current score
+            # Update ONLY StringVar content (EFFICIENT - no layout changes)
             self.current_score_var.set(f"{score:.3f}")
             
             # Calculate statistics from history
             if history:
                 scores = [item['score'] for item in history]
                 self.avg_score_var.set(f"{np.mean(scores):.3f}")
-                self.min_score_var.set(f"{np.min(scores):.3f}")
-                self.max_score_var.set(f"{np.max(scores):.3f}")
-                self.analysis_count_var.set(str(len(history)))
-                
-                # Get ROI size from latest entry
-                if 'roi_size' in history[-1]:
-                    roi_size = history[-1]['roi_size']
-                    self.roi_size_var.set(f"{roi_size[1]}x{roi_size[0]}")
+                self.count_var.set(str(len(history)))
             
             # Update runtime
             runtime_seconds = int(timestamp - self.start_time)
@@ -225,18 +365,15 @@ class StatsWindow:
             seconds = runtime_seconds % 60
             self.runtime_var.set(f"{minutes:02d}:{seconds:02d}")
             
-            # Update status
+            # Update status (ONLY text content changes)
             if self.live_analyze_mode.is_paused:
-                self.status_var.set("Paused")
-                self.status_label.configure(foreground='orange')
+                self.status_var.set("Status: Paused")
             elif self.live_analyze_mode.is_active:
-                self.status_var.set("Running")
-                self.status_label.configure(foreground='green')
+                self.status_var.set("Status: Running")
             else:
-                self.status_var.set("Stopped")
-                self.status_label.configure(foreground='red')
+                self.status_var.set("Status: Stopped")
             
-            # Store data for graph
+            # Store data for graph (EFFICIENT - only data changes)
             relative_time = timestamp - self.start_time
             self.timestamps.append(relative_time)
             self.scores.append(score)
@@ -246,25 +383,36 @@ class StatsWindow:
                 self.timestamps = self.timestamps[-self.max_history_points:]
                 self.scores = self.scores[-self.max_history_points:]
             
+            logger.debug(f"Stats updated - Score: {score:.3f}, Count: {len(history)}")
+            
         except Exception as e:
-            logger.error(f"Error updating stats: {e}")
+            logger.error(f"Error updating stats content: {e}")
+            self.status_var.set(f"Error: {str(e)[:50]}...")
     
     def _update_graph(self):
-        """Update the graph display."""
+        """Update ONLY the graph data - NO layout changes."""
         try:
+            self.graph_update_counter += 1
+            
             if len(self.timestamps) > 0 and len(self.scores) > 0:
-                # Update line data
+                # Update ONLY line data (EFFICIENT - no layout changes)
                 self.line.set_data(self.timestamps, self.scores)
                 
-                # Update axis limits
+                # Update axis limits only if needed
                 if len(self.timestamps) > 1:
                     self.ax.set_xlim(min(self.timestamps), max(self.timestamps))
                 
-                # Refresh canvas
+                # Refresh canvas (EFFICIENT - only data changes)
                 self.canvas.draw_idle()
                 
+                # Update counter display
+                self.graph_update_count_var.set(f"Graph Updates: {self.graph_update_counter}")
+                
+                logger.debug(f"Graph updated #{self.graph_update_counter} - ONLY data changed")
+                
         except Exception as e:
-            logger.error(f"Error updating graph: {e}")
+            logger.error(f"Error updating graph content: {e}")
+            self.status_var.set(f"Graph Error: {str(e)[:30]}...")
     
     def _schedule_graph_update(self):
         """Schedule the next graph update."""
@@ -351,19 +499,19 @@ class StatsWindow:
         self.hide()
     
     def hide(self):
-        """Hide the statistics window."""
+        """Hide window without destroying it."""
         if self.window:
             self.window.withdraw()
     
     def show(self):
-        """Show the statistics window."""
+        """Show window without recreating it."""
         if self.window:
             self.window.deiconify()
             self.window.lift()
             self.window.attributes('-topmost', True)
     
     def close(self):
-        """Close the statistics window."""
+        """Destroy window when truly done."""
         try:
             # Cancel update timer
             if self.update_timer_id:
@@ -379,10 +527,10 @@ class StatsWindow:
                 self.window.destroy()
                 self.window = None
                 
-            logger.info("StatsWindow closed")
+            logger.info("Static stats window destroyed")
             
         except Exception as e:
-            logger.error(f"Error closing stats window: {e}")
+            logger.error(f"Error destroying stats window: {e}")
     
     def save_graph(self, filepath: str) -> bool:
         """
