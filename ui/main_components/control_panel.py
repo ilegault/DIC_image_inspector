@@ -32,7 +32,6 @@ class ControlPanel:
 
         # UI elements
         self.buttons = {}
-        self.spectrum_var = tk.StringVar(value='optimized')
         self.control_params = {
             'step_size': tk.StringVar(value='4'),
             'subset_size': tk.StringVar(value='19')
@@ -99,10 +98,10 @@ class ControlPanel:
         self._bind_mousewheel()
 
         # Create sections
+        self._create_live_analysis_section()  # ADDED: Live analysis section - moved to top
         self._create_primary_controls()
-        self._create_live_analysis_section()  # ADDED: Live analysis section
         self._create_secondary_controls()
-        self._create_navigation_and_analysis_controls()
+        # Navigation controls moved to top bar - no longer created here
 
     def _bind_mousewheel(self):
         """Bind mouse wheel events for scrolling."""
@@ -132,10 +131,10 @@ class ControlPanel:
 
         # Primary buttons with clean modern styling
         primary_buttons = [
-            ('load_btn', " Load Image", colors.get('btn_primary', '#2563eb'), 'load_image'),
-            ('screenshot_btn', " Screenshot", colors.get('btn_info', '#3b82f6'), 'take_screenshot'),
-            ('roi_btn', " Select ROI", colors.get('btn_secondary', '#6b7280'), 'select_roi'),
-            ('analyze_btn', " Analyze", colors.get('btn_success', '#10b981'), 'analyze_image')
+            ('load_btn', "📁 Load Image", colors.get('btn_primary', '#2563eb'), 'load_image'),
+            ('screenshot_btn', "📷 Screenshot", colors.get('btn_info', '#3b82f6'), 'take_screenshot'),
+            ('roi_btn', "🎯 Select ROI", colors.get('btn_secondary', '#6b7280'), 'select_roi'),
+            ('analyze_btn', "🔬 Analyze", colors.get('btn_success', '#10b981'), 'analyze_image')
         ]
 
         for i, (btn_id, text, color, callback_key) in enumerate(primary_buttons):
@@ -189,8 +188,8 @@ class ControlPanel:
         results_row.pack(fill='x', pady=(0, 8))
 
         results_buttons = [
-            ('quality_map_btn', "️ Quality Map", colors.get('btn_info', '#3b82f6'), 'toggle_quality_map'),
-            ('results_btn', " Show Results", colors.get('btn_primary', '#2563eb'), 'show_results'),
+            ('quality_map_btn', "🗺️ Quality Map", colors.get('btn_info', '#3b82f6'), 'toggle_quality_map'),
+            ('results_btn', "📊 Show Results", colors.get('btn_primary', '#2563eb'), 'show_results'),
         ]
 
         for i, (btn_id, text, color, callback_key) in enumerate(results_buttons):
@@ -210,8 +209,8 @@ class ControlPanel:
         file_row.pack(fill='x', pady=(0, 8))
 
         file_buttons = [
-            ('save_btn', " Save Report", colors.get('btn_success', '#10b981'), 'save_report'),
-            ('help_btn', " Help", colors.get('btn_neutral', '#64748b'), 'show_help'),
+            ('save_btn', "💾 Save Report", colors.get('btn_success', '#10b981'), 'save_report'),
+            ('help_btn', "❓ Help", colors.get('btn_neutral', '#64748b'), 'show_help'),
         ]
 
         for i, (btn_id, text, color, callback_key) in enumerate(file_buttons):
@@ -230,133 +229,30 @@ class ControlPanel:
         system_row = tk.Frame(actions_frame, bg=colors['panel_bg'])
         system_row.pack(fill='x')
 
-        # Update button text based on current theme
-        theme_text = " Light Mode" if self.dark_mode else " Dark Mode"
-
-        system_buttons = [
-            ('theme_btn', theme_text, colors.get('btn_secondary', '#6b7280'), 'toggle_theme'),
-            ('reset_display_btn', " Reset View", colors.get('btn_warning', '#f59e0b'), 'reset_display_results'),
-        ]
-
-        for i, (btn_id, text, color, callback_key) in enumerate(system_buttons):
-            btn = self._create_modern_button(
-                system_row, text, color,
-                command=lambda k=callback_key: self._execute_callback(k),
-                style='secondary'
-            )
-            btn.grid(row=0, column=i, padx=4, pady=0, sticky='ew')
-            self.buttons[btn_id] = btn
-
-        system_row.grid_columnconfigure(0, weight=1)
-        system_row.grid_columnconfigure(1, weight=1)
+        # Only reset display button now (theme moved to top nav)
+        reset_btn = self._create_modern_button(
+            system_row, "🔄 Reset View", colors.get('btn_warning', '#f59e0b'),
+            command=lambda: self._execute_callback('reset_display_results'),
+            style='secondary'
+        )
+        reset_btn.pack(fill='x')
+        self.buttons['reset_display_btn'] = reset_btn
 
         # Danger Zone - Full Reset (separate, prominent)
         danger_frame = tk.Frame(actions_card, bg=colors['panel_bg'])
         danger_frame.pack(fill='x', padx=16, pady=(0, 16))
 
         reset_btn = self._create_modern_button(
-            danger_frame, " Full Reset", colors.get('btn_danger', '#ef4444'),
+            danger_frame, "🗑️ Full Reset", colors.get('btn_danger', '#ef4444'),
             command=lambda: self._execute_callback('reset_application'),
             style='danger'
         )
         reset_btn.pack(fill='x')
         self.buttons['reset_btn'] = reset_btn
 
-    def _create_navigation_and_analysis_controls(self):
-        """Create compact zoom controls with analysis method selector on the right."""
-        colors = get_theme_colors()
 
-        # Combined Navigation & Analysis Card
-        nav_card = self._create_modern_card(self.inner_frame, " Navigation & Analysis")
 
-        nav_content = tk.Frame(nav_card, bg=colors['panel_bg'])
-        nav_content.pack(fill='x', padx=16, pady=16)
 
-        # Main horizontal container
-        main_container = tk.Frame(nav_content, bg=colors['panel_bg'])
-        main_container.pack(fill='x')
-
-        # Left side: Compact zoom controls
-        zoom_section = tk.Frame(main_container, bg=colors['panel_bg'])
-        zoom_section.pack(side='left')
-
-        # Zoom controls title
-        zoom_title = tk.Label(
-            zoom_section,
-            text=" Zoom:",
-            font=APP_CONFIG['fonts']['small_bold'],
-            fg=colors['text_secondary'],
-            bg=colors['panel_bg']
-        )
-        zoom_title.pack(anchor='w', pady=(0, 4))
-
-        # Very compact zoom buttons in single row
-        zoom_frame = tk.Frame(zoom_section, bg=colors['panel_bg'])
-        zoom_frame.pack()
-
-        zoom_buttons = [
-            ('zoom_in_btn', "➕", colors.get('btn_info', '#3b82f6'), 'zoom_in'),
-            ('zoom_out_btn', "➖", colors.get('btn_info', '#3b82f6'), 'zoom_out'),
-            ('zoom_actual_btn', "1:1", colors.get('btn_neutral', '#64748b'), 'zoom_actual')
-        ]
-
-        for i, (btn_id, text, color, callback_key) in enumerate(zoom_buttons):
-            btn = self._create_compact_button(
-                zoom_frame, text, color,
-                command=lambda k=callback_key: self._execute_callback(k)
-            )
-            btn.pack(side='left', padx=1)  # Very tight spacing
-            self.buttons[btn_id] = btn
-
-        # Compact zoom level display
-        self.zoom_level_var = tk.StringVar(value="100%")
-        zoom_label = tk.Label(
-            zoom_section,
-            textvariable=self.zoom_level_var,
-            font=('Segoe UI', 9, 'bold'),
-            fg=colors['text_primary'],
-            bg=colors['panel_bg']
-        )
-        zoom_label.pack(pady=(4, 0))
-
-        # Right side: Analysis method selector
-        analysis_section = tk.Frame(main_container, bg=colors['panel_bg'])
-        analysis_section.pack(side='right', padx=(20, 0))
-
-        # Analysis method title
-        method_title = tk.Label(
-            analysis_section,
-            text=" Method:",
-            font=APP_CONFIG['fonts']['small_bold'],
-            fg=colors['text_secondary'],
-            bg=colors['panel_bg']
-        )
-        method_title.pack(anchor='w', pady=(0, 4))
-
-        # Analysis method selection
-        method_frame = tk.Frame(analysis_section, bg=colors['panel_bg'])
-        method_frame.pack()
-
-        spectrum_options = ['optimized', 'controlled']
-
-        # Compact styled combobox
-        self.spectrum_combo = ttk.Combobox(
-            method_frame,
-            textvariable=self.spectrum_var,
-            values=spectrum_options,
-            state='readonly',
-            width=12,  # Smaller width
-            font=APP_CONFIG['fonts']['small']
-        )
-        self.spectrum_combo.pack()
-        self.spectrum_combo.bind('<<ComboboxSelected>>', self._on_spectrum_changed)
-
-        # Apply combobox styling based on theme
-        self._style_combobox()
-
-        # Control parameters frame (initially hidden)
-        self.control_params_frame = tk.Frame(nav_card, bg=colors['panel_bg'])
-        self._create_control_parameters()
 
     def _create_control_parameters(self):
         """Create control-specific parameter controls with modern styling."""
@@ -631,35 +527,12 @@ class ControlPanel:
 
     def _execute_callback(self, callback_key: str):
         """Execute callback if it exists."""
-        if callback_key == 'toggle_theme':
-            # Handle theme toggle
-            self.dark_mode = not self.dark_mode
-            new_theme = 'dark' if self.dark_mode else 'light'
-            set_theme(new_theme)
-
-            # Update button text
-            if 'theme_btn' in self.buttons:
-                new_text = " Light Mode" if self.dark_mode else " Dark Mode"
-                self.buttons['theme_btn'].config(text=new_text)
-
-            # Notify callback to refresh UI
-            if 'toggle_theme' in self.callbacks:
-                self.callbacks['toggle_theme']()
-        elif callback_key in self.callbacks:
+        if callback_key in self.callbacks:
             self.callbacks[callback_key]()
 
-    def _on_spectrum_changed(self, event=None):
-        """Handle spectrum selection change."""
-        spectrum_type = self.spectrum_var.get()
 
-        # Show/hide control parameters
-        if spectrum_type == 'controlled':
-            self.control_params_frame.pack(fill='x', pady=(0, 0))
-        else:
-            self.control_params_frame.pack_forget()
 
-        # Notify parent
-        self._execute_callback('spectrum_changed')
+
 
     def refresh_theme(self):
         """Refresh all UI elements with new theme colors."""
@@ -828,9 +701,9 @@ class ControlPanel:
         """Update ROI information display."""
         self.roi_info_label.config(text=roi_info)
 
-    def get_selected_spectrum(self) -> str:
-        """Get currently selected spectrum type."""
-        return self.spectrum_var.get()
+
+
+
 
     def get_control_parameters(self) -> Dict[str, Any]:
         """Get control analysis parameters."""
@@ -851,10 +724,7 @@ class ControlPanel:
             else:
                 self.buttons['quality_map_btn'].config(bg=colors.get('info', '#3b82f6'))
 
-    def update_zoom_level(self, zoom_level: float):
-        """Update zoom level display."""
-        percentage = int(zoom_level * 100)
-        self.zoom_level_var.set(f"{percentage}%")
+
 
     def _create_live_analysis_section(self):
         """Create live analysis section in control panel."""
@@ -877,18 +747,5 @@ class ControlPanel:
         self.spinview_capture_btn.pack(fill='x')
         self.buttons['spinview_capture_btn'] = self.spinview_capture_btn
 
-        # Info text
-        info_frame = tk.Frame(live_card, bg=colors['panel_bg'])
-        info_frame.pack(fill='x', padx=16, pady=(0, 16))
 
-        info_label = tk.Label(
-            info_frame,
-            text="📹 Capture live camera feed from SpinView or other camera software\n🔬 Real-time DIC quality analysis with detailed metrics\n📊 Live graphing of all quality components",
-            font=APP_CONFIG['fonts']['small'],
-            fg=colors['text_secondary'],
-            bg=colors['panel_bg'],
-            justify='left',
-            wraplength=300
-        )
-        info_label.pack(anchor='w')
 

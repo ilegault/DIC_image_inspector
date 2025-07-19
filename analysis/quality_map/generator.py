@@ -85,6 +85,9 @@ class QualityMapGenerator:
         if spectrum_type == 'controlled':
             # Use controlled (high-precision) method
             quality_map = self._generate_controlled_method_map(gray, subset_size, step_size)
+        elif spectrum_type == 'fast':
+            # Use fast method for live analysis
+            quality_map = self._generate_fast_map(gray, subset_size, step_size)
         else:
             # Use optimized method for 'optimized' and other types
             quality_map = self._generate_standard_map(gray, subset_size, step_size)
@@ -130,6 +133,72 @@ class QualityMapGenerator:
         quality_map = cv2.GaussianBlur(quality_map, (3, 3), 0.5)
 
         return np.clip(quality_map, 0, 1)
+
+    def _generate_fast_map(self, gray: np.ndarray, subset_size: int, step_size: int) -> np.ndarray:
+        """Generate fast quality map with reduced computational overhead."""
+        h, w = gray.shape
+        
+        # Use larger step size for faster processing
+        fast_step = max(step_size * 2, subset_size // 2)
+        
+        # Calculate grid dimensions
+        grid_h = (h - subset_size) // fast_step + 1
+        grid_w = (w - subset_size) // fast_step + 1
+        
+        logger.info(f"Fast processing {grid_h * grid_w} analysis points (reduced from standard)")
+        
+        # Initialize sparse quality grid
+        quality_grid = np.zeros((grid_h, grid_w), dtype=np.float32)
+        
+        # Process with larger steps (fewer analysis points)
+        for i, y in enumerate(range(0, h - subset_size + 1, fast_step)):
+            for j, x in enumerate(range(0, w - subset_size + 1, fast_step)):
+                if i >= grid_h or j >= grid_w:
+                    continue
+                    
+                # Extract subset
+                subset = gray[y:y + subset_size, x:x + subset_size]
+                
+                # Calculate quality score with fast method
+                quality_score = self.quality_calculator.calculate_fast_quality(subset)
+                quality_grid[i, j] = quality_score
+        
+        # Interpolate sparse grid to full resolution using simple bilinear interpolation
+        # This avoids scipy dependency and is faster
+        quality_map = self._bilinear_interpolate_grid(quality_grid, (h, w), fast_step, subset_size)
+        
+        # Apply light smoothing
+        quality_map = cv2.GaussianBlur(quality_map.astype(np.float32), (3, 3), 0.3)
+        
+        return np.clip(quality_map, 0, 1)
+
+    def _bilinear_interpolate_grid(self, grid: np.ndarray, target_shape: tuple, step: int, subset_size: int) -> np.ndarray:
+        """Fast bilinear interpolation of sparse grid to full resolution."""
+        h, w = target_shape
+        grid_h, grid_w = grid.shape
+        
+        # Create output array
+        result = np.zeros((h, w), dtype=np.float32)
+        
+        # Fill in the known values first
+        for i in range(grid_h):
+            for j in range(grid_w):
+                y = i * step
+                x = j * step
+                if y < h and x < w:
+                    # Fill a small region around each grid point
+                    y_end = min(y + subset_size, h)
+                    x_end = min(x + subset_size, w)
+                    result[y:y_end, x:x_end] = grid[i, j]
+        
+        # Simple interpolation for remaining areas using OpenCV
+        mask = result == 0
+        if np.any(mask):
+            # Use OpenCV inpainting for fast interpolation
+            mask_uint8 = mask.astype(np.uint8) * 255
+            result = cv2.inpaint(result, mask_uint8, 3, cv2.INPAINT_TELEA)
+        
+        return result
 
     def _generate_controlled_method_map(self, gray: np.ndarray, facet_size: int, point_distance: int) -> np.ndarray:
         """Generate controlled method high-density quality map."""

@@ -293,39 +293,51 @@ class SpinViewCaptureMode:
         )
         analysis_frame.pack(fill='x', pady=(0, 10), padx=5)
 
-        # Analysis frequency control
-        freq_frame = tk.Frame(analysis_frame, bg=colors['panel_bg'])
-        freq_frame.pack(pady=5)
+        # Performance mode selection
+        perf_frame = tk.Frame(analysis_frame, bg=colors['panel_bg'])
+        perf_frame.pack(pady=5)
         
         tk.Label(
-            freq_frame,
-            text="Update Frequency:",
+            perf_frame,
+            text="Performance Mode:",
             font=('Arial', 9),
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
         
-        self.frequency_var = tk.StringVar(value="1.0")
-        freq_spinbox = tk.Spinbox(
-            freq_frame,
-            from_=0.1,
-            to=10.0,
-            increment=0.1,
-            width=6,
-            textvariable=self.frequency_var,
-            command=self._on_frequency_change,
-            bg=colors['canvas_bg'],
-            fg=colors['text_primary']
+        self.performance_mode = tk.StringVar(value="balanced")
+        
+        perf_combo = ttk.Combobox(
+            perf_frame,
+            textvariable=self.performance_mode,
+            values=["fast", "balanced", "accurate"],
+            state="readonly",
+            width=10
         )
-        freq_spinbox.pack(side='left', padx=5)
+        perf_combo.pack(side='left', padx=5)
         
-        tk.Label(
-            freq_frame,
-            text="seconds",
-            font=('Arial', 9),
+        # Add tooltip-like label for performance modes
+        perf_info = tk.Label(
+            perf_frame,
+            text="ℹ️",
+            font=('Arial', 8),
             bg=colors['panel_bg'],
-            fg=colors['text_primary']
-        ).pack(side='left')
+            fg='#3498db',
+            cursor="hand2"
+        )
+        perf_info.pack(side='left', padx=2)
+        
+        # Bind tooltip functionality
+        def show_perf_info(event):
+            info_text = {
+                "fast": "Fast: ~2-3x faster, good accuracy",
+                "balanced": "Balanced: Standard speed and accuracy", 
+                "accurate": "Accurate: Slower, highest precision"
+            }
+            current_mode = self.performance_mode.get()
+            self.status_var.set(info_text.get(current_mode, "Select performance mode"))
+        
+        perf_info.bind("<Button-1>", show_perf_info)
 
         # Control buttons
         btn_frame = tk.Frame(analysis_frame, bg=colors['panel_bg'])
@@ -414,6 +426,27 @@ class SpinViewCaptureMode:
         tk.Label(
             fps_frame,
             textvariable=self.metrics_vars["Frame Rate"],
+            font=('Arial', 9),
+            fg='#2c3e50',
+            bg=colors['panel_bg']
+        ).pack(side='right')
+
+        # Analysis Time
+        analysis_time_frame = tk.Frame(legend_frame, bg=colors['panel_bg'])
+        analysis_time_frame.pack(fill='x', padx=10, pady=(0, 5))
+        
+        tk.Label(
+            analysis_time_frame,
+            text="Analysis Time:",
+            font=('Arial', 9),
+            bg=colors['panel_bg'],
+            fg=colors['text_primary']
+        ).pack(side='left')
+        
+        self.metrics_vars["Analysis Time"] = tk.StringVar(value="0.0 ms")
+        tk.Label(
+            analysis_time_frame,
+            textvariable=self.metrics_vars["Analysis Time"],
             font=('Arial', 9),
             fg='#2c3e50',
             bg=colors['panel_bg']
@@ -869,11 +902,26 @@ class SpinViewCaptureMode:
                 if self.frame_times:
                     fps = 1.0 / np.mean(self.frame_times)
                     self.root.after(0, lambda: self.metrics_vars["Frame Rate"].set(f"{fps:.1f} fps"))
+                
+                # Update analysis time display
+                if self.analysis_times:
+                    avg_analysis_time = np.mean(self.analysis_times) * 1000  # Convert to ms
+                    self.root.after(0, lambda: self.metrics_vars["Analysis Time"].set(f"{avg_analysis_time:.1f} ms"))
 
-                # Control frame rate based on frequency setting
-                target_interval = float(self.frequency_var.get())
+                # Control frame rate based on performance mode
+                perf_mode = self.performance_mode.get()
+                if perf_mode == "fast":
+                    target_interval = 0.2  # 5 fps for fast mode
+                    min_sleep = 0.005
+                elif perf_mode == "balanced":
+                    target_interval = 0.5  # 2 fps for balanced mode
+                    min_sleep = 0.01
+                else:  # accurate
+                    target_interval = 1.0  # 1 fps for accurate mode
+                    min_sleep = 0.01
+                
                 elapsed = time.time() - loop_start
-                sleep_time = max(target_interval - elapsed, 0.01)  # Minimum 10ms
+                sleep_time = max(target_interval - elapsed, min_sleep)
                 time.sleep(sleep_time)
 
             except Exception as e:
@@ -881,8 +929,25 @@ class SpinViewCaptureMode:
                 time.sleep(0.5)
 
     def _analyze_with_main_analyzer(self, camera_feed) -> Optional[AnalysisResult]:
-        """Analyze camera feed using the main DIC analyzer."""
+        """Analyze camera feed using the main DIC analyzer with performance optimization."""
         try:
+            # Get performance mode settings
+            perf_mode = self.performance_mode.get()
+            
+            # Determine analysis parameters based on performance mode
+            if perf_mode == "fast":
+                spectrum_type = 'fast'  # Use new fast spectrum type
+                subset_size = 15  # Smaller subset for faster analysis
+                step_size = 8     # Larger step for fewer analysis points
+            elif perf_mode == "balanced":
+                spectrum_type = 'optimized'
+                subset_size = None  # Let analyzer determine optimal
+                step_size = None    # Let analyzer determine optimal
+            else:  # accurate
+                spectrum_type = 'controlled'
+                subset_size = None
+                step_size = None
+            
             # Handle different camera feed types
             if isinstance(camera_feed, tuple) and len(camera_feed) == 2:
                 # Polygon region with mask
@@ -891,18 +956,22 @@ class SpinViewCaptureMode:
                 # Create ROI data from mask for proper analysis
                 roi_data = self._create_roi_from_mask(mask)
                 
-                # Analyze with ROI
+                # Analyze with ROI and performance parameters
                 result = self.analyzer.analyze_image(
                     image,
                     roi=roi_data,
-                    spectrum_type='optimized'
+                    spectrum_type=spectrum_type,
+                    subset_size=subset_size,
+                    step_size=step_size
                 )
             else:
                 # Regular rectangular region
                 result = self.analyzer.analyze_image(
                     camera_feed,
                     roi=None,
-                    spectrum_type='optimized'
+                    spectrum_type=spectrum_type,
+                    subset_size=subset_size,
+                    step_size=step_size
                 )
             
             return result
@@ -1213,10 +1282,7 @@ class SpinViewCaptureMode:
 
         self.status_var.set("Analysis stopped")
 
-    def _on_frequency_change(self):
-        """Handle frequency change."""
-        # This will be picked up by the analysis loop
-        pass
+
 
     # Capture methods (from test file)
     def _capture_full_window(self, hwnd):

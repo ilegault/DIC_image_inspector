@@ -12,6 +12,7 @@ import logging
 
 from ui.main_components.control_panel import ControlPanel
 from ui.main_components.image_canvas import ImageCanvas
+from ui.main_components.top_navigation import TopNavigationBar
 # ROI selector now integrated into ImageCanvas
 from ui.main_components.legend_panel import LegendPanel
 from ui.main_components.results_popup import ResultsPopup
@@ -50,6 +51,7 @@ class DICQualityInspector:
 
         # Initialize main_components
         self.control_panel = None
+        self.top_navigation = None
         self.image_canvas = None
         self.roi_selector = None
         self.legend_panel = None
@@ -284,14 +286,14 @@ class DICQualityInspector:
 
         # Create content area (reduced padding for compact design)
         content_frame = tk.Frame(main_container, bg=colors['background'])
-        content_frame.pack(fill='both', expand=True, padx=15, pady=(0, 15))
+        content_frame.pack(fill='both', expand=True, padx=15, pady=(8, 15))
 
         # Left panel - Control Panel (reduced width with better spacing)
         left_panel = tk.Frame(content_frame, bg=colors['background'], width=310)
         left_panel.pack(side='left', fill='y', padx=(0, 20))
         left_panel.pack_propagate(False)
 
-        # Create control panel with callbacks
+        # Create control panel with callbacks (zoom controls and theme moved to top navigation)
         control_callbacks = {
             'load_image': self.load_image,
             'take_screenshot': self.take_screenshot,
@@ -303,11 +305,6 @@ class DICQualityInspector:
             'show_help': self.show_help,
             'reset_application': self.reset_application,
             'reset_display_results': self.reset_display,
-            'toggle_theme': self.toggle_theme,
-            'spectrum_changed': self.on_spectrum_changed,
-            'zoom_in': self.zoom_in,
-            'zoom_out': self.zoom_out,
-            'zoom_actual': self.zoom_actual,
             # ADDED: SpinView capture callbacks
             'start_spinview_capture': self.start_spinview_capture
         }
@@ -315,8 +312,22 @@ class DICQualityInspector:
         self.control_panel = ControlPanel(left_panel, control_callbacks)
 
         # Right panel - Image Display
-        right_panel = tk.Frame(content_frame, bg=colors['panel_bg'], relief='flat', bd=0)
+        right_panel = tk.Frame(content_frame, bg=colors['background'], relief='flat', bd=0)
         right_panel.pack(side='left', fill='both', expand=True)
+
+        # Create top navigation bar for the right panel only
+        nav_callbacks = {
+            'zoom_in': self.zoom_in,
+            'zoom_out': self.zoom_out,
+            'zoom_actual': self.zoom_actual,
+            'spectrum_changed': self.on_spectrum_changed,
+            'toggle_theme': self.toggle_theme
+        }
+        self.top_navigation = TopNavigationBar(right_panel, nav_callbacks)
+
+        # Create image canvas container
+        canvas_container = tk.Frame(right_panel, bg=colors['panel_bg'], relief='flat', bd=0)
+        canvas_container.pack(fill='both', expand=True)
 
         # Create image canvas with integrated ROI functionality
         canvas_callbacks = {
@@ -324,13 +335,13 @@ class DICQualityInspector:
             'roi_changed': self.on_roi_changed,
             'roi_completed': self.on_roi_completed
         }
-        self.image_canvas = ImageCanvas(right_panel, canvas_callbacks)
+        self.image_canvas = ImageCanvas(canvas_container, canvas_callbacks)
 
         # Keep reference to ROI selector for compatibility (now integrated in canvas)
         self.roi_selector = self.image_canvas
 
-        # Create legend panel (initially on image canvas parent)
-        self.legend_panel = LegendPanel(right_panel)
+        # Create legend panel (initially on image canvas container)
+        self.legend_panel = LegendPanel(canvas_container)
 
         # Create status bar
         self._create_status_bar()
@@ -414,7 +425,17 @@ class DICQualityInspector:
 
     def toggle_theme(self):
         """Toggle between light and dark themes."""
-        # Theme toggling is handled in control panel
+        from utils.constants import set_theme
+        
+        # Toggle theme
+        current_theme = APP_CONFIG['theme']
+        new_theme = 'dark' if current_theme == 'light' else 'light'
+        set_theme(new_theme)
+        
+        # Update top navigation theme button
+        if self.top_navigation:
+            self.top_navigation.update_theme_button()
+        
         # Refresh entire UI
         self._refresh_ui_theme()
 
@@ -445,7 +466,7 @@ class DICQualityInspector:
         # Re-show quality map if active
         if self.state.has_analysis_result() and self.image_canvas.is_showing_quality_map():
             result = self.state.get_analysis_result()
-            spectrum = self.control_panel.get_selected_spectrum()
+            spectrum = self.top_navigation.get_spectrum_method() if self.top_navigation else 'optimized'
             self.image_canvas.show_quality_map(result.quality_map, spectrum)
             self.legend_panel.show_legend(spectrum)
 
@@ -676,7 +697,7 @@ class DICQualityInspector:
             return
 
         # Get analysis parameters
-        spectrum_type = self.control_panel.get_selected_spectrum()
+        spectrum_type = self.top_navigation.get_spectrum_method() if self.top_navigation else 'optimized'
 
         # Set analysis in progress
         self.state.set_analysis_in_progress(True)
@@ -758,7 +779,7 @@ class DICQualityInspector:
             # Show quality map
             logger.debug("Showing quality map")
             result = self.state.get_analysis_result()
-            spectrum_type = self.control_panel.get_selected_spectrum()
+            spectrum_type = self.top_navigation.get_spectrum_method() if self.top_navigation else 'optimized'
             self.image_canvas.show_quality_map(result.quality_map, spectrum_type)
             self.legend_panel.show_legend(spectrum_type)
             self.control_panel.set_quality_map_active(True)
@@ -864,7 +885,7 @@ class DICQualityInspector:
 
     def on_spectrum_changed(self):
         """Handle spectrum type change."""
-        spectrum_type = self.control_panel.get_selected_spectrum()
+        spectrum_type = self.top_navigation.get_spectrum_method() if self.top_navigation else 'optimized'
 
         if self.state.has_analysis_result() and self.image_canvas.is_showing_quality_map():
             # Update quality map with new spectrum
@@ -889,13 +910,15 @@ class DICQualityInspector:
         self._update_zoom_display()
 
     def _update_zoom_display(self):
-        """Update zoom level display in control panel."""
+        """Update zoom level display in top navigation."""
         zoom_level = self.image_canvas.get_zoom_level()
-        self.control_panel.update_zoom_level(zoom_level)
+        if self.top_navigation:
+            self.top_navigation.update_zoom_level(zoom_level)
 
     def _on_zoom_changed(self, zoom_level: float):
         """Handle zoom level change from image canvas."""
-        self.control_panel.update_zoom_level(zoom_level)
+        if self.top_navigation:
+            self.top_navigation.update_zoom_level(zoom_level)
         # ROI redraw is now handled automatically in the integrated canvas
 
     def _get_image_info(self) -> Optional[Dict[str, Any]]:

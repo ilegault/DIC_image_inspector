@@ -499,6 +499,63 @@ class QualityCalculator:
         except Exception as e:
             logger.warning(f"Error calculating subset quality: {e}")
             return 0.0
+
+    def calculate_fast_quality(self, subset: np.ndarray) -> float:
+        """
+        Ultra-fast quality calculation for live analysis.
+        
+        Uses simplified metrics with minimal computational overhead
+        while maintaining reasonable accuracy for DIC quality assessment.
+        
+        Args:
+            subset: Image subset as numpy array (grayscale)
+            
+        Returns:
+            Quality score in range 0-1
+        """
+        try:
+            # Ensure we have a valid subset
+            if subset.size == 0 or subset.shape[0] < 3 or subset.shape[1] < 3:
+                return 0.0
+            
+            # Convert to grayscale if needed
+            if len(subset.shape) == 3:
+                gray = cv2.cvtColor(subset, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = subset.copy()
+            
+            # Ultra-fast gradient calculation using simple Sobel
+            grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+            grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+            
+            # Fast gradient score (simplified MIG-like calculation)
+            mean_gradient = np.mean(gradient_magnitude)
+            gradient_score = min(1.0, mean_gradient / 30.0)  # Normalized to typical range
+            
+            # Fast contrast calculation
+            contrast_score = np.std(gray) / 128.0  # Normalized standard deviation
+            contrast_score = min(1.0, contrast_score)
+            
+            # Fast entropy approximation using histogram
+            hist, _ = np.histogram(gray, bins=32, range=(0, 256))
+            hist = hist + 1e-10  # Avoid log(0)
+            prob = hist / np.sum(hist)
+            entropy = -np.sum(prob * np.log2(prob))
+            entropy_score = min(1.0, entropy / 5.0)  # Normalized to typical range
+            
+            # Simplified weighted combination (emphasizing gradient for DIC)
+            quality_score = (
+                gradient_score * 0.70 +  # Higher gradient weight for speed
+                contrast_score * 0.20 +
+                entropy_score * 0.10
+            )
+            
+            return max(0.0, min(1.0, quality_score))
+            
+        except Exception as e:
+            logger.warning(f"Error calculating fast quality: {e}")
+            return 0.0
     
     def _calculate_fast_gradient_quality(self, gray: np.ndarray) -> float:
         """
