@@ -860,86 +860,35 @@ class ControlPanel:
         """Create live analysis section in control panel."""
         colors = get_theme_colors()
 
-        # Live Analysis Card
-        live_card = self._create_modern_card(self.inner_frame, "🔴 Live Analysis")
+        # SpinView Camera Capture Card
+        live_card = self._create_modern_card(self.inner_frame, "📹 Camera Capture")
 
-        # Live Analysis button
+        # SpinView capture button
         live_btn_frame = tk.Frame(live_card, bg=colors['panel_bg'])
         live_btn_frame.pack(fill='x', padx=16, pady=(16, 8))
 
-        self.live_analysis_btn = self._create_modern_button(
+        self.spinview_capture_btn = self._create_modern_button(
             live_btn_frame,
-            "🔴 Start Live Analysis",
-            colors.get('btn_success', '#10b981'),
-            command=lambda: self._execute_callback('start_live_analysis'),
+            "📹 SpinView Camera Capture",
+            colors.get('btn_info', '#3b82f6'),
+            command=lambda: self._execute_callback('start_spinview_capture'),
             style='primary'
         )
-        self.live_analysis_btn.pack(fill='x')
-        self.buttons['live_analysis_btn'] = self.live_analysis_btn
+        self.spinview_capture_btn.pack(fill='x')
+        self.buttons['spinview_capture_btn'] = self.spinview_capture_btn
 
-        # Frequency control
-        freq_frame = tk.Frame(live_card, bg=colors['panel_bg'])
-        freq_frame.pack(fill='x', padx=16, pady=(0, 16))
+        # Info text
+        info_frame = tk.Frame(live_card, bg=colors['panel_bg'])
+        info_frame.pack(fill='x', padx=16, pady=(0, 16))
 
-        freq_label = tk.Label(
-            freq_frame,
-            text="ROI Update Frequency:",
-            font=APP_CONFIG['fonts']['small_bold'],
-            fg=colors['text_secondary'],
-            bg=colors['panel_bg']
-        )
-        freq_label.pack(anchor='w', pady=(0, 4))
-
-        # Frequency selector with mapping
-        frequencies = ["0.1 sec", "0.5 sec", "1 second", "2 seconds", "5 seconds"]
-
-        self.freq_mapping = {
-            "0.1 sec": 100,
-            "0.5 sec": 500,
-            "1 second": 1000,
-            "2 seconds": 2000,
-            "5 seconds": 5000
-        }
-
-        freq_selector_frame = tk.Frame(freq_frame, bg=colors['panel_bg'])
-        freq_selector_frame.pack(fill='x')
-
-        self.freq_menu = tk.OptionMenu(
-            freq_selector_frame,
-            self.live_freq_var,
-            *frequencies,
-            command=self.on_live_frequency_change
-        )
-        self.freq_menu.config(
-            bg=colors['canvas_bg'],
-            fg=colors['text_primary'],
+        info_label = tk.Label(
+            info_frame,
+            text="📹 Capture live camera feed from SpinView or other camera software\n🔬 Real-time DIC quality analysis with detailed metrics\n📊 Live graphing of all quality components",
             font=APP_CONFIG['fonts']['small'],
-            relief='flat',
-            bd=1,
-            highlightthickness=0,
-            activebackground=colors['hover_bg']
+            fg=colors['text_secondary'],
+            bg=colors['panel_bg'],
+            justify='left',
+            wraplength=300
         )
-        self.freq_menu.pack(fill='x')
-        self.buttons['live_freq_menu'] = self.freq_menu
+        info_label.pack(anchor='w')
 
-    def on_live_frequency_change(self, selected_freq):
-        """Handle live analysis frequency change."""
-        frequency_ms = self.freq_mapping.get(selected_freq, 1000)
-        self._execute_callback('live_frequency_changed', frequency_ms)
-
-    def update_live_analysis_button(self, is_active):
-        """Update live analysis button appearance."""
-        colors = get_theme_colors()
-
-        if is_active:
-            self.live_analysis_btn.config(
-                text="⏹️ Stop Live Analysis",
-                bg=colors.get('btn_danger', '#dc2626'),
-                command=lambda: self._execute_callback('stop_live_analysis')
-            )
-        else:
-            self.live_analysis_btn.config(
-                text="🔴 Start Live Analysis",
-                bg=colors.get('btn_success', '#10b981'),
-                command=lambda: self._execute_callback('start_live_analysis')
-            )

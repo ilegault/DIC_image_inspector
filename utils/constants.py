@@ -215,54 +215,6 @@ COLOR_SPECTRUMS = {
             (0, 255, 0, "Excellent: Excellent for DIC"),
             (0, 0, 255, "Perfect: Ideal for DIC")
         ]
-    },
-    'jet': {
-        'name': 'Jet',
-        'description': 'Classic jet colormap',
-        'hex_colors': ['#000080', '#0000ff', '#00ffff', '#ffff00', '#ff0000'],
-        'colors': [
-            (0, 0, 128, "Level 1"),
-            (0, 0, 255, "Level 2"),
-            (0, 255, 255, "Level 3"),
-            (255, 255, 0, "Level 4"),
-            (255, 0, 0, "Level 5")
-        ]
-    },
-    'viridis': {
-        'name': 'Viridis',
-        'description': 'Perceptually uniform colormap',
-        'hex_colors': ['#440154', '#31688e', '#35b779', '#fde725'],
-        'colors': [
-            (68, 1, 84, "Level 1"),
-            (49, 104, 142, "Level 2"),
-            (53, 183, 121, "Level 3"),
-            (253, 231, 37, "Level 4")
-        ]
-    },
-    'plasma': {
-        'name': 'Plasma',
-        'description': 'High contrast plasma colormap',
-        'hex_colors': ['#0d0887', '#7e03a8', '#cc4778', '#f89441', '#f0f921'],
-        'colors': [
-            (13, 8, 135, "Level 1"),
-            (126, 3, 168, "Level 2"),
-            (204, 71, 120, "Level 3"),
-            (248, 148, 65, "Level 4"),
-            (240, 249, 33, "Level 5")
-        ]
-    },
-    'inferno': {
-        'name': 'Inferno',
-        'description': 'Inferno colormap for thermal-like visualization',
-        'hex_colors': ['#000004', '#420a68', '#932667', '#dd513a', '#fca50a', '#fcffa4'],
-        'colors': [
-            (0, 0, 4, "Level 1"),
-            (66, 10, 104, "Level 2"),
-            (147, 38, 103, "Level 3"),
-            (221, 81, 58, "Level 4"),
-            (252, 165, 10, "Level 5"),
-            (252, 255, 164, "Level 6")
-        ]
     }
 }
 
@@ -345,7 +297,7 @@ DEBUG = {
 # ===== VERSION INFORMATION =====
 VERSION_INFO = {
     'major': 2,
-    'minor': 0,
+    'minor': 1,
     'patch': 0,
     'build': 1,
     'release_date': '2024-01-01',
