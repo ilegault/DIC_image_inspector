@@ -30,10 +30,10 @@ class QualityMapGenerator:
         
         # Log the scoring parameters being used
         logger.info(f"Quality map generator initialized with scoring parameters:")
-        logger.info(f"  MIG normalization: {self.quality_calculator.mig_normalization_factor}")
-        logger.info(f"  Ef normalization: {self.quality_calculator.ef_normalization_factor}")
-        logger.info(f"  MIG multiplier: {self.quality_calculator.mig_score_multiplier}")
-        logger.info(f"  Ef multiplier: {self.quality_calculator.ef_score_multiplier}")
+        logger.debug(f"  MIG normalization: {self.quality_calculator.mig_normalization_factor}")
+        logger.debug(f"  Ef normalization: {self.quality_calculator.ef_normalization_factor}")
+        logger.debug(f"  MIG multiplier: {self.quality_calculator.mig_score_multiplier}")
+        logger.debug(f"  Ef multiplier: {self.quality_calculator.ef_score_multiplier}")
 
         # Default parameters
         self.default_overlap = 0.5

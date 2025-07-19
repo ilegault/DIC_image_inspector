@@ -370,7 +370,7 @@ class DICQualityInspector:
         # Application title (compact version)
         title_label = tk.Label(
             title_frame,
-            text=" DIC Quality Inspector v2.0",
+            text=" DIC Quality Inspector v2.1",
             font=APP_CONFIG['fonts']['subheading'],
             fg=colors['text_primary'],
             bg=colors['panel_bg']

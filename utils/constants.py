@@ -7,7 +7,7 @@ Centralized configuration following clean architecture principles.
 
 # Application metadata
 APP_NAME = "DIC Image Quality Inspector"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 APP_AUTHOR = "DIC Analysis Team"
 
 # ===== FILE OPERATIONS CONFIGURATION =====
@@ -321,7 +321,7 @@ APP_CONFIG = {
         'min_width': 800,
         'min_height': 500,
         'default_width': 960,
-        'default_height': 650,
+        'default_height': 750,
         'resizable': True,
         'icon': None,  # Set to icon path if available
     },
