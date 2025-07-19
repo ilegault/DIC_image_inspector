@@ -30,6 +30,8 @@ if platform.system() == 'Windows':
 
 from models.roi_data import ROIData
 from models.analysis_result import AnalysisResult
+from utils.modern_styling import ModernStyleManager
+from utils.constants import APP_CONFIG, get_theme_colors
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +66,14 @@ class SpinViewCaptureMode:
         self.capture_window = None
         self.results_window = None
         
+        # Initialize style manager
+        self.style_manager = ModernStyleManager()
+        
         logger.info("SpinViewCaptureMode initialized")
 
     def _get_colors(self):
         """Get theme colors with fallback."""
         try:
-            from utils.constants import get_theme_colors
             return get_theme_colors()
         except ImportError:
             return {
@@ -109,16 +113,16 @@ class SpinViewCaptureMode:
         """Create the capture UI."""
         colors = self._get_colors()
         
-        # Header
-        header = tk.Frame(self.capture_window, bg='#1abc9c', height=60)
+        # Header with modern styling
+        header = tk.Frame(self.capture_window, bg=colors['primary'], height=60)
         header.pack(fill='x')
         header.pack_propagate(False)
 
         tk.Label(
             header,
             text="SpinView DIC Quality Analyzer",
-            font=('Arial', 20, 'bold'),
-            bg='#1abc9c',
+            font=APP_CONFIG['fonts']['title'],
+            bg=colors['primary'],
             fg='white'
         ).pack(expand=True)
 
@@ -152,22 +156,21 @@ class SpinViewCaptureMode:
         window_frame = tk.LabelFrame(
             parent,
             text="1. Select Target Window",
-            font=('Arial', 11, 'bold'),
+            font=APP_CONFIG['fonts']['subheading'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         )
         window_frame.pack(fill='x', pady=(0, 10), padx=5)
 
-        # Refresh button
-        tk.Button(
+        # Refresh button with modern styling
+        refresh_btn = ModernStyleManager.create_modern_button(
             window_frame,
             text="Refresh Window List",
+            bg_color=None,  # Use default primary color
             command=self._refresh_windows,
-            bg='#3498db',
-            fg='white',
-            padx=10,
-            pady=5
-        ).pack(pady=5)
+            style='primary'
+        )
+        refresh_btn.pack(pady=5)
 
         # Window listbox with scrollbar
         list_container = tk.Frame(window_frame, bg=colors['panel_bg'])
@@ -179,7 +182,7 @@ class SpinViewCaptureMode:
         self.window_listbox = tk.Listbox(
             list_container,
             yscrollcommand=scrollbar.set,
-            font=('Consolas', 9),
+            font=APP_CONFIG['fonts']['monospace'],
             height=6,
             bg=colors['canvas_bg'],
             fg=colors['text_primary'],
@@ -190,22 +193,21 @@ class SpinViewCaptureMode:
 
         self.window_listbox.bind('<<ListboxSelect>>', self._on_window_select)
 
-        # Auto-find button
-        tk.Button(
+        # Auto-find button with modern styling
+        autofind_btn = ModernStyleManager.create_modern_button(
             window_frame,
             text="Auto-Find SpinView",
+            bg_color=None,
             command=self._find_spinview,
-            bg='#9b59b6',
-            fg='white',
-            padx=10,
-            pady=3
-        ).pack(pady=5)
+            style='secondary'
+        )
+        autofind_btn.pack(pady=5)
 
         self.window_status = tk.Label(
             window_frame,
             text="No window selected",
-            font=('Arial', 9),
-            fg='gray',
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_secondary'],
             bg=colors['panel_bg']
         )
         self.window_status.pack(pady=5)
@@ -217,7 +219,7 @@ class SpinViewCaptureMode:
         region_frame = tk.LabelFrame(
             parent,
             text="2. Select Camera Feed Region",
-            font=('Arial', 11, 'bold'),
+            font=APP_CONFIG['fonts']['subheading'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         )
@@ -230,7 +232,7 @@ class SpinViewCaptureMode:
         tk.Label(
             mode_frame, 
             text="Selection Mode:", 
-            font=('Arial', 9),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack()
@@ -242,7 +244,7 @@ class SpinViewCaptureMode:
             text="Rectangle",
             variable=self.roi_mode,
             value="rectangle",
-            font=('Arial', 9),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary'],
             selectcolor=colors['selected_bg']
@@ -253,29 +255,27 @@ class SpinViewCaptureMode:
             text="Polygon",
             variable=self.roi_mode,
             value="polygon",
-            font=('Arial', 9),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary'],
             selectcolor=colors['selected_bg']
         ).pack(side='left', padx=5)
 
-        self.select_region_btn = tk.Button(
+        self.select_region_btn = ModernStyleManager.create_modern_button(
             region_frame,
             text="Select Feed Region",
+            bg_color=None,
             command=self._select_camera_region,
-            bg='#9b59b6',
-            fg='white',
-            padx=10,
-            pady=5,
-            state='disabled'
+            style='secondary'
         )
+        self.select_region_btn.configure(state='disabled')
         self.select_region_btn.pack(pady=5)
 
         self.region_status = tk.Label(
             region_frame,
             text="No region selected",
-            font=('Arial', 9),
-            fg='gray',
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_secondary'],
             bg=colors['panel_bg']
         )
         self.region_status.pack(pady=5)
@@ -287,7 +287,7 @@ class SpinViewCaptureMode:
         analysis_frame = tk.LabelFrame(
             parent,
             text="3. DIC Quality Analysis",
-            font=('Arial', 11, 'bold'),
+            font=APP_CONFIG['fonts']['subheading'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         )
@@ -300,7 +300,7 @@ class SpinViewCaptureMode:
         tk.Label(
             perf_frame,
             text="Performance Mode:",
-            font=('Arial', 9),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
@@ -312,7 +312,8 @@ class SpinViewCaptureMode:
             textvariable=self.performance_mode,
             values=["fast", "balanced", "accurate"],
             state="readonly",
-            width=10
+            width=10,
+            style='Modern.TCombobox'
         )
         perf_combo.pack(side='left', padx=5)
         
@@ -320,9 +321,9 @@ class SpinViewCaptureMode:
         perf_info = tk.Label(
             perf_frame,
             text="ℹ️",
-            font=('Arial', 8),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
-            fg='#3498db',
+            fg=colors['info'],
             cursor="hand2"
         )
         perf_info.pack(side='left', padx=2)
@@ -343,30 +344,26 @@ class SpinViewCaptureMode:
         btn_frame = tk.Frame(analysis_frame, bg=colors['panel_bg'])
         btn_frame.pack(pady=10)
 
-        self.start_btn = tk.Button(
+        self.start_btn = ModernStyleManager.create_modern_button(
             btn_frame,
             text="▶️ Start Analysis",
+            bg_color=None,
             command=self._start_analysis,
-            bg='#27ae60',
-            fg='white',
-            font=('Arial', 12, 'bold'),
-            padx=20,
-            pady=8,
-            state='disabled'
+            size='large',
+            style='success'
         )
+        self.start_btn.configure(state='disabled')
         self.start_btn.pack(side='left', padx=5)
 
-        self.stop_btn = tk.Button(
+        self.stop_btn = ModernStyleManager.create_modern_button(
             btn_frame,
             text="⏹️ Stop",
+            bg_color=None,
             command=self._stop_analysis,
-            bg='#e74c3c',
-            fg='white',
-            font=('Arial', 12, 'bold'),
-            padx=20,
-            pady=8,
-            state='disabled'
+            size='large',
+            style='danger'
         )
+        self.stop_btn.configure(state='disabled')
         self.stop_btn.pack(side='left', padx=5)
 
     def _create_legend_panel(self, parent):
@@ -377,7 +374,7 @@ class SpinViewCaptureMode:
         legend_frame = tk.LabelFrame(
             parent,
             text="Quality Map Legend",
-            font=('Arial', 11, 'bold'),
+            font=APP_CONFIG['fonts']['subheading'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         )
@@ -396,7 +393,7 @@ class SpinViewCaptureMode:
         tk.Label(
             score_frame,
             text="DIC Quality Score:",
-            font=('Arial', 10, 'bold'),
+            font=APP_CONFIG['fonts']['body_bold'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
@@ -405,8 +402,8 @@ class SpinViewCaptureMode:
         tk.Label(
             score_frame,
             textvariable=self.metrics_vars["Overall Score"],
-            font=('Arial', 10, 'bold'),
-            fg='#2c3e50',
+            font=APP_CONFIG['fonts']['body_bold'],
+            fg=colors['text_primary'],
             bg=colors['panel_bg']
         ).pack(side='right')
 
@@ -417,7 +414,7 @@ class SpinViewCaptureMode:
         tk.Label(
             fps_frame,
             text="Frame Rate:",
-            font=('Arial', 9),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
@@ -426,8 +423,8 @@ class SpinViewCaptureMode:
         tk.Label(
             fps_frame,
             textvariable=self.metrics_vars["Frame Rate"],
-            font=('Arial', 9),
-            fg='#2c3e50',
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_primary'],
             bg=colors['panel_bg']
         ).pack(side='right')
 
@@ -438,7 +435,7 @@ class SpinViewCaptureMode:
         tk.Label(
             analysis_time_frame,
             text="Analysis Time:",
-            font=('Arial', 9),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
@@ -447,8 +444,8 @@ class SpinViewCaptureMode:
         tk.Label(
             analysis_time_frame,
             textvariable=self.metrics_vars["Analysis Time"],
-            font=('Arial', 9),
-            fg='#2c3e50',
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_primary'],
             bg=colors['panel_bg']
         ).pack(side='right')
 
@@ -490,7 +487,7 @@ class SpinViewCaptureMode:
         tk.Label(
             parent,
             text="Quality Scale",
-            font=('Arial', 10, 'bold'),
+            font=APP_CONFIG['fonts']['body_bold'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(pady=(5, 3))
@@ -528,7 +525,7 @@ class SpinViewCaptureMode:
         tk.Label(
             label_frame,
             text="Poor",
-            font=('Arial', 7),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
@@ -539,7 +536,7 @@ class SpinViewCaptureMode:
         tk.Label(
             label_frame,
             text="Good",
-            font=('Arial', 7),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='left')
@@ -550,7 +547,7 @@ class SpinViewCaptureMode:
         tk.Label(
             label_frame,
             text="Excellent",
-            font=('Arial', 7),
+            font=APP_CONFIG['fonts']['small'],
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='right')
@@ -600,8 +597,8 @@ class SpinViewCaptureMode:
         status_bar = tk.Label(
             self.capture_window,
             textvariable=self.status_var,
-            font=('Arial', 10),
-            bg=colors['panel_bg'],
+            font=APP_CONFIG['fonts']['status'],
+            bg=colors['status_bar'],
             fg=colors['text_primary'],
             anchor='w',
             padx=10
