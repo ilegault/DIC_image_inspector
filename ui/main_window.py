@@ -800,11 +800,16 @@ class DICQualityInspector:
             messagebox.showerror("Results Error", f"Failed to show results: {str(e)}")
 
     def save_report(self):
-        """Save analysis report."""
+        """Save comprehensive analysis report with quality map."""
         if not self.state.can_save_report():
             return
 
         try:
+            # Show export options dialog
+            export_options = self._show_export_options_dialog()
+            if not export_options:
+                return  # User cancelled
+
             # Generate report content
             result = self.state.get_analysis_result()
             image_info = self.state.get_image_info()
@@ -816,23 +821,491 @@ class DICQualityInspector:
                 roi_info
             )
 
-            # Get save location
-            filename = filedialog.asksaveasfilename(
-                title="Save Report",
-                defaultextension=".txt",
-                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-                initialdir=self.file_operations.get_last_directory()
-            )
-
-            if filename:
-                success = self.file_operations.save_report_to_file(report_content, filename)
-                if success:
-                    messagebox.showinfo("Success", "Report saved successfully!")
+            # Use default location or ask user
+            base_folder = self._get_reports_folder()
+            
+            if base_folder:
+                if export_options['format'] == 'package':
+                    # Save as complete package (always creates new folder)
+                    success, folder_path = self._save_report_package(
+                        base_folder, report_content, result, 
+                        image_info, export_options
+                    )
+                    if success:
+                        # Show success with option to open folder
+                        response = messagebox.askyesno(
+                            "Report Exported Successfully!", 
+                            f"Complete report package saved to:\n{folder_path}\n\nWould you like to open the folder?",
+                            icon='question'
+                        )
+                        if response:
+                            import os
+                            import subprocess
+                            try:
+                                # Open folder in Windows Explorer
+                                subprocess.Popen(f'explorer "{folder_path}"')
+                            except Exception as e:
+                                logging.warning(f"Could not open folder: {e}")
+                    else:
+                        messagebox.showerror("Error", "Failed to save report package")
                 else:
-                    messagebox.showerror("Error", "Failed to save report")
+                    # Save as single file in timestamped folder
+                    success, folder_path = self._save_single_report_in_folder(
+                        base_folder, report_content, result, export_options
+                    )
+                    if success:
+                        # Show success with option to open folder
+                        response = messagebox.askyesno(
+                            "Report Exported Successfully!", 
+                            f"Report saved to:\n{folder_path}\n\nWould you like to open the folder?",
+                            icon='question'
+                        )
+                        if response:
+                            import os
+                            import subprocess
+                            try:
+                                # Open folder in Windows Explorer
+                                subprocess.Popen(f'explorer "{folder_path}"')
+                            except Exception as e:
+                                logging.warning(f"Could not open folder: {e}")
+                    else:
+                        messagebox.showerror("Error", "Failed to save report")
 
         except Exception as e:
             messagebox.showerror("Save Error", f"Failed to save report: {str(e)}")
+
+    def _get_reports_folder(self) -> Optional[str]:
+        """Get or create the reports folder."""
+        import os
+        
+        try:
+            # Try to create a Reports folder in the user's Documents
+            documents_path = os.path.expanduser("~/Documents")
+            reports_folder = os.path.join(documents_path, "DIC_Analysis_Reports")
+            
+            # Create the folder if it doesn't exist
+            os.makedirs(reports_folder, exist_ok=True)
+            
+            return reports_folder
+            
+        except Exception as e:
+            logging.warning(f"Could not create default reports folder: {e}")
+            # Fall back to asking user for location
+            base_folder = filedialog.askdirectory(
+                title="Select Location to Create Report Folder",
+                initialdir=self.file_operations.get_last_directory()
+            )
+            return base_folder
+
+    def _show_export_options_dialog(self) -> Optional[Dict[str, Any]]:
+        """Show dialog for export options."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Export Report Options")
+        dialog.geometry("450x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 50,
+            self.root.winfo_rooty() + 50
+        ))
+        
+        colors = get_theme_colors()
+        dialog.configure(bg=colors['background'])
+        
+        result = {'cancelled': True}
+        
+        # Main frame
+        main_frame = tk.Frame(dialog, bg=colors['background'])
+        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        # Title
+        title_label = tk.Label(
+            main_frame,
+            text="📦 Export Analysis Report",
+            font=APP_CONFIG['fonts']['heading'],
+            fg=colors['text_primary'],
+            bg=colors['background']
+        )
+        title_label.pack(pady=(0, 20))
+        
+        # Description
+        desc_label = tk.Label(
+            main_frame,
+            text="Choose what to include in your report package:",
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_secondary'],
+            bg=colors['background']
+        )
+        desc_label.pack(pady=(0, 15))
+        
+        # Export format options
+        format_frame = tk.LabelFrame(
+            main_frame,
+            text="📄 Report Type",
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background']
+        )
+        format_frame.pack(fill='x', pady=(0, 15))
+        
+        format_var = tk.StringVar(value='package')
+        
+        tk.Radiobutton(
+            format_frame,
+            text="📦 Complete Package (Recommended)",
+            variable=format_var,
+            value='package',
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background'],
+            selectcolor=colors['hover_bg']
+        ).pack(anchor='w', padx=10, pady=5)
+        
+        tk.Label(
+            format_frame,
+            text="   • Text report + Quality map images + Original image",
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_secondary'],
+            bg=colors['background']
+        ).pack(anchor='w', padx=20, pady=(0, 5))
+        
+        tk.Radiobutton(
+            format_frame,
+            text="📄 Text Report Only",
+            variable=format_var,
+            value='text_only',
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background'],
+            selectcolor=colors['hover_bg']
+        ).pack(anchor='w', padx=10, pady=5)
+        
+        # Quality map options
+        qmap_frame = tk.LabelFrame(
+            main_frame,
+            text="🗺️ Quality Map Images (for Complete Package)",
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background']
+        )
+        qmap_frame.pack(fill='x', pady=(0, 15))
+        
+        include_overlay_var = tk.BooleanVar(value=True)
+        include_raw_var = tk.BooleanVar(value=True)
+        
+        tk.Checkbutton(
+            qmap_frame,
+            text="✅ Quality map overlay (recommended)",
+            variable=include_overlay_var,
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background'],
+            selectcolor=colors['hover_bg']
+        ).pack(anchor='w', padx=10, pady=2)
+        
+        tk.Label(
+            qmap_frame,
+            text="   Shows quality distribution on your original image",
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_secondary'],
+            bg=colors['background']
+        ).pack(anchor='w', padx=20, pady=(0, 5))
+        
+        tk.Checkbutton(
+            qmap_frame,
+            text="📊 Raw quality map visualization",
+            variable=include_raw_var,
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background'],
+            selectcolor=colors['hover_bg']
+        ).pack(anchor='w', padx=10, pady=2)
+        
+        tk.Label(
+            qmap_frame,
+            text="   Pure quality data without background image",
+            font=APP_CONFIG['fonts']['small'],
+            fg=colors['text_secondary'],
+            bg=colors['background']
+        ).pack(anchor='w', padx=20, pady=(0, 5))
+        
+        # Spectrum selection
+        spectrum_frame = tk.LabelFrame(
+            main_frame,
+            text="🎨 Color Scheme",
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background']
+        )
+        spectrum_frame.pack(fill='x', pady=(0, 20))
+        
+        spectrum_var = tk.StringVar(value='optimized')
+        spectrum_options = [
+            ('optimized', '🔥 Optimized (Hot-Cold, Recommended)'),
+            ('viridis', '🌈 Viridis (Purple-Yellow)'),
+            ('plasma', '💜 Plasma (Purple-Pink)'),
+            ('jet', '🌊 Jet (Blue-Red, Classic)')
+        ]
+        
+        for value, text in spectrum_options:
+            tk.Radiobutton(
+                spectrum_frame,
+                text=text,
+                variable=spectrum_var,
+                value=value,
+                font=APP_CONFIG['fonts']['small'],
+                fg=colors['text_primary'],
+                bg=colors['background'],
+                selectcolor=colors['hover_bg']
+            ).pack(anchor='w', padx=10, pady=2)
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame, bg=colors['background'])
+        button_frame.pack(fill='x')
+        
+        def on_export():
+            result.update({
+                'cancelled': False,
+                'format': format_var.get(),
+                'include_overlay': include_overlay_var.get(),
+                'include_raw': include_raw_var.get(),
+                'spectrum': spectrum_var.get()
+            })
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        tk.Button(
+            button_frame,
+            text="📦 Export Report",
+            command=on_export,
+            font=APP_CONFIG['fonts']['default'],
+            bg=colors.get('btn_primary', '#2563eb'),
+            fg='white',
+            relief='flat',
+            padx=20,
+            pady=8
+        ).pack(side='right', padx=(5, 0))
+        
+        tk.Button(
+            button_frame,
+            text="Cancel",
+            command=on_cancel,
+            font=APP_CONFIG['fonts']['default'],
+            bg=colors.get('btn_secondary', '#6b7280'),
+            fg='white',
+            relief='flat',
+            padx=20,
+            pady=8
+        ).pack(side='right')
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return None if result.get('cancelled', True) else result
+
+    def _save_report_package(self, base_folder: str, report_content: str, 
+                           result: AnalysisResult, image_info: Dict, 
+                           options: Dict[str, Any]) -> tuple[bool, str]:
+        """Save complete report package with quality map."""
+        import os
+        from datetime import datetime
+        
+        try:
+            # Create timestamped folder
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_name = image_info.get('filename', 'unknown')
+            if image_name != 'unknown':
+                # Remove extension from image name
+                image_name = os.path.splitext(os.path.basename(image_name))[0]
+                folder_name = f"DIC_Report_{image_name}_{timestamp}"
+            else:
+                folder_name = f"DIC_Analysis_Report_{timestamp}"
+                
+            package_folder = os.path.join(base_folder, folder_name)
+            os.makedirs(package_folder, exist_ok=True)
+            
+            # Save text report
+            report_file = os.path.join(package_folder, "analysis_report.txt")
+            with open(report_file, 'w', encoding='utf-8') as f:
+                f.write(report_content)
+            
+            # Save original image for reference
+            original_image = self.state.get_image()
+            if original_image is not None:
+                original_file = os.path.join(package_folder, "original_image.png")
+                self.file_operations.save_image_to_file(original_image, original_file)
+            
+            # Save quality map visualizations if requested
+            if options.get('include_overlay', True) or options.get('include_raw', False):
+                quality_map = result.quality_map
+                spectrum = options.get('spectrum', 'optimized')
+                
+                if options.get('include_overlay', True):
+                    # Save quality map overlay
+                    overlay_file = os.path.join(package_folder, "quality_map_overlay.png")
+                    success = self._export_quality_map_overlay(
+                        original_image, quality_map, spectrum, overlay_file
+                    )
+                    if not success:
+                        logging.warning("Failed to save quality map overlay")
+                
+                if options.get('include_raw', False):
+                    # Save raw quality map visualization
+                    raw_file = os.path.join(package_folder, "quality_map_raw.png")
+                    success = self._export_raw_quality_map(
+                        quality_map, spectrum, raw_file
+                    )
+                    if not success:
+                        logging.warning("Failed to save raw quality map")
+            
+            # Create summary file
+            summary_file = os.path.join(package_folder, "README.txt")
+            self._create_package_summary(summary_file, options, image_info)
+            
+            return True, package_folder
+            
+        except Exception as e:
+            logging.error(f"Failed to save report package: {e}")
+            return False, ""
+
+    def _save_single_report_in_folder(self, base_folder: str, report_content: str, 
+                                     result: AnalysisResult, options: Dict[str, Any]) -> tuple[bool, str]:
+        """Save single text report file in a timestamped folder."""
+        import os
+        from datetime import datetime
+        
+        try:
+            # Create timestamped folder
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            folder_name = f"DIC_Report_{timestamp}"
+            report_folder = os.path.join(base_folder, folder_name)
+            os.makedirs(report_folder, exist_ok=True)
+            
+            # Save text report
+            report_file = os.path.join(report_folder, "analysis_report.txt")
+            success = self.file_operations.save_report_to_file(report_content, report_file)
+            
+            if success:
+                return True, report_folder
+            else:
+                return False, ""
+                
+        except Exception as e:
+            logging.error(f"Failed to save single report: {e}")
+            return False, ""
+
+    def _export_quality_map_overlay(self, original_image: np.ndarray, 
+                                  quality_map: np.ndarray, spectrum: str, 
+                                  filepath: str) -> bool:
+        """Export quality map overlay on original image."""
+        try:
+            from analysis.quality_map.colormap import ColormapGenerator
+            
+            # Generate colored visualization
+            colormap_gen = ColormapGenerator()
+            colored_map = colormap_gen.apply_colormap(quality_map, spectrum)
+            
+            # Blend with original image
+            visualization = colormap_gen.apply_overlay_blend(original_image, colored_map)
+            
+            # Save visualization
+            return self.file_operations.save_image_to_file(visualization, filepath)
+            
+        except Exception as e:
+            logging.error(f"Failed to export quality map overlay: {e}")
+            return False
+
+    def _export_raw_quality_map(self, quality_map: np.ndarray, spectrum: str, 
+                              filepath: str) -> bool:
+        """Export raw quality map visualization."""
+        try:
+            from analysis.quality_map.colormap import ColormapGenerator
+            
+            # Generate colored visualization without overlay
+            colormap_gen = ColormapGenerator()
+            colored_map = colormap_gen.apply_colormap(quality_map, spectrum)
+            
+            # Save raw quality map
+            return self.file_operations.save_image_to_file(colored_map, filepath)
+            
+        except Exception as e:
+            logging.error(f"Failed to export raw quality map: {e}")
+            return False
+
+    def _create_package_summary(self, filepath: str, options: Dict[str, Any], image_info: Dict[str, Any]):
+        """Create summary file for the report package."""
+        try:
+            from datetime import datetime
+            import os
+            
+            image_name = image_info.get('filename', 'Unknown')
+            if image_name != 'Unknown':
+                image_name = os.path.basename(image_name)
+            
+            summary_content = f"""DIC Analysis Report Package
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Source Image: {image_name}
+
+PACKAGE CONTENTS:
+================
+
+1. analysis_report.txt
+   - Complete text analysis report
+   - Quality statistics and recommendations
+   - DIC parameter suggestions
+
+2. original_image.png
+   - Copy of the analyzed image for reference
+
+"""
+            
+            file_counter = 3
+            if options.get('include_overlay', True):
+                summary_content += f"""{file_counter}. quality_map_overlay.png
+   - Quality map overlaid on original image
+   - Shows quality distribution across the image
+   - Color spectrum: {options.get('spectrum', 'optimized')}
+
+"""
+                file_counter += 1
+            
+            if options.get('include_raw', False):
+                summary_content += f"""{file_counter}. quality_map_raw.png
+   - Raw quality map visualization
+   - Pure quality data without original image
+   - Color spectrum: {options.get('spectrum', 'optimized')}
+
+"""
+            
+            summary_content += """USAGE NOTES:
+============
+
+- Use the text report for detailed analysis results
+- Quality map images show spatial distribution of DIC suitability
+- Higher quality areas (warmer colors) are better for DIC analysis
+- Lower quality areas (cooler colors) may produce less reliable results
+- The original image is included for reference and comparison
+
+COLOR SPECTRUM GUIDE:
+====================
+- Red/Hot colors: High quality areas (excellent for DIC)
+- Yellow/Warm colors: Good quality areas
+- Green/Cool colors: Moderate quality areas
+- Blue/Cold colors: Lower quality areas (may be challenging for DIC)
+
+For questions about this analysis, refer to the help documentation
+in the DIC Quality Inspector application.
+"""
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(summary_content)
+                
+        except Exception as e:
+            logging.error(f"Failed to create package summary: {e}")
 
     def show_help(self):
         """Show help dialog."""

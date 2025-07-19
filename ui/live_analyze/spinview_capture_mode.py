@@ -116,7 +116,7 @@ class SpinViewCaptureMode:
 
         tk.Label(
             header,
-            text="🔬 SpinView DIC Quality Analyzer",
+            text="SpinView DIC Quality Analyzer",
             font=('Arial', 20, 'bold'),
             bg='#1abc9c',
             fg='white'
@@ -161,7 +161,7 @@ class SpinViewCaptureMode:
         # Refresh button
         tk.Button(
             window_frame,
-            text="🔄 Refresh Window List",
+            text="Refresh Window List",
             command=self._refresh_windows,
             bg='#3498db',
             fg='white',
@@ -193,7 +193,7 @@ class SpinViewCaptureMode:
         # Auto-find button
         tk.Button(
             window_frame,
-            text="🔍 Auto-Find SpinView",
+            text="Auto-Find SpinView",
             command=self._find_spinview,
             bg='#9b59b6',
             fg='white',
@@ -239,7 +239,7 @@ class SpinViewCaptureMode:
         
         tk.Radiobutton(
             mode_frame,
-            text="📐 Rectangle",
+            text="Rectangle",
             variable=self.roi_mode,
             value="rectangle",
             font=('Arial', 9),
@@ -250,7 +250,7 @@ class SpinViewCaptureMode:
 
         tk.Radiobutton(
             mode_frame,
-            text="🔺 Polygon",
+            text="Polygon",
             variable=self.roi_mode,
             value="polygon",
             font=('Arial', 9),
@@ -261,7 +261,7 @@ class SpinViewCaptureMode:
 
         self.select_region_btn = tk.Button(
             region_frame,
-            text="📐 Select Feed Region",
+            text="Select Feed Region",
             command=self._select_camera_region,
             bg='#9b59b6',
             fg='white',
@@ -554,16 +554,6 @@ class SpinViewCaptureMode:
             bg=colors['panel_bg'],
             fg=colors['text_primary']
         ).pack(side='right')
-        
-        # Add compact note
-        tk.Label(
-            parent,
-            text="Red = Worst ← → Blue = Best",
-            font=('Arial', 7),
-            bg=colors['panel_bg'],
-            fg=colors['text_secondary'],
-            justify='center'
-        ).pack(pady=(3, 0))
 
     def _create_results_graph(self, parent):
         """Create the results graph for score over time."""

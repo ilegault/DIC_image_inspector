@@ -131,10 +131,10 @@ class ControlPanel:
 
         # Primary buttons with clean modern styling
         primary_buttons = [
-            ('load_btn', "📁 Load Image", colors.get('btn_primary', '#2563eb'), 'load_image'),
-            ('screenshot_btn', "📷 Screenshot", colors.get('btn_info', '#3b82f6'), 'take_screenshot'),
-            ('roi_btn', "🎯 Select ROI", colors.get('btn_secondary', '#6b7280'), 'select_roi'),
-            ('analyze_btn', "🔬 Analyze", colors.get('btn_success', '#10b981'), 'analyze_image')
+            ('load_btn', "Load Image", colors.get('btn_primary', '#2563eb'), 'load_image'),
+            ('screenshot_btn', "Screenshot", colors.get('btn_info', '#3b82f6'), 'take_screenshot'),
+            ('roi_btn', "Select ROI", colors.get('btn_secondary', '#6b7280'), 'select_roi'),
+            ('analyze_btn', "Analyze", colors.get('btn_success', '#10b981'), 'analyze_image')
         ]
 
         for i, (btn_id, text, color, callback_key) in enumerate(primary_buttons):
@@ -188,8 +188,8 @@ class ControlPanel:
         results_row.pack(fill='x', pady=(0, 8))
 
         results_buttons = [
-            ('quality_map_btn', "🗺️ Quality Map", colors.get('btn_info', '#3b82f6'), 'toggle_quality_map'),
-            ('results_btn', "📊 Show Results", colors.get('btn_primary', '#2563eb'), 'show_results'),
+            ('quality_map_btn', "Quality Map", colors.get('btn_info', '#3b82f6'), 'toggle_quality_map'),
+            ('results_btn', "Show Results", colors.get('btn_primary', '#2563eb'), 'show_results'),
         ]
 
         for i, (btn_id, text, color, callback_key) in enumerate(results_buttons):
@@ -209,8 +209,8 @@ class ControlPanel:
         file_row.pack(fill='x', pady=(0, 8))
 
         file_buttons = [
-            ('save_btn', "💾 Save Report", colors.get('btn_success', '#10b981'), 'save_report'),
-            ('help_btn', "❓ Help", colors.get('btn_neutral', '#64748b'), 'show_help'),
+            ('save_btn', "Export Report", colors.get('btn_success', '#10b981'), 'save_report'),
+            ('help_btn', "Help", colors.get('btn_neutral', '#64748b'), 'show_help'),
         ]
 
         for i, (btn_id, text, color, callback_key) in enumerate(file_buttons):
@@ -231,7 +231,7 @@ class ControlPanel:
 
         # Only reset display button now (theme moved to top nav)
         reset_btn = self._create_modern_button(
-            system_row, "🔄 Reset View", colors.get('btn_warning', '#f59e0b'),
+            system_row, "Reset View", colors.get('btn_warning', '#f59e0b'),
             command=lambda: self._execute_callback('reset_display_results'),
             style='secondary'
         )
@@ -243,7 +243,7 @@ class ControlPanel:
         danger_frame.pack(fill='x', padx=16, pady=(0, 16))
 
         reset_btn = self._create_modern_button(
-            danger_frame, "🗑️ Full Reset", colors.get('btn_danger', '#ef4444'),
+            danger_frame, "Full Reset", colors.get('btn_danger', '#ef4444'),
             command=lambda: self._execute_callback('reset_application'),
             style='danger'
         )
@@ -530,10 +530,6 @@ class ControlPanel:
         if callback_key in self.callbacks:
             self.callbacks[callback_key]()
 
-
-
-
-
     def refresh_theme(self):
         """Refresh all UI elements with new theme colors."""
         colors = get_theme_colors()
@@ -701,10 +697,6 @@ class ControlPanel:
         """Update ROI information display."""
         self.roi_info_label.config(text=roi_info)
 
-
-
-
-
     def get_control_parameters(self) -> Dict[str, Any]:
         """Get control analysis parameters."""
         return {
@@ -724,14 +716,12 @@ class ControlPanel:
             else:
                 self.buttons['quality_map_btn'].config(bg=colors.get('info', '#3b82f6'))
 
-
-
     def _create_live_analysis_section(self):
         """Create live analysis section in control panel."""
         colors = get_theme_colors()
 
         # SpinView Camera Capture Card
-        live_card = self._create_modern_card(self.inner_frame, "📹 Camera Capture")
+        live_card = self._create_modern_card(self.inner_frame, "Camera Capture")
 
         # SpinView capture button
         live_btn_frame = tk.Frame(live_card, bg=colors['panel_bg'])
@@ -739,7 +729,7 @@ class ControlPanel:
 
         self.spinview_capture_btn = self._create_modern_button(
             live_btn_frame,
-            "📹 SpinView Camera Capture",
+            "SpinView Camera Capture",
             colors.get('btn_info', '#3b82f6'),
             command=lambda: self._execute_callback('start_spinview_capture'),
             style='primary'
