@@ -7,8 +7,8 @@ from typing import Optional, Dict, Any
 
 import threading
 import numpy as np
-from PIL import Image
 import logging
+from datetime import datetime
 
 from ui.main_components.control_panel import ControlPanel
 from ui.main_components.image_canvas import ImageCanvas
@@ -27,6 +27,7 @@ from utils.file_operations import FileOperationsManager
 
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.modern_styling import ModernStyleManager
+from utils.shared_logging import shared_logger
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,10 @@ class DICQualityInspector:
         self.analyzer = ImageAnalyzer()
         self.report_generator = ReportGenerator()
         logger.info("Application services initialized successfully")
+        
+        # Initialize shared logging system
+        self.log_directory = shared_logger.get_dic_quality_directory()
+        self.ensure_log_directory()
 
         # Style manager
         self.style_manager = ModernStyleManager()
@@ -746,6 +751,12 @@ class DICQualityInspector:
         self.state.set_analysis_result(result)
         self.state.set_analysis_in_progress(False)
 
+        # Automatically save analysis data to shared logging system
+        try:
+            self.save_analysis_data_to_shared_logging()
+        except Exception as e:
+            logger.warning(f"Failed to auto-save analysis data: {e}")
+
         # Auto-show quality map after short delay
         self.root.after(500, self._auto_show_quality_map)
 
@@ -875,21 +886,13 @@ class DICQualityInspector:
             messagebox.showerror("Save Error", f"Failed to save report: {str(e)}")
 
     def _get_reports_folder(self) -> Optional[str]:
-        """Get or create the reports folder."""
-        import os
-        
+        """Get or create the reports folder using shared logging system."""
         try:
-            # Try to create a Reports folder in the user's Documents
-            documents_path = os.path.expanduser("~/Documents")
-            reports_folder = os.path.join(documents_path, "DIC_Analysis_Reports")
-            
-            # Create the folder if it doesn't exist
-            os.makedirs(reports_folder, exist_ok=True)
-            
-            return reports_folder
+            # Use shared export directory for reports that should be shared across all apps
+            return shared_logger.get_export_directory()
             
         except Exception as e:
-            logging.warning(f"Could not create default reports folder: {e}")
+            logging.warning(f"Could not access shared export directory: {e}")
             # Fall back to asking user for location
             base_folder = filedialog.askdirectory(
                 title="Select Location to Create Report Folder",
@@ -1402,7 +1405,42 @@ in the DIC Quality Inspector application.
         """Get ROI information for report."""
         return self.state.get_roi_info()
 
+    def ensure_log_directory(self):
+        """Initialize logging directory using shared logging system."""
+        try:
+            print(f"📁 DIC Quality log directory: {self.log_directory}")
+            shared_logger.print_directory_structure()
+        except Exception as e:
+            print(f"⚠ Error with log directory: {e}")
 
+    def save_analysis_data_to_shared_logging(self):
+        """Save current analysis data using shared logging system."""
+        if not self.state.has_analysis_result():
+            return
+        
+        try:
+            result = self.state.get_analysis_result()
+            image_info = self.state.get_image_info()
+            roi_info = self.state.get_roi_info()
+            
+            # Save analysis results as JSON
+            analysis_data = {
+                'analysis_result': result.to_dict(),
+                'image_info': image_info,
+                'roi_info': roi_info,
+                'timestamp': datetime.now().isoformat(),
+                'application': 'DIC Quality Inspector'
+            }
+            
+            # Use shared logging to save analysis data
+            self.file_operations.save_analysis_results_with_shared_logging(analysis_data)
+            
+            # Save quality map data as CSV
+            if hasattr(result, 'quality_map') and result.quality_map is not None:
+                self.file_operations.save_quality_map_csv_with_shared_logging(result.quality_map)
+                
+        except Exception as e:
+            logger.error(f"Failed to save analysis data to shared logging: {e}")
 
     def start_spinview_capture(self):
         """Start SpinView camera capture mode."""

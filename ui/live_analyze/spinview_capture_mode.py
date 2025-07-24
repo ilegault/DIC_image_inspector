@@ -66,6 +66,10 @@ class SpinViewCaptureMode:
         self.capture_window = None
         self.results_window = None
         
+        # Window geometry management
+        self.main_window_geometry = None
+        self.main_window_state = 'normal'
+        
         # Initialize style manager
         self.style_manager = ModernStyleManager()
         
@@ -95,10 +99,16 @@ class SpinViewCaptureMode:
 
     def _create_capture_window(self):
         """Create the main capture interface window."""
+        # Store main window geometry before creating capture window
+        self._store_main_window_geometry()
+        
         self.capture_window = tk.Toplevel(self.root)
         self.capture_window.title("SpinView Camera DIC Quality Analyzer")
         self.capture_window.geometry("1000x700")
         self.capture_window.protocol("WM_DELETE_WINDOW", self._on_capture_window_close)
+        
+        # Position capture window on same monitor as main window
+        self._position_capture_window()
         
         # Apply theme
         colors = self._get_colors()
@@ -108,6 +118,84 @@ class SpinViewCaptureMode:
         
         # Initial window refresh
         self._refresh_windows()
+
+    def _store_main_window_geometry(self):
+        """Store the main window geometry to restore it later."""
+        try:
+            # Force window to update before getting geometry
+            self.root.update_idletasks()
+            
+            # Get current geometry
+            self.main_window_geometry = self.root.geometry()
+            
+            # Also store window state
+            self.main_window_state = self.root.state()
+            
+            logger.debug(f"Stored main window geometry: {self.main_window_geometry}, state: {self.main_window_state}")
+        except Exception as e:
+            logger.warning(f"Could not store main window geometry: {e}")
+            self.main_window_geometry = None
+            self.main_window_state = 'normal'
+
+    def _position_capture_window(self):
+        """Position capture window on the same monitor as the main window."""
+        try:
+            # Get main window position and size
+            main_x = self.root.winfo_x()
+            main_y = self.root.winfo_y()
+            main_width = self.root.winfo_width()
+            main_height = self.root.winfo_height()
+            
+            # Calculate position for capture window (slightly offset from main window)
+            capture_x = main_x + 50  # Offset by 50 pixels
+            capture_y = main_y + 50
+            
+            # For multi-monitor setups, be more careful about screen bounds
+            try:
+                # Create a temporary window to get screen info for the main window's monitor
+                temp = tk.Toplevel()
+                temp.withdraw()  # Hide it
+                temp.geometry(f"1x1+{main_x}+{main_y}")  # Position at main window location
+                temp.update_idletasks()
+                
+                # Get screen dimensions from the temporary window's perspective
+                screen_width = temp.winfo_screenwidth()
+                screen_height = temp.winfo_screenheight()
+                temp.destroy()
+                
+            except Exception:
+                # Fallback to main window's screen info
+                screen_width = self.root.winfo_screenwidth()
+                screen_height = self.root.winfo_screenheight()
+            
+            # Adjust if window would go off-screen, but allow for multi-monitor setups
+            if capture_x + 1000 > screen_width:
+                capture_x = screen_width - 1000 - 10
+            if capture_y + 700 > screen_height:
+                capture_y = screen_height - 700 - 10
+                
+            # Only adjust if completely off-screen
+            if capture_x + 1000 < 0:  # Completely off left edge
+                capture_x = 10
+            if capture_y + 700 < 0:  # Completely off top edge
+                capture_y = 10
+            
+            # Set the window position
+            self.capture_window.geometry(f"1000x700+{capture_x}+{capture_y}")
+            logger.debug(f"Positioned capture window at: {capture_x}, {capture_y} (main at {main_x}, {main_y})")
+            
+        except Exception as e:
+            logger.warning(f"Could not position capture window: {e}")
+            # Fallback: position relative to main window with simple offset
+            try:
+                main_x = self.root.winfo_x()
+                main_y = self.root.winfo_y()
+                capture_x = main_x + 100
+                capture_y = main_y + 100
+                self.capture_window.geometry(f"1000x700+{capture_x}+{capture_y}")
+            except Exception:
+                # Final fallback to default positioning
+                self.capture_window.geometry("1000x700")
 
     def _create_capture_ui(self):
         """Create the capture UI."""
@@ -1378,9 +1466,72 @@ class SpinViewCaptureMode:
     def _on_capture_window_close(self):
         """Handle capture window close."""
         self._stop_analysis()
+        
+        # Restore main window geometry if it was stored
+        self._restore_main_window_geometry()
+        
         if self.capture_window:
             self.capture_window.destroy()
             self.capture_window = None
+
+    def _restore_main_window_geometry(self):
+        """Restore the main window geometry."""
+        try:
+            if hasattr(self, 'main_window_geometry') and self.main_window_geometry:
+                # First restore the window state
+                if hasattr(self, 'main_window_state') and self.main_window_state:
+                    try:
+                        self.root.state(self.main_window_state)
+                    except Exception:
+                        pass  # Ignore state restoration errors
+                
+                # Then restore geometry
+                self.root.geometry(self.main_window_geometry)
+                logger.debug(f"Restored main window geometry: {self.main_window_geometry}")
+                
+                # Force window to update and refresh
+                self.root.update_idletasks()
+                
+                # Ensure window is visible and properly sized
+                self.root.deiconify()  # Make sure window is not minimized
+                self.root.lift()       # Bring window to front
+                self.root.focus_force()  # Give focus back to main window
+                
+        except Exception as e:
+            logger.warning(f"Could not restore main window geometry: {e}")
+            # Fallback: ensure window is at least visible and reasonably sized
+            try:
+                self.root.deiconify()
+                self.root.lift()
+                
+                # Set a reasonable minimum size if window became too small
+                current_geometry = self.root.geometry()
+                logger.debug(f"Current geometry after error: {current_geometry}")
+                
+                if 'x' in current_geometry:
+                    width_height = current_geometry.split('+')[0]
+                    if 'x' in width_height:
+                        try:
+                            width, height = width_height.split('x')
+                            width, height = int(width), int(height)
+                            
+                            # If window is too small, restore to a reasonable size
+                            if width < 800 or height < 500:
+                                # Try to restore to a good size on the same monitor
+                                try:
+                                    main_x = self.root.winfo_x()
+                                    main_y = self.root.winfo_y()
+                                    self.root.geometry(f"1200x800+{main_x}+{main_y}")
+                                except Exception:
+                                    self.root.geometry("1200x800")
+                                logger.info("Reset main window to minimum size due to geometry issues")
+                        except ValueError:
+                            # If we can't parse the geometry, set a default
+                            self.root.geometry("1200x800")
+                            logger.info("Set default geometry due to parsing error")
+                            
+            except Exception as fallback_error:
+                logger.error(f"Could not apply fallback geometry fix: {fallback_error}")
 
     def export_results(self):
         """Export analysis results."""

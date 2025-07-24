@@ -3,6 +3,7 @@
 import datetime
 from typing import Dict, List, Optional, Tuple
 import logging
+from utils.shared_logging import shared_logger
 
 logger = logging.getLogger(__name__)
 
@@ -623,7 +624,7 @@ End of Report
 
     def save_report_to_file(self, report_content: str, filename: str) -> bool:
         """
-        Save report content to a file.
+        Save report content to a file using shared logging system.
 
         Args:
             report_content: The complete report text
@@ -633,10 +634,30 @@ End of Report
             True if successful, False otherwise
         """
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(report_content)
-            logger.info(f"Report saved to {filename}")
+            # Use shared logging system for DIC quality reports
+            filepath = shared_logger.write_text_log('dic_quality', filename, report_content)
+            logger.info(f"✅ Report saved to shared logging directory: {filepath}")
             return True
         except Exception as e:
             logger.error(f"Failed to save report to {filename}: {e}")
+            return False
+
+    def save_report_to_export_directory(self, report_content: str, filename: str) -> bool:
+        """
+        Save report content to shared export directory for cross-app access.
+
+        Args:
+            report_content: The complete report text
+            filename: Target filename
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Use shared export directory for reports that should be accessible by all apps
+            filepath = shared_logger.write_text_log('export', filename, report_content)
+            logger.info(f"📤 Report exported to shared directory: {filepath}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to export report to {filename}: {e}")
             return False

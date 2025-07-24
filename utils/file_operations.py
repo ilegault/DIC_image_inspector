@@ -12,6 +12,7 @@ import numpy as np
 from utils.constants import (
     FILE_OPERATIONS, DEFAULT_FILENAMES, SUPPORTED_IMAGE_FORMATS, VALIDATION
 )
+from utils.shared_logging import shared_logger
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class FileOperationsManager:
 
     def __init__(self):
         """Initialize the file operations manager."""
-        self.last_directory = os.path.expanduser("~")  # Default to home directory
+        self.last_directory = shared_logger.get_dic_quality_directory()  # Use shared logging directory
         self.supported_extensions = self._get_supported_extensions()
 
     def load_image_from_file(self, filepath: Optional[str] = None) -> Optional[np.ndarray]:
@@ -506,6 +507,96 @@ class FileOperationsManager:
         """Get the last used directory."""
         return self.last_directory
 
+    def save_analysis_results_with_shared_logging(self, results_data: Dict, filename: Optional[str] = None) -> Optional[str]:
+        """
+        Save analysis results using shared logging system.
+        
+        Args:
+            results_data: Analysis results dictionary
+            filename: Optional filename, will generate timestamped name if None
+            
+        Returns:
+            Path to saved file or None if failed
+        """
+        try:
+            if filename is None:
+                filename = shared_logger.create_timestamped_filename("quality_analysis", "json")
+            
+            # Convert results to JSON-serializable format
+            json_results = self._convert_for_json(results_data)
+            
+            # Save using shared logging
+            filepath = shared_logger.write_text_log('dic_quality', filename, 
+                                                   json.dumps(json_results, indent=2, ensure_ascii=False))
+            
+            logger.info(f"✅ Analysis results saved to: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Failed to save analysis results with shared logging: {e}")
+            return None
+
+    def save_quality_map_csv_with_shared_logging(self, quality_map: np.ndarray, filename: Optional[str] = None) -> Optional[str]:
+        """
+        Save quality map data as CSV using shared logging system.
+        
+        Args:
+            quality_map: Quality map data (0-1 range)
+            filename: Optional filename, will generate timestamped name if None
+            
+        Returns:
+            Path to saved file or None if failed
+        """
+        try:
+            if filename is None:
+                filename = shared_logger.create_timestamped_filename("quality_map_data", "csv")
+            
+            # Prepare data for CSV
+            h, w = quality_map.shape
+            data = []
+            for y in range(h):
+                for x in range(w):
+                    quality_01 = quality_map[y, x]
+                    quality_percent = quality_01 * 100
+                    data.append({
+                        'X_Pixel': x,
+                        'Y_Pixel': y,
+                        'Quality_Score_0_1': f"{quality_01:.6f}",
+                        'Quality_Percentage': f"{quality_percent:.2f}"
+                    })
+            
+            # Save using shared logging
+            filepath = shared_logger.write_csv_log('dic_quality', filename, data)
+            
+            logger.info(f"✅ Quality map data saved to: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Failed to save quality map CSV with shared logging: {e}")
+            return None
+
+    def export_final_report_to_shared_export(self, report_content: str, report_name: str) -> Optional[str]:
+        """
+        Export final report to shared export directory.
+        
+        Args:
+            report_content: The report text content
+            report_name: Name for the report file
+            
+        Returns:
+            Path to exported file or None if failed
+        """
+        try:
+            # Save to shared export directory for cross-app access
+            filepath = shared_logger.write_text_log('export', report_name, report_content)
+            
+            logger.info(f"📤 Report exported to shared directory: {filepath}")
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"Failed to export report to shared directory: {e}")
+            return None
+
 
 class ExportManager:
     """
@@ -681,7 +772,6 @@ def get_file_size_string(size_bytes: int) -> str:
 
 def is_valid_filename(filename: str) -> bool:
     """Check if filename is valid for the current operating system."""
-    import string
 
     # Check for invalid characters (Windows is most restrictive)
     invalid_chars = '<>:"/\\|?*'

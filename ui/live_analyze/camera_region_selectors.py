@@ -14,6 +14,86 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def position_window_on_parent_monitor(child_window, parent_window):
+    """
+    Position a child window on the same monitor as the parent window.
+    
+    Args:
+        child_window: The window to position
+        parent_window: The parent window to position relative to
+    """
+    try:
+        # Get parent window position and size
+        parent_x = parent_window.winfo_x()
+        parent_y = parent_window.winfo_y()
+        parent_width = parent_window.winfo_width()
+        parent_height = parent_window.winfo_height()
+        
+        # Get child window size
+        child_width = child_window.winfo_width()
+        child_height = child_window.winfo_height()
+        
+        # Calculate center position relative to parent window
+        # Center the child window over the parent window
+        x = parent_x + (parent_width - child_width) // 2
+        y = parent_y + (parent_height - child_height) // 2
+        
+        # For multi-monitor setups, we need to be more careful about screen bounds
+        # Try to get the actual monitor bounds that contain the parent window
+        try:
+            import tkinter as tk
+            # Create a temporary window to get screen info
+            temp = tk.Toplevel()
+            temp.withdraw()  # Hide it
+            temp.geometry(f"1x1+{parent_x}+{parent_y}")  # Position at parent location
+            temp.update_idletasks()
+            
+            # Get screen dimensions from the temporary window's perspective
+            screen_width = temp.winfo_screenwidth()
+            screen_height = temp.winfo_screenheight()
+            temp.destroy()
+            
+        except Exception:
+            # Fallback to parent's screen info
+            screen_width = parent_window.winfo_screenwidth()
+            screen_height = parent_window.winfo_screenheight()
+        
+        # Adjust if window would go off-screen, but be more lenient for multi-monitor
+        # Allow negative coordinates for secondary monitors
+        max_x = screen_width - child_width - 10
+        max_y = screen_height - child_height - 10
+        
+        # Only adjust if the window would be completely off-screen
+        if x + child_width < 0:  # Completely off left edge
+            x = 10
+        elif x > screen_width:  # Completely off right edge
+            x = max_x
+            
+        if y + child_height < 0:  # Completely off top edge
+            y = 10
+        elif y > screen_height:  # Completely off bottom edge
+            y = max_y
+        
+        # Set the window position
+        child_window.geometry(f"+{x}+{y}")
+        logger.debug(f"Positioned child window at: {x}, {y} (parent at {parent_x}, {parent_y})")
+        
+    except Exception as e:
+        logger.warning(f"Could not position window on parent monitor: {e}")
+        # Fallback: position relative to parent with simple offset
+        try:
+            parent_x = parent_window.winfo_x()
+            parent_y = parent_window.winfo_y()
+            x = parent_x + 100
+            y = parent_y + 100
+            child_window.geometry(f"+{x}+{y}")
+        except Exception:
+            # Final fallback to center of screen
+            x = (child_window.winfo_screenwidth() - child_window.winfo_width()) // 2
+            y = (child_window.winfo_screenheight() - child_window.winfo_height()) // 2
+            child_window.geometry(f"+{x}+{y}")
+
+
 class CameraRegionSelector:
     """Interactive selector for camera region within window."""
 
@@ -114,11 +194,9 @@ class CameraRegionSelector:
             fg='gray'
         ).pack(pady=5)
 
-        # Center window
+        # Position window on same monitor as parent
         self.selector_window.update_idletasks()
-        x = (self.selector_window.winfo_screenwidth() - self.selector_window.winfo_width()) // 2
-        y = (self.selector_window.winfo_screenheight() - self.selector_window.winfo_height()) // 2
-        self.selector_window.geometry(f"+{x}+{y}")
+        position_window_on_parent_monitor(self.selector_window, self.parent)
 
     def _on_click(self, event):
         """Handle mouse click."""
@@ -347,11 +425,9 @@ class CameraPolygonSelector:
         )
         self.status_label.pack(pady=5)
 
-        # Center window
+        # Position window on same monitor as parent
         self.selector_window.update_idletasks()
-        x = (self.selector_window.winfo_screenwidth() - self.selector_window.winfo_width()) // 2
-        y = (self.selector_window.winfo_screenheight() - self.selector_window.winfo_height()) // 2
-        self.selector_window.geometry(f"+{x}+{y}")
+        position_window_on_parent_monitor(self.selector_window, self.parent)
 
     def _on_left_click(self, event):
         """Handle left mouse click - add polygon point."""
