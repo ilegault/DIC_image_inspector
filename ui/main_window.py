@@ -28,6 +28,7 @@ from utils.file_operations import FileOperationsManager
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.modern_styling import ModernStyleManager
 from utils.shared_logging import shared_logger
+from utils.window_utils import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,6 @@ class DICQualityInspector:
         
         # Initialize shared logging system
         self.log_directory = shared_logger.get_dic_quality_directory()
-        self.ensure_log_directory()
 
         # Style manager
         self.style_manager = ModernStyleManager()
@@ -375,7 +375,7 @@ class DICQualityInspector:
         # Application title (compact version)
         title_label = tk.Label(
             title_frame,
-            text=" DIC Quality Inspector v2.1",
+            text=" DIC Quality Inspector",
             font=APP_CONFIG['fonts']['subheading'],
             fg=colors['text_primary'],
             bg=colors['panel_bg']
@@ -902,17 +902,18 @@ class DICQualityInspector:
 
     def _show_export_options_dialog(self) -> Optional[Dict[str, Any]]:
         """Show dialog for export options."""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Export Report Options")
-        dialog.geometry("450x400")
-        dialog.transient(self.root)
+        dialog = WindowManager.create_child_window(
+            parent=self.root,
+            title="Export Report Options",
+            width=450,
+            height=600,
+            resizable=False,
+            topmost=False,
+            center=True,
+            offset_x=50,
+            offset_y=50
+        )
         dialog.grab_set()
-        
-        # Center the dialog
-        dialog.geometry("+%d+%d" % (
-            self.root.winfo_rootx() + 50,
-            self.root.winfo_rooty() + 50
-        ))
         
         colors = get_theme_colors()
         dialog.configure(bg=colors['background'])
@@ -926,7 +927,7 @@ class DICQualityInspector:
         # Title
         title_label = tk.Label(
             main_frame,
-            text="📦 Export Analysis Report",
+            text="Export Analysis Report",
             font=APP_CONFIG['fonts']['heading'],
             fg=colors['text_primary'],
             bg=colors['background']
@@ -946,7 +947,7 @@ class DICQualityInspector:
         # Export format options
         format_frame = tk.LabelFrame(
             main_frame,
-            text="📄 Report Type",
+            text="Report Type",
             font=APP_CONFIG['fonts']['default'],
             fg=colors['text_primary'],
             bg=colors['background']
@@ -957,7 +958,7 @@ class DICQualityInspector:
         
         tk.Radiobutton(
             format_frame,
-            text="📦 Complete Package (Recommended)",
+            text="Complete Package (Recommended)",
             variable=format_var,
             value='package',
             font=APP_CONFIG['fonts']['default'],
@@ -968,7 +969,7 @@ class DICQualityInspector:
         
         tk.Label(
             format_frame,
-            text="   • Text report + Quality map images + Original image",
+            text=" Text report + Quality map images + Original image",
             font=APP_CONFIG['fonts']['small'],
             fg=colors['text_secondary'],
             bg=colors['background']
@@ -976,7 +977,7 @@ class DICQualityInspector:
         
         tk.Radiobutton(
             format_frame,
-            text="📄 Text Report Only",
+            text="Text Report Only",
             variable=format_var,
             value='text_only',
             font=APP_CONFIG['fonts']['default'],
@@ -988,7 +989,7 @@ class DICQualityInspector:
         # Quality map options
         qmap_frame = tk.LabelFrame(
             main_frame,
-            text="🗺️ Quality Map Images (for Complete Package)",
+            text="Quality Map Images (for Complete Package)",
             font=APP_CONFIG['fonts']['default'],
             fg=colors['text_primary'],
             bg=colors['background']
@@ -1000,7 +1001,7 @@ class DICQualityInspector:
         
         tk.Checkbutton(
             qmap_frame,
-            text="✅ Quality map overlay (recommended)",
+            text="Quality map overlay (recommended)",
             variable=include_overlay_var,
             font=APP_CONFIG['fonts']['default'],
             fg=colors['text_primary'],
@@ -1010,7 +1011,7 @@ class DICQualityInspector:
         
         tk.Label(
             qmap_frame,
-            text="   Shows quality distribution on your original image",
+            text="Shows quality distribution on your original image",
             font=APP_CONFIG['fonts']['small'],
             fg=colors['text_secondary'],
             bg=colors['background']
@@ -1018,7 +1019,7 @@ class DICQualityInspector:
         
         tk.Checkbutton(
             qmap_frame,
-            text="📊 Raw quality map visualization",
+            text="Raw quality map visualization",
             variable=include_raw_var,
             font=APP_CONFIG['fonts']['default'],
             fg=colors['text_primary'],
@@ -1028,7 +1029,7 @@ class DICQualityInspector:
         
         tk.Label(
             qmap_frame,
-            text="   Pure quality data without background image",
+            text="Pure quality data without background image",
             font=APP_CONFIG['fonts']['small'],
             fg=colors['text_secondary'],
             bg=colors['background']
@@ -1037,7 +1038,7 @@ class DICQualityInspector:
         # Spectrum selection
         spectrum_frame = tk.LabelFrame(
             main_frame,
-            text="🎨 Color Scheme",
+            text="Color Scheme",
             font=APP_CONFIG['fonts']['default'],
             fg=colors['text_primary'],
             bg=colors['background']
@@ -1046,10 +1047,10 @@ class DICQualityInspector:
         
         spectrum_var = tk.StringVar(value='optimized')
         spectrum_options = [
-            ('optimized', '🔥 Optimized (Hot-Cold, Recommended)'),
-            ('viridis', '🌈 Viridis (Purple-Yellow)'),
-            ('plasma', '💜 Plasma (Purple-Pink)'),
-            ('jet', '🌊 Jet (Blue-Red, Classic)')
+            ('optimized', 'Optimized (Hot-Cold, Recommended)'),
+            ('viridis', 'Viridis (Purple-Yellow)'),
+            ('plasma', 'Plasma (Purple-Pink)'),
+            ('jet', 'Jet (Blue-Red, Classic)')
         ]
         
         for value, text in spectrum_options:
@@ -1083,7 +1084,7 @@ class DICQualityInspector:
         
         tk.Button(
             button_frame,
-            text="📦 Export Report",
+            text="Export Report",
             command=on_export,
             font=APP_CONFIG['fonts']['default'],
             bg=colors.get('btn_primary', '#2563eb'),
@@ -1404,14 +1405,6 @@ in the DIC Quality Inspector application.
     def _get_roi_info(self) -> Optional[Dict[str, Any]]:
         """Get ROI information for report."""
         return self.state.get_roi_info()
-
-    def ensure_log_directory(self):
-        """Initialize logging directory using shared logging system."""
-        try:
-            print(f"📁 DIC Quality log directory: {self.log_directory}")
-            shared_logger.print_directory_structure()
-        except Exception as e:
-            print(f"⚠ Error with log directory: {e}")
 
     def save_analysis_data_to_shared_logging(self):
         """Save current analysis data using shared logging system."""

@@ -32,7 +32,6 @@ class SharedLogger:
         
         # Create subdirectories for different components
         self.camera_log_directory = self.base_log_directory / "Camera_Logs"
-        self.forwarder_log_directory = self.base_log_directory / "Forwarder_Logs"
         self.session_log_directory = self.base_log_directory / "Session_Logs"
         self.dic_quality_directory = self.base_log_directory / "DIC_Quality_Logs"
         self.export_directory = self.base_log_directory / "Exports"
@@ -41,7 +40,6 @@ class SharedLogger:
         for directory in [
             self.base_log_directory,
             self.camera_log_directory,
-            self.forwarder_log_directory,
             self.session_log_directory,
             self.dic_quality_directory,
             self.export_directory
@@ -104,8 +102,6 @@ class SharedLogger:
         """
         directory_map = {
             'camera': self.camera_log_directory,
-            'forwarder': self.forwarder_log_directory,
-            'session': self.session_log_directory,
             'dic_quality': self.dic_quality_directory,
             'export': self.export_directory
         }
@@ -203,8 +199,6 @@ class SharedLogger:
         """
         directory_map = {
             'camera': self.camera_log_directory,
-            'forwarder': self.forwarder_log_directory,
-            'session': self.session_log_directory,
             'dic_quality': self.dic_quality_directory,
             'export': self.export_directory
         }
@@ -220,22 +214,10 @@ class SharedLogger:
         info = {
             'base_directory': str(self.base_log_directory),
             'camera_logs': str(self.camera_log_directory),
-            'forwarder_logs': str(self.forwarder_log_directory),
-            'session_logs': str(self.session_log_directory),
             'dic_quality_logs': str(self.dic_quality_directory),
             'exports': str(self.export_directory)
         }
         return info
-    
-    def print_directory_structure(self):
-        """Print the directory structure for debugging"""
-        print("📁 DIC Timing Log Directory Structure:")
-        print(f"   📂 Base: {self.base_log_directory}")
-        print(f"   📂 Camera Logs: {self.camera_log_directory}")
-        print(f"   📂 Forwarder Logs: {self.forwarder_log_directory}")
-        print(f"   📂 Session Logs: {self.session_log_directory}")
-        print(f"   📂 DIC Quality Logs: {self.dic_quality_directory}")
-        print(f"   📂 Exports: {self.export_directory}")
 
 
 # Create a global instance for easy import

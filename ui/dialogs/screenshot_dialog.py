@@ -4,9 +4,23 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import ImageGrab
 import numpy as np
-from typing import Callable, Optional
+from typing import Callable, Optional, List, Dict, Tuple
 from utils.constants import APP_CONFIG
+from utils.window_utils import WindowManager
 import time
+import sys
+
+# Windows-specific imports for monitor detection
+if sys.platform == 'win32':
+    try:
+        import win32api
+        import win32gui
+        import win32con
+        WINDOWS_API_AVAILABLE = True
+    except ImportError:
+        WINDOWS_API_AVAILABLE = False
+else:
+    WINDOWS_API_AVAILABLE = False
 
 
 class ScreenshotDialog:
@@ -14,7 +28,7 @@ class ScreenshotDialog:
     Screenshot capture dialog for capturing screen regions.
 
     Provides fullscreen overlay for selecting screen regions to capture.
-    Follows single responsibility principle - only screenshot capture.
+    Enhanced with multi-monitor support and monitor selection.
     """
 
     def __init__(self, parent: tk.Widget, callback: Callable[[Optional[np.ndarray]], None]):
@@ -37,6 +51,110 @@ class ScreenshotDialog:
         self.start_y = 0
         self.rect_id = None
         self.selecting = False
+        
+        # Multi-monitor support
+        self.monitors = []
+        self.selected_monitor = None
+        self.monitor_offset_x = 0
+        self.monitor_offset_y = 0
+        
+        # Detect available monitors
+        self._detect_monitors()
+
+    def _detect_monitors(self) -> None:
+        """Detect all available monitors and their properties."""
+        self.monitors = []
+        
+        if WINDOWS_API_AVAILABLE:
+            try:
+                # Use Windows API to get accurate monitor information
+                def monitor_enum_proc(hMonitor, hdcMonitor, lprcMonitor, dwData):
+                    monitor_info = win32api.GetMonitorInfo(hMonitor)
+                    monitor_rect = monitor_info['Monitor']
+                    work_rect = monitor_info['Work']
+                    
+                    # Calculate monitor properties
+                    x, y, right, bottom = monitor_rect
+                    width = right - x
+                    height = bottom - y
+                    
+                    # Determine if this is the primary monitor
+                    is_primary = monitor_info['Flags'] & win32con.MONITORINFOF_PRIMARY
+                    
+                    monitor_data = {
+                        'index': len(self.monitors),
+                        'name': f"Monitor {len(self.monitors) + 1}" + (" (Primary)" if is_primary else ""),
+                        'x': x,
+                        'y': y,
+                        'width': width,
+                        'height': height,
+                        'right': right,
+                        'bottom': bottom,
+                        'is_primary': bool(is_primary),
+                        'work_area': work_rect
+                    }
+                    
+                    self.monitors.append(monitor_data)
+                    return True
+                
+                # Enumerate all monitors
+                win32api.EnumDisplayMonitors(None, None, monitor_enum_proc, 0)
+                
+                # Sort monitors: primary first, then by position
+                self.monitors.sort(key=lambda m: (not m['is_primary'], m['y'], m['x']))
+                
+                print(f"Detected {len(self.monitors)} monitors:")
+                for i, monitor in enumerate(self.monitors):
+                    print(f"  {monitor['name']}: {monitor['width']}x{monitor['height']} at ({monitor['x']}, {monitor['y']})")
+                    
+            except Exception as e:
+                print(f"Error detecting monitors with Windows API: {e}")
+                self._fallback_monitor_detection()
+        else:
+            self._fallback_monitor_detection()
+    
+    def _fallback_monitor_detection(self) -> None:
+        """Fallback monitor detection using tkinter."""
+        try:
+            # Get total virtual screen size
+            root = self.parent
+            while root.master:
+                root = root.master
+            
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            
+            # Simple fallback - assume single monitor or treat as single large screen
+            self.monitors = [{
+                'index': 0,
+                'name': "Primary Monitor",
+                'x': 0,
+                'y': 0,
+                'width': screen_width,
+                'height': screen_height,
+                'right': screen_width,
+                'bottom': screen_height,
+                'is_primary': True,
+                'work_area': (0, 0, screen_width, screen_height)
+            }]
+            
+            print(f"Fallback: Single monitor {screen_width}x{screen_height}")
+            
+        except Exception as e:
+            print(f"Error in fallback monitor detection: {e}")
+            # Ultimate fallback
+            self.monitors = [{
+                'index': 0,
+                'name': "Default Monitor",
+                'x': 0,
+                'y': 0,
+                'width': 1920,
+                'height': 1080,
+                'right': 1920,
+                'bottom': 1080,
+                'is_primary': True,
+                'work_area': (0, 0, 1920, 1080)
+            }]
 
     def show(self):
         """Show the screenshot capture options."""
@@ -53,25 +171,23 @@ class ScreenshotDialog:
             self._cleanup_and_callback(None)
 
     def _show_screenshot_options(self):
-        """Show screenshot options dialog."""
-        # Create options dialog
-        options_window = tk.Toplevel(self.parent)
-        options_window.title("Screenshot Options")
-        options_window.geometry("450x280")
-        options_window.resizable(False, False)
-        options_window.transient(self.parent)
+        """Show screenshot options dialog with monitor selection."""
+        # Adjust window height based on number of monitors
+        base_height = 320
+        monitor_height = len(self.monitors) * 35 if len(self.monitors) > 1 else 0
+        window_height = base_height + monitor_height
+        
+        # Create options dialog with proper positioning
+        options_window = WindowManager.create_child_window(
+            parent=self.parent,
+            title="Screenshot Options",
+            width=500,
+            height=window_height,
+            resizable=False,
+            topmost=True,
+            center=True
+        )
         options_window.grab_set()
-
-        # Make sure it appears on top
-        options_window.attributes('-topmost', True)
-        options_window.lift()
-        options_window.focus_force()
-
-        # Center the window
-        options_window.update_idletasks()
-        x = (options_window.winfo_screenwidth() // 2) - (450 // 2)
-        y = (options_window.winfo_screenheight() // 2) - (280 // 2)
-        options_window.geometry(f"450x280+{x}+{y}")
 
         # Set background color
         options_window.configure(bg='#f0f0f0')
@@ -79,12 +195,47 @@ class ScreenshotDialog:
         # Title
         title_label = tk.Label(
             options_window,
-            text=" Choose Screenshot Method",
+            text="📸 Choose Screenshot Method",
             font=('Arial', 16, 'bold'),
             bg='#f0f0f0',
             fg='#333333'
         )
-        title_label.pack(pady=20)
+        title_label.pack(pady=15)
+
+        # Monitor selection (if multiple monitors)
+        if len(self.monitors) > 1:
+            monitor_frame = tk.LabelFrame(
+                options_window,
+                text="Select Monitor",
+                font=('Arial', 11, 'bold'),
+                bg='#f0f0f0',
+                fg='#333333',
+                padx=10,
+                pady=5
+            )
+            monitor_frame.pack(fill='x', padx=20, pady=(0, 15))
+            
+            self.monitor_var = tk.StringVar(value=str(self.monitors[0]['index']))
+            
+            for monitor in self.monitors:
+                monitor_text = f"{monitor['name']} - {monitor['width']}×{monitor['height']}"
+                if monitor['is_primary']:
+                    monitor_text += " 🖥️"
+                
+                monitor_radio = tk.Radiobutton(
+                    monitor_frame,
+                    text=monitor_text,
+                    variable=self.monitor_var,
+                    value=str(monitor['index']),
+                    font=('Arial', 10),
+                    bg='#f0f0f0',
+                    fg='#333333',
+                    selectcolor='#e0e0e0'
+                )
+                monitor_radio.pack(anchor='w', pady=2)
+        else:
+            # Single monitor - set default
+            self.monitor_var = tk.StringVar(value="0")
 
         # Description
         desc_label = tk.Label(
@@ -106,7 +257,7 @@ class ScreenshotDialog:
 
         full_screen_btn = tk.Button(
             full_screen_frame,
-            text=" Capture Full Screen",
+            text="🖥️ Capture Full Monitor",
             font=('Arial', 12, 'bold'),
             bg='#10b981',
             fg='white',
@@ -114,13 +265,13 @@ class ScreenshotDialog:
             padx=20,
             pady=12,
             cursor='hand2',
-            command=lambda: self._capture_full_screen_and_close(options_window)
+            command=lambda: self._capture_full_monitor_and_close(options_window)
         )
         full_screen_btn.pack(fill='x')
 
         full_desc = tk.Label(
             full_screen_frame,
-            text="Captures entire screen, then use ROI selector in app",
+            text="Captures entire selected monitor, then use ROI selector in app",
             font=('Arial', 9),
             bg='#f0f0f0',
             fg='#888888'
@@ -133,7 +284,7 @@ class ScreenshotDialog:
 
         select_region_btn = tk.Button(
             region_frame,
-            text=" Select Screen Region",
+            text="🎯 Select Screen Region",
             font=('Arial', 12, 'bold'),
             bg='#3b82f6',
             fg='white',
@@ -147,7 +298,7 @@ class ScreenshotDialog:
 
         region_desc = tk.Label(
             region_frame,
-            text="Click and drag to select specific area (Recommended)",
+            text="Click and drag to select specific area on selected monitor (Recommended)",
             font=('Arial', 9),
             bg='#f0f0f0',
             fg='#888888'
@@ -157,7 +308,7 @@ class ScreenshotDialog:
         # Cancel button
         cancel_btn = tk.Button(
             buttons_frame,
-            text=" Cancel",
+            text="❌ Cancel",
             font=('Arial', 11),
             bg='#6b7280',
             fg='white',
@@ -175,30 +326,42 @@ class ScreenshotDialog:
         # Keyboard shortcuts
         options_window.bind('<Escape>', lambda e: self._cancel_and_close(options_window))
         options_window.bind('<Return>', lambda e: self._start_region_selection(options_window))
-        options_window.bind('<F>', lambda e: self._capture_full_screen_and_close(options_window))
-        options_window.bind('<f>', lambda e: self._capture_full_screen_and_close(options_window))
+        options_window.bind('<F>', lambda e: self._capture_full_monitor_and_close(options_window))
+        options_window.bind('<f>', lambda e: self._capture_full_monitor_and_close(options_window))
         options_window.bind('<R>', lambda e: self._start_region_selection(options_window))
         options_window.bind('<r>', lambda e: self._start_region_selection(options_window))
 
         # Add keyboard shortcut hints
         shortcut_label = tk.Label(
             options_window,
-            text="Shortcuts: Enter/R = Region, F = Full Screen, Esc = Cancel",
+            text="Shortcuts: Enter/R = Region, F = Full Monitor, Esc = Cancel",
             font=('Arial', 8),
             bg='#f0f0f0',
             fg='#999999'
         )
         shortcut_label.pack(side='bottom', pady=5)
 
-    def _capture_full_screen_and_close(self, options_window):
-        """Capture full screen and close options window."""
+    def _capture_full_monitor_and_close(self, options_window):
+        """Capture full monitor and close options window."""
+        # Get selected monitor
+        selected_index = int(self.monitor_var.get())
+        self.selected_monitor = self.monitors[selected_index]
+        
+        print(f"Selected monitor: {self.selected_monitor['name']} at ({self.selected_monitor['x']}, {self.selected_monitor['y']})")
+        
         options_window.destroy()
         self._hide_main_window()
         # Longer delay to ensure window is fully hidden before capture
-        self.parent.after(300, self._capture_full_screen)
+        self.parent.after(300, self._capture_full_monitor)
 
     def _start_region_selection(self, options_window):
         """Start region selection and close options window."""
+        # Get selected monitor
+        selected_index = int(self.monitor_var.get())
+        self.selected_monitor = self.monitors[selected_index]
+        
+        print(f"Selected monitor for region selection: {self.selected_monitor['name']} at ({self.selected_monitor['x']}, {self.selected_monitor['y']})")
+        
         options_window.destroy()
         self._hide_main_window()
         # Small delay to ensure window is hidden
@@ -247,8 +410,37 @@ class ScreenshotDialog:
         except Exception as e:
             print(f"Warning: Could not hide main window: {e}")
 
+    def _capture_full_monitor(self):
+        """Capture the entire selected monitor without user selection."""
+        try:
+            if not self.selected_monitor:
+                print("No monitor selected, falling back to full screen")
+                self._capture_full_screen()
+                return
+                
+            monitor = self.selected_monitor
+            print(f"Capturing full monitor: {monitor['name']} ({monitor['width']}x{monitor['height']})")
+
+            # Capture specific monitor using its coordinates
+            bbox = (monitor['x'], monitor['y'], monitor['right'], monitor['bottom'])
+            screenshot = ImageGrab.grab(bbox=bbox, all_screens=True)
+
+            if screenshot:
+                # Convert to numpy array
+                image_array = np.array(screenshot)
+                print(f"Monitor captured: {image_array.shape}")
+                self._cleanup_and_callback(image_array)
+            else:
+                print("Failed to capture monitor")
+                self._cleanup_and_callback(None)
+
+        except Exception as e:
+            print(f"Error capturing monitor: {e}")
+            # Fallback to full screen capture
+            self._capture_full_screen()
+
     def _capture_full_screen(self):
-        """Capture the entire screen without user selection."""
+        """Capture the entire screen without user selection (fallback method)."""
         try:
             print("Capturing full screen...")
 
@@ -289,14 +481,33 @@ class ScreenshotDialog:
             # Small delay to ensure main window is fully hidden before capture
             time.sleep(0.1)
 
-            # Capture the entire screen (should now be clean without app window)
-            screen_image = ImageGrab.grab(all_screens=True)
+            if not self.selected_monitor:
+                print("No monitor selected, using fallback")
+                self._create_simple_overlay()
+                return
 
-            # Create fullscreen window
+            monitor = self.selected_monitor
+            print(f"Creating overlay for monitor: {monitor['name']} at ({monitor['x']}, {monitor['y']})")
+
+            # Capture only the selected monitor (should now be clean without app window)
+            bbox = (monitor['x'], monitor['y'], monitor['right'], monitor['bottom'])
+            screen_image = ImageGrab.grab(bbox=bbox, all_screens=True)
+
+            # Create fullscreen window on the selected monitor
             self.screenshot_window = tk.Toplevel()  # Don't parent to main window
+            self.screenshot_window.configure(bg='black')
+            
+            # Position window on the selected monitor
+            self.screenshot_window.geometry(f"{monitor['width']}x{monitor['height']}+{monitor['x']}+{monitor['y']}")
+            self.screenshot_window.update_idletasks()
+            
+            # Make it fullscreen on the selected monitor
             self.screenshot_window.attributes('-fullscreen', True)
             self.screenshot_window.attributes('-topmost', True)
-            self.screenshot_window.configure(bg='black')
+
+            # Store monitor offset for coordinate calculations
+            self.monitor_offset_x = monitor['x']
+            self.monitor_offset_y = monitor['y']
 
             # Convert PIL image to PhotoImage for tkinter
             self.screen_photo = ImageTk.PhotoImage(screen_image)
@@ -317,7 +528,7 @@ class ScreenshotDialog:
                 tags="background"
             )
 
-            # Create instructions overlay (keep this as requested)
+            # Create instructions overlay
             instructions_frame = tk.Frame(
                 self.screenshot_window,
                 bg='#1f2937',
@@ -328,7 +539,7 @@ class ScreenshotDialog:
 
             instructions = tk.Label(
                 instructions_frame,
-                text=" CLICK and DRAG to select region • ESC to cancel • Right-click to cancel",
+                text=f"📸 {monitor['name']} • CLICK and DRAG to select region • ESC to cancel • Right-click to cancel",
                 font=('Segoe UI', 12, 'bold'),
                 fg="#ffffff",
                 bg="#1f2937",
@@ -349,7 +560,7 @@ class ScreenshotDialog:
             self.screenshot_window.update_idletasks()
             self.screenshot_window.update()
 
-            print("Screenshot overlay created with clean screen content - app window hidden!")
+            print(f"Screenshot overlay created for {monitor['name']} - app window hidden!")
 
         except Exception as e:
             print(f"Error creating screen overlay: {e}")
@@ -362,6 +573,26 @@ class ScreenshotDialog:
 
         # Create window without parent to avoid showing main window
         self.screenshot_window = tk.Toplevel()
+        
+        if self.selected_monitor:
+            monitor = self.selected_monitor
+            print(f"Creating simple overlay for monitor: {monitor['name']}")
+            
+            # Position on selected monitor
+            self.screenshot_window.geometry(f"{monitor['width']}x{monitor['height']}+{monitor['x']}+{monitor['y']}")
+            self.monitor_offset_x = monitor['x']
+            self.monitor_offset_y = monitor['y']
+            
+            monitor_name = monitor['name']
+        else:
+            # Fallback to parent's display
+            parent_info = WindowManager.get_parent_window_info(self.parent)
+            self.screenshot_window.geometry(f"1x1+{parent_info['x']}+{parent_info['y']}")
+            self.monitor_offset_x = 0
+            self.monitor_offset_y = 0
+            monitor_name = "Screen"
+        
+        self.screenshot_window.update_idletasks()
         self.screenshot_window.attributes('-fullscreen', True)
         self.screenshot_window.attributes('-topmost', True)
 
@@ -381,13 +612,13 @@ class ScreenshotDialog:
         )
         self.selection_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
-        # Instructions (keep as requested)
+        # Instructions
         instructions_frame = tk.Frame(self.screenshot_window, bg='#1f2937', relief='solid', bd=1)
         instructions_frame.place(x=20, y=20)
 
         instructions = tk.Label(
             instructions_frame,
-            text=" CLICK and DRAG to select region • ESC to cancel • Right-click to cancel",
+            text=f"📸 {monitor_name} • CLICK and DRAG to select region • ESC to cancel • Right-click to cancel",
             font=('Segoe UI', 12, 'bold'),
             fg="#ffffff",
             bg="#1f2937",
@@ -401,7 +632,7 @@ class ScreenshotDialog:
         self.screenshot_window.grab_set()
         self.selection_canvas.focus_set()
 
-        print("Simple overlay created (main window should be hidden)")
+        print(f"Simple overlay created for {monitor_name} (main window should be hidden)")
 
     def _bind_events(self):
         """Bind mouse and keyboard events - simplified and reliable."""
@@ -604,26 +835,46 @@ class ScreenshotDialog:
 
     def _capture_screenshot(self, x1: int, y1: int, x2: int, y2: int):
         """
-        Capture screenshot of selected area with improved coordinate handling.
+        Capture screenshot of selected area with monitor-specific coordinate handling.
 
         Args:
-            x1, y1: Top-left corner
-            x2, y2: Bottom-right corner
+            x1, y1: Top-left corner (relative to overlay canvas)
+            x2, y2: Bottom-right corner (relative to overlay canvas)
         """
         try:
-            print(f"Capturing screenshot: ({x1},{y1}) to ({x2},{y2})")
+            print(f"Capturing screenshot: canvas coords ({x1},{y1}) to ({x2},{y2})")
 
-            # Get screen offset for multi-monitor setups
-            screen_x = self.screenshot_window.winfo_rootx()
-            screen_y = self.screenshot_window.winfo_rooty()
-
-            # Adjust coordinates for screen position
-            abs_x1 = x1 + screen_x
-            abs_y1 = y1 + screen_y
-            abs_x2 = x2 + screen_x
-            abs_y2 = y2 + screen_y
-
-            print(f"Adjusted coordinates: ({abs_x1},{abs_y1}) to ({abs_x2},{abs_y2})")
+            if self.selected_monitor:
+                # Use monitor-specific coordinates
+                monitor = self.selected_monitor
+                
+                # Convert canvas coordinates to absolute screen coordinates
+                abs_x1 = x1 + monitor['x']
+                abs_y1 = y1 + monitor['y']
+                abs_x2 = x2 + monitor['x']
+                abs_y2 = y2 + monitor['y']
+                
+                print(f"Monitor {monitor['name']} coordinates: ({abs_x1},{abs_y1}) to ({abs_x2},{abs_y2})")
+                
+                # Ensure coordinates are within monitor bounds
+                abs_x1 = max(monitor['x'], min(abs_x1, monitor['right']))
+                abs_y1 = max(monitor['y'], min(abs_y1, monitor['bottom']))
+                abs_x2 = max(monitor['x'], min(abs_x2, monitor['right']))
+                abs_y2 = max(monitor['y'], min(abs_y2, monitor['bottom']))
+                
+                print(f"Bounded coordinates: ({abs_x1},{abs_y1}) to ({abs_x2},{abs_y2})")
+                
+            else:
+                # Fallback to window-based coordinates
+                screen_x = self.screenshot_window.winfo_rootx()
+                screen_y = self.screenshot_window.winfo_rooty()
+                
+                abs_x1 = x1 + screen_x
+                abs_y1 = y1 + screen_y
+                abs_x2 = x2 + screen_x
+                abs_y2 = y2 + screen_y
+                
+                print(f"Fallback coordinates: ({abs_x1},{abs_y1}) to ({abs_x2},{abs_y2})")
 
             # Capture screenshot with all_screens=True for multi-monitor support
             screenshot = ImageGrab.grab(bbox=(abs_x1, abs_y1, abs_x2, abs_y2), all_screens=True)
@@ -639,17 +890,9 @@ class ScreenshotDialog:
 
         except Exception as e:
             print(f"Error capturing screenshot: {e}")
-            # Fallback to original coordinates if adjustment fails
-            try:
-                screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                if screenshot:
-                    image_array = np.array(screenshot)
-                    print(f"Fallback screenshot captured: {image_array.shape}")
-                    self._cleanup_and_callback(image_array)
-                else:
-                    self._cleanup_and_callback(None)
-            except:
-                self._cleanup_and_callback(None)
+            import traceback
+            traceback.print_exc()
+            self._cleanup_and_callback(None)
 
     def _refocus_window(self, event=None):
         """Refocus the screenshot window if focus is lost."""
@@ -695,7 +938,7 @@ class ScreenshotDialog:
                     root = self.parent
                     while root.master:
                         root = root.master
-                    root.deiconify()
+                    WindowManager.ensure_window_visible(root)
                     self.main_window_hidden = False
                 except Exception as e:
                     print(f"Warning: Could not restore main window: {e}")

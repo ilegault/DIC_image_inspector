@@ -32,6 +32,7 @@ from models.roi_data import ROIData
 from models.analysis_result import AnalysisResult
 from utils.modern_styling import ModernStyleManager
 from utils.constants import APP_CONFIG, get_theme_colors
+from utils.window_utils import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -102,13 +103,20 @@ class SpinViewCaptureMode:
         # Store main window geometry before creating capture window
         self._store_main_window_geometry()
         
-        self.capture_window = tk.Toplevel(self.root)
-        self.capture_window.title("SpinView Camera DIC Quality Analyzer")
-        self.capture_window.geometry("1000x700")
+        # Create capture window with proper positioning and full window controls
+        self.capture_window = WindowManager.create_child_window(
+            parent=self.root,
+            title="SpinView Camera DIC Quality Analyzer",
+            width=1000,
+            height=700,
+            resizable=True,
+            topmost=False,
+            center=False,
+            offset_x=50,
+            offset_y=50,
+            transient=False  # Allow full window management controls
+        )
         self.capture_window.protocol("WM_DELETE_WINDOW", self._on_capture_window_close)
-        
-        # Position capture window on same monitor as main window
-        self._position_capture_window()
         
         # Apply theme
         colors = self._get_colors()

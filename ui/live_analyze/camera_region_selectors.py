@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 from PIL import Image, ImageTk
 import logging
+from utils.window_utils import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +112,15 @@ class CameraRegionSelector:
 
     def show(self):
         """Show the region selector."""
-        self.selector_window = tk.Toplevel(self.parent)
-        self.selector_window.title("Select Camera Feed Region")
+        self.selector_window = WindowManager.create_child_window(
+            parent=self.parent,
+            title="Select Camera Feed Region",
+            width=800,
+            height=950,
+            resizable=True,
+            topmost=True,
+            center=True
+        )
         self.selector_window.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
         # Instructions
@@ -194,9 +202,7 @@ class CameraRegionSelector:
             fg='gray'
         ).pack(pady=5)
 
-        # Position window on same monitor as parent
-        self.selector_window.update_idletasks()
-        position_window_on_parent_monitor(self.selector_window, self.parent)
+        # Window positioning is handled by WindowManager.create_child_window
 
     def _on_click(self, event):
         """Handle mouse click."""
@@ -320,8 +326,15 @@ class CameraPolygonSelector:
 
     def show(self):
         """Show the polygon selector."""
-        self.selector_window = tk.Toplevel(self.parent)
-        self.selector_window.title("Select Camera Feed Region - Polygon")
+        self.selector_window = WindowManager.create_child_window(
+            parent=self.parent,
+            title="Select Camera Feed Region - Polygon",
+            width=800,
+            height=600,
+            resizable=True,
+            topmost=True,
+            center=True
+        )
         self.selector_window.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
         # Instructions
@@ -425,9 +438,7 @@ class CameraPolygonSelector:
         )
         self.status_label.pack(pady=5)
 
-        # Position window on same monitor as parent
-        self.selector_window.update_idletasks()
-        position_window_on_parent_monitor(self.selector_window, self.parent)
+        # Window positioning is handled by WindowManager.create_child_window
 
     def _on_left_click(self, event):
         """Handle left mouse click - add polygon point."""

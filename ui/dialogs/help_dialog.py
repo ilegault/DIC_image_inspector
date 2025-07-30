@@ -2,7 +2,8 @@
 
 import tkinter as tk
 from tkinter import ttk
-from utils.constants import APP_CONFIG, get_theme_colors
+from utils.constants import APP_CONFIG
+from utils.window_utils import WindowManager
 
 
 class HelpDialog:
@@ -35,15 +36,17 @@ class HelpDialog:
 
     def _create_help_window(self):
         """Create the help window."""
-        self.help_window = tk.Toplevel(self.parent)
-        self.help_window.title("DIC Image Quality Inspector - Help")
-        self.help_window.geometry("700x600")
+        self.help_window = WindowManager.create_child_window(
+            parent=self.parent,
+            title="DIC Image Quality Inspector - Help",
+            width=700,
+            height=600,
+            resizable=True,
+            topmost=False,
+            center=True
+        )
         self.help_window.configure(bg=APP_CONFIG['colors']['background'])
-        self.help_window.transient(self.parent)
         self.help_window.grab_set()
-
-        # Make resizable
-        self.help_window.resizable(True, True)
         self.help_window.minsize(600, 500)
 
     def _create_help_content(self):

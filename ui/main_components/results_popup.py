@@ -6,6 +6,7 @@ from typing import Optional
 from models.analysis_result import AnalysisResult
 from core.report_generator import ReportGenerator
 from utils.constants import APP_CONFIG, get_theme_colors
+from utils.window_utils import WindowManager
 
 
 class ResultsPopup:
@@ -46,15 +47,17 @@ class ResultsPopup:
         """Create the main popup window."""
         colors = get_theme_colors()
 
-        self.popup_window = tk.Toplevel(self.parent)
-        self.popup_window.title("DIC Quality Analysis Results")
-        self.popup_window.geometry("1000x800")
+        self.popup_window = WindowManager.create_child_window(
+            parent=self.parent,
+            title="DIC Quality Analysis Results",
+            width=1000,
+            height=800,
+            resizable=True,
+            topmost=False,
+            center=True
+        )
         self.popup_window.configure(bg=colors['background'])
-        self.popup_window.transient(self.parent)
         self.popup_window.grab_set()
-
-        # Make resizable
-        self.popup_window.resizable(True, True)
         self.popup_window.minsize(800, 600)
 
     def _create_popup_content(self):
