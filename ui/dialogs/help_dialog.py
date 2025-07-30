@@ -1,8 +1,9 @@
-# ui/dialogs/help_dialog.py - Help Information Dialog
+# ui/dialogs/help_dialog.py - Fixed version
+# Replace your current help_dialog.py with this corrected version
 
 import tkinter as tk
 from tkinter import ttk
-from utils.constants import APP_CONFIG
+from utils.constants import APP_CONFIG, get_theme_colors
 from utils.window_utils import WindowManager
 
 
@@ -45,23 +46,30 @@ class HelpDialog:
             topmost=False,
             center=True
         )
-        self.help_window.configure(bg=APP_CONFIG['colors']['background'])
+
+        # FIX: Use get_theme_colors() instead of direct access
+        colors = get_theme_colors()
+        self.help_window.configure(bg=colors['background'])
+
         self.help_window.grab_set()
         self.help_window.minsize(600, 500)
 
     def _create_help_content(self):
         """Create the help content."""
+        # FIX: Use get_theme_colors() throughout
+        colors = get_theme_colors()
+
         # Main container
-        main_frame = tk.Frame(self.help_window, bg=APP_CONFIG['colors']['background'])
+        main_frame = tk.Frame(self.help_window, bg=colors['background'])
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
         # Title
         title_label = tk.Label(
             main_frame,
-            text=" DIC Image Quality Inspector - Help Guide",
+            text="🔍 DIC Image Quality Inspector - Help Guide",
             font=APP_CONFIG['fonts']['title'],
-            fg=APP_CONFIG['colors']['text_primary'],
-            bg=APP_CONFIG['colors']['background']
+            fg=colors['text_primary'],
+            bg=colors['background']
         )
         title_label.pack(pady=(0, 20))
 
@@ -83,8 +91,10 @@ class HelpDialog:
 
     def _create_scrollable_help_text(self, parent):
         """Create scrollable text area with help content."""
+        colors = get_theme_colors()
+
         # Frame for text widget and scrollbar
-        text_frame = tk.Frame(parent, bg=APP_CONFIG['colors']['background'])
+        text_frame = tk.Frame(parent, bg=colors['background'])
         text_frame.pack(fill='both', expand=True)
 
         # Text widget with scrollbar
@@ -138,7 +148,7 @@ class HelpDialog:
 
 
 
- GETTING STARTED
+📋 GETTING STARTED
 
 • Loading Images:
   - Click "Load Image" to select an image file from your computer
@@ -150,128 +160,134 @@ class HelpDialog:
   2. Optionally select a Region of Interest (ROI)
   3. Click "Analyze" to process the image
   4. View results using "Show Results" button
-  5. Save comprehensive report if needed
+  5. Export reports using "Export Report" button
+
+• Analysis Parameters:
+  - Select between Standard and ZEISS-style analysis methods
+  - Adjust subset size and overlap based on your needs
+  - Use color spectrum options to visualize quality maps
 
 
 
- REGION OF INTEREST (ROI) SELECTION
+🎯 REGION OF INTEREST (ROI) SELECTION
 
-• Starting ROI Selection:
-  - Click "Select ROI" button to enter selection mode
-  - Cursor changes to crosshair when active
-
-• Creating ROI Polygon:
-  - Left-click to add points to your polygon
-  - Move mouse to see preview line to next point
-  - Need minimum 3 points for a valid polygon
-  - Right-click to complete the polygon selection
-
-• ROI Benefits:
-  - Focus analysis on specific area of interest
+• ROI Purpose:
+  - Focus analysis on specific image areas
   - Reduce processing time for large images
-  - Get targeted quality assessment
+  - Analyze only relevant regions for your DIC setup
 
-• Tips:
-  - Select areas with representative speckle patterns
-  - Avoid edges and boundaries of specimens
-  - Ensure ROI contains sufficient pattern detail
+• How to Select ROI:
+  - Click "Select ROI" button
+  - Left-click to start creating rectangle
+  - Drag to define the region boundary
+  - Right-click to complete selection
+  - Clear existing ROI by clicking "Select ROI" again
 
-
-
-️ IMAGE NAVIGATION & VIEWING
-
-• Zoom Controls:
-  - Mouse wheel: Zoom in/out at cursor position
-  - Supports zoom levels from 10% to 500%
-
-• Panning:
-  - Hold Ctrl + Left-click and drag to pan around image
-  - Essential for navigating large, zoomed images
-
-• View Options:
-  - "Original": Show unprocessed image
-  - "Edges": Display edge detection visualization
-  - "Gradient": Show gradient magnitude analysis
-  - "Reset": Return to default view and clear all selections
-
-• Quality Map Display:
-  - "Quality Map" button toggles color overlay showing analysis results
-  - Different color schemes available via dropdown menu
+• ROI Tips:
+  - Select representative areas with good speckle patterns
+  - Avoid edges and areas with poor lighting
+  - Multiple ROI analyses can validate pattern consistency
 
 
 
- ANALYSIS & QUALITY ASSESSMENT
+📊 UNDERSTANDING RESULTS
 
-• Analysis Process:
-  - Examines speckle pattern quality across the image
-  - Evaluates gradient content, contrast, and pattern characteristics
-  - Generates recommended DIC correlation parameters
+• Overall Quality Score:
+  - Score range: 0-100 (higher = better for DIC)
+  - Excellent (80-100): Ideal for high-precision DIC
+  - Good (60-79): Suitable for most DIC applications
+  - Fair (40-59): May work with careful parameter selection
+  - Poor (<40): Consider pattern improvement
 
-• Quality Metrics:
-  - Overall Score: 0-100 scale indicating DIC suitability
-  - Color-coded quality map showing spatial variation
-  - Detailed statistics including min/max/average quality
+• Quality Map Colors:
+  - Hot colors (red/yellow): High quality areas
+  - Cool colors (blue/green): Lower quality areas
+  - Use different color spectrums for better visualization
 
-• Methods Options:
-  - Custom DIC: Strict assessment for DIC applications only
-  - ZEISS-Style: Professional pattern quality evaluation
-
-• Understanding Scores:
-  - 90-100: Excellent - Perfect for precision DIC
-  - 75-90: Very Good - Suitable for most DIC applications
-  - 60-75: Good - Acceptable with proper parameters
-  - 45-60: Marginal - Use with caution
-  - Below 45: Poor - Consider pattern improvement
+• DIC Parameter Recommendations:
+  - Subset size suggestions based on speckle characteristics
+  - Overlap recommendations for measurement accuracy
+  - Step size guidance for correlation analysis
 
 
 
- ADVANCED FEATURES
+⚙️ ANALYSIS METHODS
 
-• Controlled Method Analysis:
-  - Select "controlled" spectrum for professional assessment
-  - Adjust Facet Size (11-51 pixels) and Step Size (2-20 pixels)
-  - Higher density analysis with smaller step sizes
+• Standard Analysis:
+  - Fast processing suitable for most applications
+  - Balanced between speed and accuracy
+  - Good for initial pattern assessment
 
-• Report Generation:
-  - "Show Results": Detailed popup with comprehensive analysis
-  - "Save Report": Export complete technical report to text file
-  - Includes mathematical background, recommendations, and parameters
-
-• Quality Map Features:
-  - Dynamic legend shows color coding for current spectrum
-  - Toggle quality map on/off to compare with original
-  - Legend updates automatically when changing spectrums
+• ZEISS-style Analysis:
+  - More detailed analysis with smaller steps
+  - Higher accuracy but slower processing
+  - Recommended for critical measurements
+  - Mimics commercial DIC software analysis
 
 
 
- INTERPRETING RESULTS
+🎨 COLOR SPECTRUM OPTIONS
 
-• Executive Summary:
-  - Large score display with color-coded assessment
-  - Clear recommendation: Proceed, Caution, or Improve
+• Optimized (Hot-Cold):
+  - Custom spectrum designed for DIC quality visualization
+  - Clear distinction between quality levels
+  - Recommended for most users
 
-• Technical Analysis:
-  - Statistical distribution of quality across image
-  - Min/Max/Average/Median quality values
-  - Standard deviation indicating quality consistency
+• Viridis (Purple-Yellow):
+  - Perceptually uniform color scale
+  - Good for scientific publications
+  - Color-blind friendly option
 
-• DIC Parameters:
-  - Recommended subset (facet) size for correlation
-  - Optimal step size for point spacing
-  - Expected measurement accuracy based on pattern quality
+• Plasma (Purple-Pink):
+  - High contrast visualization
+  - Good for identifying subtle variations
 
-• Recommendations:
-  - Specific guidance based on your quality score
-  - Suggestions for improving pattern if needed
-  - Parameter adjustments for optimal results
-
+• Jet (Blue-Red):
+  - Traditional color scale
+  - Familiar to many users
+  - High dynamic range
 
 
- TROUBLESHOOTING
 
-• ROI Selection Issues:
-  - If ROI appears offset, try resetting view first
-  - Ensure at least 3 points before right-clicking to complete
+💾 EXPORT AND REPORTING
+
+• Report Formats:
+  - Complete Package: Text report + images + original
+  - Text Only: Detailed analysis results in text format
+
+• Export Options:
+  - Quality map overlay on original image
+  - Raw quality map visualization
+  - Multiple color spectrum options
+  - Comprehensive text analysis
+
+• File Organization:
+  - All exports saved to timestamped folders
+  - Package summary included for easy reference
+  - Results compatible with documentation needs
+
+
+
+TROUBLESHOOTING
+
+• Image Loading Issues:
+  - Ensure image format is supported (PNG, JPEG, TIFF, BMP)
+  - Check file permissions and path
+  - Try reducing image size if memory errors occur
+
+• Analysis Problems:
+  - Verify image has sufficient speckle pattern
+  - Try different ROI selection if results seem inconsistent
+  - Use Standard analysis for faster processing
+
+• Display Issues:
+  - If quality map doesn't appear, ensure analysis completed
+  - Try different color spectrums for better visibility
+  - Check that legend panel is enabled
+
+• ROI Selection Problems:
+  - Ensure you're left-clicking to start selection
+  - Use right-clicking to complete
   - Clear existing ROI by clicking "Select ROI" again
 
 • Image Display Problems:
@@ -291,7 +307,7 @@ class HelpDialog:
 
 
 
- BEST PRACTICES
+BEST PRACTICES
 
 • Image Preparation:
   - Ensure good lighting and focus before capture
@@ -315,7 +331,7 @@ class HelpDialog:
 
 
 
- TECHNICAL BACKGROUND
+🔬 TECHNICAL BACKGROUND
 
 This tool analyzes digital image correlation (DIC) pattern quality by:
 
@@ -330,7 +346,7 @@ parameters and expected measurement accuracy.
 
 
 
- SUPPORT
+📞 SUPPORT
 
 For additional support or feature requests:
 • Check the application documentation

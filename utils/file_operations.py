@@ -529,7 +529,7 @@ class FileOperationsManager:
             filepath = shared_logger.write_text_log('dic_quality', filename, 
                                                    json.dumps(json_results, indent=2, ensure_ascii=False))
             
-            logger.info(f"✅ Analysis results saved to: {filepath}")
+            logger.info(f"Analysis results saved to: {filepath}")
             return filepath
             
         except Exception as e:
@@ -568,7 +568,7 @@ class FileOperationsManager:
             # Save using shared logging
             filepath = shared_logger.write_csv_log('dic_quality', filename, data)
             
-            logger.info(f"✅ Quality map data saved to: {filepath}")
+            logger.info(f"Quality map data saved to: {filepath}")
             return filepath
             
         except Exception as e:
@@ -590,7 +590,7 @@ class FileOperationsManager:
             # Save to shared export directory for cross-app access
             filepath = shared_logger.write_text_log('export', report_name, report_content)
             
-            logger.info(f"📤 Report exported to shared directory: {filepath}")
+            logger.info(f"Report exported to shared directory: {filepath}")
             return filepath
             
         except Exception as e:
