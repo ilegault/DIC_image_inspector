@@ -3,6 +3,7 @@
 import tkinter as tk
 from typing import Dict, List, Tuple
 from utils.constants import APP_CONFIG, get_theme_colors
+from analysis.quality_map.colormap import ColormapGenerator
 
 
 class LegendPanel:
@@ -25,42 +26,12 @@ class LegendPanel:
         self.current_spectrum = None
         self.is_visible = False
 
-        # Legend definitions for different spectrums
-        self.spectrum_definitions = {
-            'optimized': {
-                'name': 'Optimized DIC',
-                'colors': [
-                    (50, 0, 0, "Unusable (0-70%): No correlation possible"),
-                    (255, 0, 0, "Poor (70-80%): Unreliable correlation"),
-                    (255, 140, 0, "Acceptable (80-85%): Usable with uncertainty"),
-                    (255, 255, 0, "Good (85-90%): Good correlation quality"),
-                    (0, 255, 255, "Very Good (90-95%): Very reliable"),
-                    (0, 100, 255, "Excellent (95-100%): Optimal pattern")
-                ]
-            },
-            'controlled': {
-                'name': 'Controlled Pattern Quality',
-                'colors': [
-                    (50, 0, 0, "Unusable (0-70%): No correlation possible"),
-                    (255, 0, 0, "Poor (70-80%): Unreliable correlation"),
-                    (255, 140, 0, "Acceptable (80-85%): Usable with uncertainty"),
-                    (255, 255, 0, "Good (85-90%): Good correlation quality"),
-                    (0, 255, 255, "Very Good (90-95%): Very reliable"),
-                    (0, 100, 255, "Excellent (95-100%): Optimal pattern")
-                ]
-            },
-            'custom_dic': {
-                'name': 'Custom DIC Assessment',
-                'colors': [
-                    (0, 0, 0, "Critical: Not suitable for DIC"),
-                    (255, 0, 0, "Minimum: Threshold for DIC"),
-                    (255, 127, 0, "Good: Acceptable for DIC"),
-                    (255, 255, 0, "Very Good: Good for DIC"),
-                    (0, 255, 0, "Excellent: Excellent for DIC"),
-                    (0, 0, 255, "Perfect: Ideal for DIC")
-                ]
-            }
-        }
+        # Initialize colormap generator to get consistent spectrum definitions
+        self.colormap_generator = ColormapGenerator()
+        
+        # Get spectrum definitions from the same source as the colormap visualization
+        # This ensures the legend colors match exactly with the actual visualization
+        self.spectrum_definitions = self.colormap_generator.detailed_spectrums
 
     def show_legend(self, spectrum_type: str):
         """

@@ -116,7 +116,7 @@ class CameraRegionSelector:
             parent=self.parent,
             title="Select Camera Feed Region",
             width=800,
-            height=950,
+            height=1000,
             resizable=True,
             topmost=True,
             center=True
@@ -330,7 +330,7 @@ class CameraPolygonSelector:
             parent=self.parent,
             title="Select Camera Feed Region - Polygon",
             width=800,
-            height=600,
+            height=1000,
             resizable=True,
             topmost=True,
             center=True

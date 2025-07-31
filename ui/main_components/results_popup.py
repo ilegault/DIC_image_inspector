@@ -50,7 +50,7 @@ class ResultsPopup:
         self.popup_window = WindowManager.create_child_window(
             parent=self.parent,
             title="DIC Quality Analysis Results",
-            width=1000,
+            width=600,
             height=800,
             resizable=True,
             topmost=False,
@@ -58,7 +58,7 @@ class ResultsPopup:
         )
         self.popup_window.configure(bg=colors['background'])
         self.popup_window.grab_set()
-        self.popup_window.minsize(800, 600)
+        self.popup_window.minsize(600, 600)
 
     def _create_popup_content(self):
         """Create the scrollable content area."""
@@ -70,9 +70,6 @@ class ResultsPopup:
 
         # Create scrollable area
         self._create_scrollable_content(main_frame)
-
-        # Close button
-        self._create_close_button(main_frame)
 
     def _create_scrollable_content(self, parent):
         """Create scrollable content area with results."""
@@ -402,26 +399,6 @@ class ResultsPopup:
             fg=colors['text_primary'],
             bg=colors['panel_bg']
         ).pack(anchor='w')
-
-    def _create_close_button(self, parent):
-        """Create close button."""
-        colors = get_theme_colors()
-        close_btn = tk.Button(
-            parent,
-            text="Close Results",
-            bg=colors['btn_primary'],
-            fg='white',
-            font=('Arial', 12, 'bold'),
-            padx=30,
-            pady=10,
-            relief='flat',
-            bd=0,
-            cursor='hand2',
-            command=self._close_popup,
-            activebackground=colors['btn_primary_hover'],
-            activeforeground='white'
-        )
-        close_btn.pack(pady=20)
 
     def _close_popup(self):
         """Close the popup window."""

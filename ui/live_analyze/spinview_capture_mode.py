@@ -33,6 +33,7 @@ from models.analysis_result import AnalysisResult
 from utils.modern_styling import ModernStyleManager
 from utils.constants import APP_CONFIG, get_theme_colors
 from utils.window_utils import WindowManager
+from analysis.quality_map.colormap import ColormapGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class SpinViewCaptureMode:
         self.analysis_history = deque(maxlen=1000)  # Store more history for graphs
         self.current_score = 0.0
         self.current_quality_map = None
+        self.current_spectrum_type = 'custom_dic'  # Track current spectrum for consistent visualization
         
         # Performance tracking
         self.frame_times = deque(maxlen=50)
@@ -73,6 +75,9 @@ class SpinViewCaptureMode:
         
         # Initialize style manager
         self.style_manager = ModernStyleManager()
+        
+        # Initialize colormap generator for consistent color visualization
+        self.colormap_generator = ColormapGenerator()
         
         logger.info("SpinViewCaptureMode initialized")
 
@@ -288,16 +293,6 @@ class SpinViewCaptureMode:
         scrollbar.config(command=self.window_listbox.yview)
 
         self.window_listbox.bind('<<ListboxSelect>>', self._on_window_select)
-
-        # Auto-find button with modern styling
-        autofind_btn = ModernStyleManager.create_modern_button(
-            window_frame,
-            text="Auto-Find SpinView",
-            bg_color=None,
-            command=self._find_spinview,
-            style='secondary'
-        )
-        autofind_btn.pack(pady=5)
 
         self.window_status = tk.Label(
             window_frame,
@@ -592,15 +587,32 @@ class SpinViewCaptureMode:
         legend_container = tk.Frame(parent, bg=colors['panel_bg'])
         legend_container.pack(fill='x', padx=5, pady=2)
         
-        # Legend items with color swatches - arranged horizontally
-        # These match the custom_dic spectrum from constants.py
-        legend_items = [
-            ("#FF0000", "Poor"),       # Red (255, 0, 0) - worst
-            ("#FF7F00", "Fair"),       # Orange (255, 127, 0)
-            ("#FFFF00", "Good"),       # Yellow (255, 255, 0)
-            ("#00FF00", "Very Good"),  # Green (0, 255, 0)
-            ("#0000FF", "Excellent")   # Blue (0, 0, 255) - best
-        ]
+        # Get legend items from colormap generator for consistency
+        # Use the current spectrum type to match the visualization
+        try:
+            spectrum_def = self.colormap_generator.detailed_spectrums.get(self.current_spectrum_type, 
+                          self.colormap_generator.detailed_spectrums['custom_dic'])
+            legend_items = []
+            
+            # Skip the first color (black/critical) for the legend display as it's rarely shown
+            colors_to_show = spectrum_def['colors'][1:]  # Skip black (0,0,0)
+            
+            for r, g, b, description in colors_to_show:
+                color_hex = f"#{r:02x}{g:02x}{b:02x}"
+                # Extract just the quality level from description
+                quality_level = description.split(':')[0] if ':' in description else description
+                legend_items.append((color_hex, quality_level))
+                
+        except Exception as e:
+            logger.error(f"Error getting legend colors: {e}")
+            # Fallback to hardcoded values
+            legend_items = [
+                ("#FF0000", "Poor"),       # Red (255, 0, 0) - worst
+                ("#FF7F00", "Fair"),       # Orange (255, 127, 0)
+                ("#FFFF00", "Good"),       # Yellow (255, 255, 0)
+                ("#00FF00", "Very Good"),  # Green (0, 255, 0)
+                ("#0000FF", "Excellent")   # Blue (0, 0, 255) - best
+            ]
         
         # Create horizontal layout with color swatches
         swatch_frame = tk.Frame(legend_container, bg=colors['panel_bg'])
@@ -689,7 +701,7 @@ class SpinViewCaptureMode:
         """Create status bar."""
         colors = self._get_colors()
         
-        self.status_var = tk.StringVar(value="Ready - Select a window from the list or use Auto-Find")
+        self.status_var = tk.StringVar(value="Ready - Select a window from the list")
         status_bar = tk.Label(
             self.capture_window,
             textvariable=self.status_var,
@@ -820,34 +832,6 @@ class SpinViewCaptureMode:
                 "Could not auto-find SpinView specifically.\n"
                 "Please manually select your camera window from the list above."
             )
-
-    def _find_spinview_window(self):
-        """Find SpinView window automatically."""
-        windows = []
-
-        def enum_handler(hwnd, ctx):
-            if win32gui.IsWindowVisible(hwnd):
-                window_text = win32gui.GetWindowText(hwnd)
-                # Look for SpinView or common camera UI patterns
-                if any(pattern in window_text.lower() for pattern in
-                       ['spinview', 'flir', 'camera', 'viewer', 'live', 'preview']):
-                    windows.append({
-                        'hwnd': hwnd,
-                        'title': window_text,
-                        'class': win32gui.GetClassName(hwnd)
-                    })
-
-        win32gui.EnumWindows(enum_handler, None)
-
-        # If found SpinView specifically
-        for window in windows:
-            if 'spinview' in window['title'].lower():
-                self.spinview_hwnd = window['hwnd']
-                logger.info(f"Found SpinView: {window['title']}")
-                return True
-
-        # Otherwise return all camera-related windows
-        return windows
 
     def _get_window_title(self, hwnd):
         """Get window title from handle."""
@@ -1019,7 +1003,7 @@ class SpinViewCaptureMode:
             
             # Determine analysis parameters based on performance mode
             if perf_mode == "fast":
-                spectrum_type = 'fast'  # Use new fast spectrum type
+                spectrum_type = 'optimized'  # Use optimized for fast mode (fast spectrum may not exist)
                 subset_size = 15  # Smaller subset for faster analysis
                 step_size = 8     # Larger step for fewer analysis points
             elif perf_mode == "balanced":
@@ -1030,6 +1014,9 @@ class SpinViewCaptureMode:
                 spectrum_type = 'controlled'
                 subset_size = None
                 step_size = None
+            
+            # Store the spectrum type for consistent visualization
+            self.current_spectrum_type = spectrum_type
             
             # Handle different camera feed types
             if isinstance(camera_feed, tuple) and len(camera_feed) == 2:
@@ -1202,63 +1189,34 @@ class SpinViewCaptureMode:
             logger.error(f"Display update error: {e}")
 
     def _create_quality_visualization(self, quality_map: np.ndarray) -> np.ndarray:
-        """Create colored visualization of quality map with custom DIC colormap."""
+        """Create colored visualization of quality map using the same colormap as main app."""
         try:
-            # Normalize quality map to 0-1
-            normalized = (quality_map - quality_map.min()) / (quality_map.max() - quality_map.min() + 1e-6)
+            # Use the same colormap generator as the main app for consistency
+            # Use the same spectrum type that was used for analysis to ensure consistency
+            colored_map = self.colormap_generator.apply_colormap(
+                quality_map, 
+                spectrum_type=self.current_spectrum_type,  # Use same spectrum as analysis
+                interpolation='smooth'                     # Use smooth interpolation for better visualization
+            )
             
-            # Create custom colormap: red (bad) to blue (good)
-            # This matches the main app's custom_dic spectrum where blue = good, red = bad
-            h, w = normalized.shape
-            colored_rgb = np.zeros((h, w, 3), dtype=np.uint8)
-            
-            # Define color points to match custom_dic spectrum from constants.py
-            # Red (bad quality) = (255, 0, 0)
-            # Orange = (255, 127, 0) 
-            # Yellow = (255, 255, 0)
-            # Green = (0, 255, 0)
-            # Blue (good quality) = (0, 0, 255)
-            
-            colors = np.array([
-                [255, 0, 0],      # Red (worst quality)
-                [255, 127, 0],    # Orange
-                [255, 255, 0],    # Yellow
-                [0, 255, 0],      # Green
-                [0, 0, 255]       # Blue (best quality)
-            ], dtype=np.float32)
-            
-            # Create smooth interpolation
-            n_colors = len(colors)
-            color_positions = np.linspace(0, 1, n_colors)
-            
-            # Find which color segment each pixel belongs to
-            segment_indices = np.searchsorted(color_positions, normalized) - 1
-            segment_indices = np.clip(segment_indices, 0, n_colors - 2)
-            
-            # Get interpolation factor
-            pos1 = color_positions[segment_indices]
-            pos2 = color_positions[segment_indices + 1]
-            denominator = pos2 - pos1
-            denominator[denominator == 0] = 1
-            t = (normalized - pos1) / denominator
-            t = np.clip(t, 0, 1)
-            
-            # Interpolate colors
-            color1 = colors[segment_indices]
-            color2 = colors[segment_indices + 1]
-            t_expanded = np.expand_dims(t, axis=2)
-            
-            interpolated_colors = color1 * (1 - t_expanded) + color2 * t_expanded
-            colored_rgb = np.clip(interpolated_colors, 0, 255).astype(np.uint8)
-            
-            return colored_rgb
+            return colored_map
             
         except Exception as e:
             logger.error(f"Error creating quality visualization: {e}")
-            # Fallback to grayscale
-            if len(quality_map.shape) == 2:
-                return np.stack([quality_map] * 3, axis=2)
-            return quality_map
+            # Fallback: try with custom_dic spectrum
+            try:
+                colored_map = self.colormap_generator.apply_colormap(
+                    quality_map, 
+                    spectrum_type='custom_dic',
+                    interpolation='smooth'
+                )
+                return colored_map
+            except:
+                # Final fallback to grayscale
+                if len(quality_map.shape) == 2:
+                    normalized = ((quality_map - quality_map.min()) / (quality_map.max() - quality_map.min() + 1e-6) * 255).astype(np.uint8)
+                    return np.stack([normalized] * 3, axis=2)
+                return quality_map
 
     def _update_canvas(self, canvas, image, item):
         """Update a canvas with an image."""

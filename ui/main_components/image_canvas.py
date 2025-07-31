@@ -173,7 +173,9 @@ class ImageCanvas:
         self.canvas.bind("<Button-1>", self._on_left_click)
         self.canvas.bind("<Motion>", self._on_mouse_motion)
 
-        # Remove keyboard shortcuts to avoid conflicts with Ctrl ROI selection
+        # Key events for ROI completion
+        self.canvas.bind("<Return>", self._on_enter_key)  # Enter key to complete ROI
+        self.canvas.bind("<KP_Enter>", self._on_enter_key)  # Numpad Enter key
 
         # Make canvas focusable for key events
         self.canvas.focus_set()
@@ -819,6 +821,19 @@ class ImageCanvas:
 
     def _start_pan(self, event):
         """Start panning operation (improved from canvas test.py)."""
+        # Check if ROI selection is active (but NOT Ctrl selection mode)
+        if self.roi_selection_active and not self.ctrl_selection_mode:
+            # Complete ROI selection with right-click (only for button route)
+            if len(self.roi_coords) >= 3:
+                logger.debug("Right-click completing ROI selection (button route)")
+                self._finish_roi_selection()
+                return "break"  # Prevent panning
+            else:
+                logger.debug("Right-click canceling ROI selection - not enough points")
+                self._clear_roi()
+                return "break"  # Prevent panning
+        
+        # Normal panning behavior
         self.canvas.config(cursor="fleur")
         self.pan_start_x = event.x
         self.pan_start_y = event.y
@@ -1125,6 +1140,26 @@ class ImageCanvas:
         """Handle mouse motion - show preview line during ROI selection."""
         if self.roi_selection_active and self.roi_coords:
             self._update_roi_preview(event)
+
+    def _on_enter_key(self, event):
+        """Handle Enter key - complete ROI selection."""
+        if self.roi_selection_active:
+            if len(self.roi_coords) >= 3:
+                logger.debug("Enter key completing ROI selection")
+                self._finish_roi_selection()
+            else:
+                logger.debug("Enter key pressed but not enough ROI points")
+        return "break"  # Prevent other Enter key handling
+
+    def _on_enter_key(self, event):
+        """Handle Enter key - complete ROI selection."""
+        if self.roi_selection_active:
+            if len(self.roi_coords) >= 3:
+                logger.debug("Enter key completing ROI selection")
+                self._finish_roi_selection()
+            else:
+                logger.debug("Enter key pressed but not enough ROI points")
+        return "break"  # Prevent other Enter key handling
 
     def start_ctrl_selection(self):
         """Start Ctrl+hold ROI selection mode."""

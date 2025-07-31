@@ -183,25 +183,25 @@ COLOR_SPECTRUMS = {
     'optimized': {
         'name': 'Optimized DIC',
         'description': 'Optimized for DIC analysis visualization',
-        'hex_colors': ['#000000', '#8b0000', '#ff4500', '#ffd700', '#00ff00'],
         'colors': [
-            (0, 0, 0, "Critical: Not suitable for DIC"),
-            (139, 0, 0, "Poor: Below threshold"),
-            (255, 69, 0, "Good: Acceptable for DIC"),
-            (255, 215, 0, "Very Good: Good for DIC"),
-            (0, 255, 0, "Excellent: Ideal for DIC")
+            (0, 0, 0, "Unusable: No correlation possible"),        # Black for worst
+            (139, 0, 0, "Poor: Unreliable correlation"),           # Dark red
+            (255, 140, 0, "Acceptable: Usable with uncertainty"),  # Orange
+            (255, 255, 0, "Good: Good correlation quality"),       # Yellow
+            (0, 255, 255, "Very Good: Very reliable"),             # Cyan
+            (0, 255, 0, "Excellent: Optimal pattern")              # Green for best
         ]
     },
     'controlled': {
         'name': 'Controlled Pattern Quality',
         'description': 'High-precision pattern quality assessment',
         'colors': [
-            (0, 0, 0, "Unusable: No correlation possible"),
-            (139, 0, 0, "Poor: Unreliable correlation"),
-            (255, 140, 0, "Acceptable: Usable with uncertainty"),
-            (255, 255, 0, "Good: Good correlation quality"),
-            (0, 255, 255, "Very Good: Very reliable"),
-            (0, 255, 0, "Excellent: Optimal pattern")
+            (0, 0, 0, "Unusable: No correlation possible"),        # Black for worst
+            (139, 0, 0, "Poor: Unreliable correlation"),           # Dark red
+            (255, 140, 0, "Acceptable: Usable with uncertainty"),  # Orange
+            (255, 255, 0, "Good: Good correlation quality"),       # Yellow
+            (0, 255, 255, "Very Good: Very reliable"),             # Cyan
+            (0, 255, 0, "Excellent: Optimal pattern")              # Green for best
         ]
     },
     'custom_dic': {
