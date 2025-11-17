@@ -1,4 +1,18 @@
-# utils/validation.py - Validation Helper
+"""
+Validation utilities for DIC image quality assessment.
+
+This module provides centralized validation functions for images, ROI data,
+and analysis parameters. It ensures consistent validation logic across the
+application and provides clear error messages for invalid inputs.
+
+Usage:
+    from utils.validation import ValidationHelper
+
+    validator = ValidationHelper()
+    if validator.validate_image_for_analysis(image):
+        # Proceed with analysis
+        pass
+"""
 
 import numpy as np
 from typing import Optional, Tuple, List

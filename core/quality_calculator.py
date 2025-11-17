@@ -1,4 +1,14 @@
-# core/quality_calculator.py - Quality Metrics Calculator
+"""
+Overall quality score calculation for DIC patterns.
+
+Combines multiple analysis metrics (gradient, contrast, entropy, speckle) into
+a unified quality score using weighted aggregation. Provides the primary quality
+assessment for DIC pattern suitability.
+
+Usage:
+    calculator = QualityCalculator()
+    quality_score = calculator.calculate_overall_quality(metrics_dict)
+"""
 
 import cv2
 import numpy as np

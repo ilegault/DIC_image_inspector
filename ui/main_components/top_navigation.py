@@ -1,4 +1,19 @@
-# ui/main_components/top_navigation.py - Top Navigation Bar Component
+"""
+Top navigation bar component for DIC Image Quality Inspector.
+
+This module implements the navigation bar containing zoom controls, analysis method
+selector, and theme toggle button. It provides quick access to frequently used
+display and analysis options in a compact horizontal layout.
+
+Usage:
+    from ui.main_components.top_navigation import TopNavigationBar
+
+    nav_bar = TopNavigationBar(parent, callbacks={
+        'zoom_in': on_zoom_in,
+        'zoom_out': on_zoom_out,
+        'toggle_theme': on_theme_toggle
+    })
+"""
 
 import tkinter as tk
 from tkinter import ttk

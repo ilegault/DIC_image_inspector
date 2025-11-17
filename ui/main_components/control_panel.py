@@ -1,4 +1,20 @@
-# ui/main_components/control_panel.py - Fixed UI Component with Dark Mode
+"""
+Control panel component for DIC Image Quality Inspector.
+
+This module implements the primary control interface with buttons for all major
+operations including image loading, ROI selection, analysis execution, and
+result viewing. It provides parameter controls and manages UI state based on
+application workflow.
+
+Usage:
+    from ui.main_components.control_panel import ControlPanel
+
+    panel = ControlPanel(parent, callbacks={
+        'load_image': on_load_image,
+        'analyze_image': on_analyze,
+        'show_results': on_show_results
+    })
+"""
 
 import tkinter as tk
 from tkinter import ttk

@@ -1,4 +1,14 @@
-# models/roi_data.py - ROI Data Model
+"""
+Region of Interest (ROI) data model and operations.
+
+Provides data structure and methods for managing ROI selections including polygon
+and rectangular regions. Handles coordinate transformations, mask generation, and
+area calculations for focused analysis.
+
+Usage:
+    roi = ROIData(coordinates=[(x1,y1), (x2,y2), ...], roi_type='polygon')
+    mask = roi.create_mask(image_shape)
+"""
 
 from dataclasses import dataclass
 from typing import List, Tuple, Optional

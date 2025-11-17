@@ -1,4 +1,15 @@
-# models/application_state.py - Application State Management
+"""
+Application state management with observer pattern.
+
+Centralized state manager for the DIC Image Quality Inspector application.
+Maintains image data, ROI selections, analysis results, and UI state with
+observer notifications for reactive updates.
+
+Usage:
+    state = ApplicationState()
+    state.set_image(image_array, filename='test.png')
+    state.add_observer('image', callback_function)
+"""
 
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Callable, List

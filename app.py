@@ -1,4 +1,22 @@
-# app.py
+"""
+Main application entry point for DIC Image Quality Inspector.
+
+This module initializes and launches the DIC Image Quality Inspector application,
+a comprehensive tool for analyzing Digital Image Correlation (DIC) image quality.
+It provides various quality metrics including contrast, gradient, entropy, and
+speckle pattern analysis to assess the suitability of images for DIC measurements.
+
+Usage:
+    python app.py
+
+Configuration:
+    Adjust DEBUG_PRESET below to control logging verbosity:
+    - 'off': Only errors
+    - 'normal': Standard operation (recommended)
+    - 'debug': Detailed console output
+    - 'zoom_pan': Debug zoom/pan operations
+    - 'verbose': Maximum debug level
+"""
 
 import tkinter as tk
 import logging
@@ -6,19 +24,6 @@ import logging
 # === CHANGE DEBUG PRESET HERE ===
 # Available presets: 'off', 'normal', 'debug', 'zoom_pan', 'verbose'
 DEBUG_PRESET = 'normal'  # <-- Change this line to change debug level
-
-# ===== DEBUG PRESETS REFERENCE =====
-"""
-Available Debug Presets:
-
-'off'      - Only errors, minimal output
-'normal'   - Standard operation (recommended for daily use)  
-'debug'    - App debugging enabled, detailed console output
-'zoom_pan' - Debug zoom/pan operations specifically  
-'verbose'  - Everything at maximum debug level
-
-Just change DEBUG_PRESET above and restart the app.
-"""
 
 # Apply debug configuration FIRST, before any other imports
 from utils.debug_config import DebugPresets

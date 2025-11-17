@@ -1,4 +1,17 @@
-# analysis/contrast_analysis.py - Contrast Analysis Module
+"""
+Contrast analysis module for DIC image quality assessment.
+
+This module provides comprehensive contrast analysis for Digital Image Correlation
+(DIC) images, evaluating both local and global contrast characteristics. It uses
+multiple metrics including RMS contrast, Michelson contrast, and local contrast
+variation to assess image quality for DIC applications.
+
+Usage:
+    from analysis.contrast_analysis import ContrastAnalyzer
+
+    analyzer = ContrastAnalyzer()
+    results = analyzer.analyze(image_data)
+"""
 
 import cv2
 import numpy as np

@@ -1,4 +1,15 @@
-# utils/file_operations.py - File I/O Operations
+"""
+File I/O operations for image loading, report saving, and data export.
+
+Provides centralized file operations including image loading with validation,
+report generation and export, quality map data export in various formats,
+and backup management with proper error handling.
+
+Usage:
+    file_mgr = FileOperationsManager()
+    image = file_mgr.load_image_from_file('path/to/image.png')
+    file_mgr.save_report_to_file(report_content, 'report.txt')
+"""
 
 import os
 import csv

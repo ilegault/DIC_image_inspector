@@ -1,4 +1,17 @@
-# core/report_generator.py - Report Generation Logic
+"""
+Report generation module for DIC quality assessment results.
+
+This module handles the creation of comprehensive analysis reports including
+technical details, non-technical explanations, DIC parameter recommendations,
+and quality criteria assessments. It provides formatted text reports suitable
+for documentation and export.
+
+Usage:
+    from core.report_generator import ReportGenerator
+
+    generator = ReportGenerator()
+    report = generator.generate_comprehensive_report(analysis_results, image_info, roi_info)
+"""
 
 import datetime
 from typing import Dict, List, Optional, Tuple

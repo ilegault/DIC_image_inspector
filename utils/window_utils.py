@@ -1,4 +1,19 @@
-# utils/window_utils.py - Window Management Utilities
+"""
+Window management utilities for cross-platform GUI operations.
+
+This module provides utility functions for managing Tkinter windows including
+positioning, centering, multi-monitor support, and window creation helpers.
+It ensures consistent window behavior across different display configurations.
+
+Usage:
+    from utils.window_utils import WindowManager
+
+    # Center a window on parent
+    WindowManager.center_on_parent(dialog, parent_window)
+
+    # Create a child window
+    child = WindowManager.create_child_window(parent, title="Dialog", width=600, height=400)
+"""
 
 import tkinter as tk
 import logging

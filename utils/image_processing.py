@@ -1,4 +1,17 @@
-# utils/image_processing.py - Image Processing Utilities
+"""
+Image processing utilities for DIC quality assessment.
+
+This module provides standardized image processing functions used throughout
+the DIC Image Quality Inspector application. It includes utilities for color
+conversion, normalization, ROI extraction, and quality visualization operations.
+
+Usage:
+    from utils.image_processing import ImageProcessor
+
+    processor = ImageProcessor()
+    gray_image = processor.convert_to_grayscale(image)
+    roi_image = processor.extract_roi(image, roi_coordinates)
+"""
 
 import cv2
 import numpy as np
