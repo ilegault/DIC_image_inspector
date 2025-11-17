@@ -1,4 +1,17 @@
-# core/image_analyzer.py - Main Analysis Orchestrator
+"""
+Main image analysis orchestrator for DIC quality assessment.
+
+This module provides the central coordination layer for DIC image quality analysis.
+It orchestrates multiple analysis components (gradient, speckle, contrast, entropy)
+and generates comprehensive quality assessments with DIC parameter recommendations.
+The ImageAnalyzer class serves as the main entry point for all analysis operations.
+
+Usage:
+    from core.image_analyzer import ImageAnalyzer
+
+    analyzer = ImageAnalyzer()
+    results = analyzer.analyze_image(image, roi=roi_data, spectrum_type='optimized')
+"""
 
 import cv2
 import numpy as np

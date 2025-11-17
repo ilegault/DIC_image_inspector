@@ -1,5 +1,16 @@
-# ui/dialogs/help_dialog.py - Fixed version
-# Replace your current help_dialog.py with this corrected version
+"""
+Help dialog for DIC Image Quality Inspector.
+
+This module provides a comprehensive help dialog displaying detailed usage
+instructions, feature explanations, and troubleshooting guidance. It presents
+information in a scrollable, formatted text area with proper theming support.
+
+Usage:
+    from ui.dialogs.help_dialog import HelpDialog
+
+    help_dialog = HelpDialog(parent_window)
+    help_dialog.show()
+"""
 
 import tkinter as tk
 from tkinter import ttk

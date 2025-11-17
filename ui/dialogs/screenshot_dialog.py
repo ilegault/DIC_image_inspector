@@ -1,4 +1,20 @@
-# ui/dialogs/screenshot_dialog.py - Screenshot Capture Dialog
+"""
+Screenshot capture dialog for screen region selection.
+
+This module provides an interactive fullscreen overlay for capturing screen regions.
+It includes multi-monitor support, monitor selection, and visual feedback during
+the selection process. The captured image is returned as a numpy array for analysis.
+
+Usage:
+    from ui.dialogs.screenshot_dialog import ScreenshotDialog
+
+    def on_screenshot_captured(image):
+        # Process captured image
+        pass
+
+    dialog = ScreenshotDialog(parent_window, on_screenshot_captured)
+    dialog.show()
+"""
 
 import tkinter as tk
 from tkinter import messagebox

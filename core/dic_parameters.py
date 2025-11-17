@@ -1,4 +1,14 @@
-# core/dic_parameters.py - DIC Parameter Calculator
+"""
+DIC parameter calculation and optimization.
+
+Determines optimal DIC analysis parameters including subset size, step size, and
+overlap based on image characteristics and quality scores. Provides recommendations
+for facet size and correlation settings.
+
+Usage:
+    calculator = DICParameterCalculator()
+    params = calculator.calculate_parameters(image, quality_score, subset_size)
+"""
 
 import cv2
 import numpy as np

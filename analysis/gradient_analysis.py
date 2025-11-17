@@ -1,4 +1,17 @@
-# analysis/gradient_analysis.py - Gradient Analysis Module
+"""
+Gradient analysis module for DIC image quality assessment.
+
+This module analyzes gradient characteristics of DIC images to assess edge content,
+sharpness, and directional properties. It calculates gradient magnitude, orientation,
+and distribution metrics using Sobel operators to evaluate the suitability of
+speckle patterns for correlation analysis.
+
+Usage:
+    from analysis.gradient_analysis import GradientAnalyzer
+
+    analyzer = GradientAnalyzer()
+    results = analyzer.analyze(image_data)
+"""
 
 import cv2
 import numpy as np

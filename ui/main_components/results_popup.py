@@ -1,4 +1,16 @@
-# ui/dialogs/results_popup.py - Results Display Dialog
+"""
+Results popup dialog for displaying comprehensive analysis results.
+
+This module implements a detailed results viewer that presents analysis findings
+in a formatted, scrollable window. It displays quality scores, technical metrics,
+DIC parameter recommendations, and non-technical explanations of the results.
+
+Usage:
+    from ui.main_components.results_popup import ResultsPopup
+
+    popup = ResultsPopup(parent, analysis_result, report_generator)
+    popup.show()
+"""
 
 import tkinter as tk
 from tkinter import ttk, messagebox

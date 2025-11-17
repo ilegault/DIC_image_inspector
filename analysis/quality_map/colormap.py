@@ -1,4 +1,14 @@
-# analysis/quality_map/colormap.py - Color Mapping Functions
+"""
+Colormap generation and application for quality visualization.
+
+Provides color mapping functionality to visualize quality scores with different
+color schemes optimized for DIC analysis. Supports multiple spectrum types and
+overlay blending with original images.
+
+Usage:
+    colormap_gen = ColormapGenerator()
+    colored_map = colormap_gen.apply_colormap(quality_map, 'optimized')
+"""
 
 import numpy as np
 import cv2

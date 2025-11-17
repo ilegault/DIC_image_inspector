@@ -1,7 +1,22 @@
-# utils/debug_config.py - SIMPLIFIED VERSION
 """
-Simple debug configuration - just change the preset in app.py and it works.
-No complicated overrides or state management.
+Debug configuration and logging preset management.
+
+This module provides a simplified debug configuration system with preset logging
+levels for different use cases. It allows easy switching between logging verbosity
+levels without complex configuration. Simply change the preset in app.py to adjust
+logging behavior across the entire application.
+
+Usage:
+    from utils.debug_config import DebugPresets
+
+    DebugPresets.apply_preset('debug')  # Enable debug logging
+
+Available presets:
+    - 'off': Only errors
+    - 'normal': Standard operation
+    - 'debug': Detailed debug output
+    - 'zoom_pan': Debug zoom and pan operations
+    - 'verbose': Maximum debug level
 """
 
 import logging

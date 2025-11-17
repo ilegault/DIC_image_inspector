@@ -1,4 +1,20 @@
-# ui/main_components/image_canvas.py - Clean Image Display Component
+"""
+Image canvas component for displaying and interacting with DIC images.
+
+This module provides a comprehensive image display component with zoom, pan,
+ROI selection, and quality map overlay capabilities. It handles all image
+display operations including coordinate transformations, user interactions,
+and visual feedback for DIC quality assessment.
+
+Usage:
+    from ui.main_components.image_canvas import ImageCanvas
+
+    canvas = ImageCanvas(parent, callbacks={
+        'zoom_changed': on_zoom_changed,
+        'roi_changed': on_roi_changed
+    })
+    canvas.display_image(image_data)
+"""
 
 import tkinter as tk
 from tkinter import ttk

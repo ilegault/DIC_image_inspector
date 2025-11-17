@@ -1,4 +1,19 @@
-# ui/main_components/roi_selector.py - Clean ROI Selection Component
+"""
+ROI (Region of Interest) selector component for image analysis.
+
+This module provides an interactive polygon selection tool for defining regions
+of interest on images. It handles user interactions for creating, editing, and
+finalizing ROI selections with visual feedback on the canvas.
+
+Usage:
+    from ui.main_components.roi_selector import ROISelector
+
+    roi_selector = ROISelector(canvas, callbacks={
+        'roi_changed': on_roi_changed,
+        'roi_completed': on_roi_completed
+    })
+    roi_selector.start_selection()
+"""
 
 import tkinter as tk
 from typing import List, Tuple, Callable, Dict, Optional

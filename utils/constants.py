@@ -1,8 +1,13 @@
-# utils/constants.py - Application Constants
-
 """
 Application-wide constants and configuration.
-Centralized configuration following clean architecture principles.
+
+Centralizes all configuration values, UI settings, color schemes, validation rules,
+and application constants. Provides theme management and styling configuration
+following clean architecture principles.
+
+Usage:
+    from utils.constants import APP_CONFIG, VALIDATION, get_theme_colors
+    colors = get_theme_colors()
 """
 
 # Application metadata

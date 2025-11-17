@@ -1,5 +1,14 @@
-# This script is used to run the application from the command line.
-# main.py
+"""
+Entry point for DIC Image Quality Inspector application.
+
+Launches the main application window for analyzing DIC (Digital Image Correlation)
+image quality. This tool helps assess speckle pattern quality and provides
+recommendations for optimal DIC analysis parameters.
+
+Usage:
+    python main.py
+"""
+
 import sys
 import os
 

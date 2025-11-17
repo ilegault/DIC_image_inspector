@@ -1,4 +1,14 @@
-# analysis/quality_map/generator.py - Quality Map Generator
+"""
+Quality map generation for DIC image analysis.
+
+Generates spatial quality maps by analyzing image subsets across the entire image
+or region of interest. Combines multiple quality metrics to produce a comprehensive
+assessment of pattern suitability for DIC correlation.
+
+Usage:
+    generator = QualityMapGenerator()
+    quality_map, visualization = generator.generate(image, spectrum_type='optimized')
+"""
 
 import cv2
 import numpy as np

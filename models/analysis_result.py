@@ -1,4 +1,14 @@
-# models/analysis_result.py - Analysis Result Data Model
+"""
+Analysis result data model and operations.
+
+Encapsulates complete DIC quality analysis results including overall scores,
+quality maps, statistics, DIC parameters, and detailed metrics in a type-safe
+data structure with validation and serialization support.
+
+Usage:
+    result = AnalysisResult(overall_score=85.5, quality_map=map_array,
+                           quality_map_stats=stats, analysis_method='Full image')
+"""
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional

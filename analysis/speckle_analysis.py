@@ -1,4 +1,17 @@
-# analysis/speckle_analysis.py - Speckle Pattern Analysis
+"""
+Speckle pattern analysis module for DIC image quality assessment.
+
+This module analyzes speckle pattern morphology including size, distribution,
+and density characteristics. It evaluates pattern isotropy, size uniformity,
+and spatial distribution to determine optimal subset sizes for DIC correlation
+and assess overall pattern quality for measurement applications.
+
+Usage:
+    from analysis.speckle_analysis import SpeckleAnalyzer
+
+    analyzer = SpeckleAnalyzer()
+    results = analyzer.analyze(image_data)
+"""
 
 import cv2
 import numpy as np

@@ -1,4 +1,18 @@
-# main_window.py - Updated Main Window with Theme Support
+"""
+Main application window for DIC Image Quality Inspector.
+
+This module implements the primary GUI window that orchestrates all UI components
+including the control panel, image canvas, navigation bar, and dialogs. It manages
+the application state, coordinates analysis operations, and handles user interactions
+for the DIC quality assessment workflow.
+
+Usage:
+    from ui.main_window import DICQualityInspector
+
+    root = tk.Tk()
+    app = DICQualityInspector(root)
+    root.mainloop()
+"""
 
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk

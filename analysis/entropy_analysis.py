@@ -1,4 +1,17 @@
-# analysis/entropy_analysis.py - Information Content Analysis
+"""
+Entropy analysis module for DIC image quality assessment.
+
+This module evaluates information content and uniqueness of DIC images through
+entropy measurements. It calculates Shannon entropy, local entropy variation,
+and pattern uniqueness to assess the randomness and information density of
+speckle patterns, which are crucial for reliable DIC correlation.
+
+Usage:
+    from analysis.entropy_analysis import EntropyAnalyzer
+
+    analyzer = EntropyAnalyzer()
+    results = analyzer.analyze(image_data)
+"""
 
 import cv2
 import numpy as np

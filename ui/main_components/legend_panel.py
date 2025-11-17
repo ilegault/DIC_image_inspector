@@ -1,4 +1,16 @@
-# ui/main_components/legend_panel.py - Legend Component with Dark Mode
+"""
+Legend panel component for quality map visualization.
+
+This module provides a dynamic legend panel that displays color-coded quality
+interpretations based on the selected spectrum type. It shows the mapping between
+colors and DIC quality levels to help users interpret quality map visualizations.
+
+Usage:
+    from ui.main_components.legend_panel import LegendPanel
+
+    legend = LegendPanel(parent_widget)
+    legend.show_legend('optimized')  # Show legend for optimized spectrum
+"""
 
 import tkinter as tk
 from typing import Dict, List, Tuple
