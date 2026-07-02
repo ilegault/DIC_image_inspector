@@ -4,20 +4,20 @@
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
 
-## 🔬 Overview
+## Overview
 
-**DIC Image Quality Inspector** is a sophisticated Python application designed to evaluate and optimize speckle pattern quality for Digital Image Correlation (DIC) applications. It provides comprehensive analysis of speckle patterns, helping researchers and engineers determine if their specimens are properly prepared for mechanical testing with DIC systems.
+**DIC Image Quality Inspector** is a sophisticated Python application designed to evaluate and optimize speckle pattern quality for Digital Image Correlation (DIC) applications. It provides a comprehensive analysis of speckle patterns, helping researchers and engineers determine if their specimens are properly prepared for mechanical testing with DIC systems.
 
 The tool analyzes critical quality metrics including gradient content, contrast distribution, speckle morphology, information entropy, and noise characteristics to provide scientifically-based recommendations for optimal DIC correlation parameters.
 
-## ✨ Key Features
+## Key Features
 
 ### Core Analysis Capabilities
-- 🎯 **Advanced Quality Metrics**: Mean Intensity Gradient (MIG), Enhanced Feature (Ef) calculation, entropy analysis
-- 📊 **Real-time Quality Visualization**: Color-mapped quality overlays with multiple spectrum options
-- 🔍 **Region of Interest (ROI) Selection**: Polygon-based ROI for focused analysis
-- 📈 **DIC Parameter Optimization**: Automatic subset size and step size recommendations
-- 📸 **Multiple Input Methods**: File loading, screenshot capture, live camera feed (Windows)
+- **Advanced Quality Metrics**: Mean Intensity Gradient (MIG), Enhanced Feature (Ef) calculation, entropy analysis
+- **Real-time Quality Visualization**: Color-mapped quality overlays with multiple spectrum options
+- **Region of Interest (ROI) Selection**: Polygon-based ROI for focused analysis
+- **DIC Parameter Optimization**: Automatic subset size and step size recommendations
+- **Multiple Input Methods**: File loading, screenshot capture, live camera feed (Windows)
 
 ### Technical Features
 - **Multi-threaded Processing**: Responsive UI during analysis operations
@@ -32,12 +32,12 @@ The tool analyzes critical quality metrics including gradient content, contrast 
 - **Export Capabilities**: Reports in TXT/PDF/HTML, quality maps in PNG/TIFF
 - **Performance Modes**: Fast, Balanced, and Accurate analysis options
 
-## 🖼️ Screenshots
+## Screenshots
 
 <img width="1006" height="804" alt="image" src="https://github.com/user-attachments/assets/33e2e2fb-7b92-4c9f-bb44-a55b68ca078b" />
 
 
-## 📊 Understanding Quality Scores
+## Understanding Quality Scores
 
 ### Quality Assessment Scale
 
@@ -74,39 +74,8 @@ The tool evaluates five key quality metrics:
    - Estimates signal-to-noise ratio
    - Lower noise improves sub-pixel accuracy
 
-## 📁 Project Structure
 
-```
-DIC_image_inspector/
-├── 📂 analysis/              # Core analysis algorithms
-│   ├── entropy_analysis.py   # Information content analysis
-│   ├── gradient_analysis.py  # MIG and gradient calculations
-│   ├── morphology_analysis.py # Speckle shape analysis
-│   └── quality_map/          # Quality visualization
-├── 📂 core/                  # Business logic
-│   ├── image_analyzer.py    # Main analysis orchestrator
-│   └── report_generator.py  # Report generation
-├── 📂 models/               # Data models
-│   ├── analysis_result.py   # Analysis result container
-│   ├── image_data.py       # Image data wrapper
-│   └── roi_data.py         # ROI data structure
-├── 📂 ui/                   # User interface
-│   ├── main_window.py       # Main application window
-│   ├── main_components/     # UI components
-│   ├── dialogs/            # Dialog windows
-│   └── live_analyze/       # Live analysis features
-├── 📂 utils/               # Utilities
-│   ├── constants.py        # Application constants
-│   ├── validation.py       # Input validation
-│   └── file_operations.py  # File I/O operations
-├── 📄 main.py              # Entry point
-├── 📄 app.py               # Application initialization
-├── 📄 requirements.txt     # Dependencies
-└── 📄 README.md           # This file
-```
-
-
-## 🔬 Scientific Background
+##  Scientific Background
 
 This tool implements established DIC quality assessment methods from peer-reviewed literature:
 
@@ -137,23 +106,23 @@ Where weights are optimized based on empirical DIC performance data.
 - If you are in the spinview live feature then choose the easier mode 
 
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 👥 Authors
+## Authors
 
 - **Isaac Legault** - *Initial development* - [GitHub Profile](https://github.com/ilegault)
 - **Leyton (Zhiyan) Lu** - [GitHub Profile](https://github.com/eggman127)
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - DIC research community for theoretical foundations
 - Open-source contributors for core libraries
 - Beta testers for valuable feedback
 - Academic partners for validation data
 
-## 📮 Support
+## Support
 
 For support and questions:
-- 📧 Email: ilegault004@gmail.com
+- Email: ilegault004@gmail.com
