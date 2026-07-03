@@ -2,8 +2,8 @@
 Help dialog for DIC Image Quality Inspector.
 
 This module provides a comprehensive help dialog displaying detailed usage
-instructions, feature explanations, and troubleshooting guidance. It presents
-information in a scrollable, formatted text area with proper theming support.
+instructions, feature explanations, and troubleshooting guidance. Content is
+organised into topic tabs using ttk.Notebook for quick navigation.
 
 Usage:
     from ui.dialogs.help_dialog import HelpDialog
@@ -22,7 +22,7 @@ class HelpDialog:
     """
     Help dialog for displaying application usage information.
 
-    Shows comprehensive help information in a scrollable dialog.
+    Shows comprehensive help information in a tabbed dialog.
     Follows single responsibility principle - only help display.
     """
 
@@ -52,43 +52,47 @@ class HelpDialog:
             parent=self.parent,
             title="DIC Image Quality Inspector - Help",
             width=700,
-            height=600,
+            height=620,
             resizable=True,
             topmost=False,
             center=True
         )
 
-        # FIX: Use get_theme_colors() instead of direct access
         colors = get_theme_colors()
         self.help_window.configure(bg=colors['background'])
-
         self.help_window.grab_set()
         self.help_window.minsize(600, 500)
 
     def _create_help_content(self):
-        """Create the help content."""
-        # FIX: Use get_theme_colors() throughout
+        """Create the help content with tabbed notebook."""
         colors = get_theme_colors()
 
-        # Main container
         main_frame = tk.Frame(self.help_window, bg=colors['background'])
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
         # Title
-        title_label = tk.Label(
+        tk.Label(
             main_frame,
-            text="🔍 DIC Image Quality Inspector - Help Guide",
+            text="DIC Image Quality Inspector - Help Guide",
             font=APP_CONFIG['fonts']['title'],
             fg=colors['text_primary'],
             bg=colors['background']
-        )
-        title_label.pack(pady=(0, 20))
+        ).pack(pady=(0, 12))
 
-        # Create scrollable text area
-        self._create_scrollable_help_text(main_frame)
+        # Notebook
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill='both', expand=True)
+
+        self._add_tab(notebook, "Getting Started", self._text_getting_started())
+        self._add_tab(notebook, "Workflow",        self._text_workflow())
+        self._add_tab(notebook, "Reading Results", self._text_reading_results())
+        self._add_tab(notebook, "Quality Map",     self._text_quality_map())
+        self._add_tab(notebook, "DIC Parameters",  self._text_dic_parameters())
+        self._add_tab(notebook, "Definitions",     self._text_definitions())
+        self._add_tab(notebook, "Troubleshooting", self._text_troubleshooting())
 
         # Close button
-        close_button = tk.Button(
+        tk.Button(
             main_frame,
             text="Close",
             bg='#3498db',
@@ -97,402 +101,422 @@ class HelpDialog:
             command=self._close_help,
             padx=20,
             pady=5
-        )
-        close_button.pack(pady=10)
+        ).pack(pady=10)
 
-    def _create_scrollable_help_text(self, parent):
-        """Create scrollable text area with help content."""
+    def _add_tab(self, notebook: ttk.Notebook, title: str, content: str):
+        """Add a scrollable read-only text tab to the notebook."""
         colors = get_theme_colors()
 
-        # Frame for text widget and scrollbar
-        text_frame = tk.Frame(parent, bg=colors['background'])
-        text_frame.pack(fill='both', expand=True)
+        frame = tk.Frame(notebook, bg=colors['background'])
+        notebook.add(frame, text=title)
 
-        # Text widget with scrollbar
-        self.help_text = tk.Text(
-            text_frame,
+        text = tk.Text(
+            frame,
             wrap='word',
-            bg='#f0f0f0',
-            fg='#333333',
+            bg='#f7f7f7',
+            fg='#222222',
             font=('Arial', 11),
-            padx=10,
-            pady=10,
-            relief='sunken',
-            bd=1
+            padx=12,
+            pady=12,
+            relief='flat',
+            bd=0
         )
+        scroll = ttk.Scrollbar(frame, orient='vertical', command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
 
-        scrollbar = ttk.Scrollbar(text_frame, orient='vertical', command=self.help_text.yview)
-        self.help_text.configure(yscrollcommand=scrollbar.set)
+        text.pack(side='left', fill='both', expand=True)
+        scroll.pack(side='right', fill='y')
 
-        # Pack text widget and scrollbar
-        self.help_text.pack(side='left', fill='both', expand=True)
-        scrollbar.pack(side='right', fill='y')
+        text.tag_configure('header', font=('Arial', 13, 'bold'), foreground='#2c3e50')
+        text.tag_configure('subheader', font=('Arial', 11, 'bold'), foreground='#34495e')
 
-        # Insert help content
-        self._insert_help_content()
+        # Insert content: lines starting with "##" get header tag, "#" get subheader
+        for line in content.split('\n'):
+            if line.startswith('## '):
+                text.insert('end', line[3:] + '\n', 'header')
+            elif line.startswith('# '):
+                text.insert('end', line[2:] + '\n', 'subheader')
+            else:
+                text.insert('end', line + '\n')
 
-        # Make text read-only
-        self.help_text.config(state='disabled')
+        text.config(state='disabled')
 
-    def _insert_help_content(self):
-        """Insert comprehensive help content."""
-        help_content = self._get_help_content()
+    # ------------------------------------------------------------------
+    # Tab content
+    # ------------------------------------------------------------------
 
-        # Insert content with formatting
-        self.help_text.insert('1.0', help_content)
+    def _text_getting_started(self) -> str:
+        return """\
+## Getting Started
 
-        # Configure text tags for better formatting
-        self._configure_text_formatting()
+# Loading Images
 
-    def _configure_text_formatting(self):
-        """Configure text formatting tags."""
-        # Header styling
-        self.help_text.tag_configure('header', font=('Arial', 14, 'bold'), foreground='#2c3e50')
-        self.help_text.tag_configure('subheader', font=('Arial', 12, 'bold'), foreground='#34495e')
-        self.help_text.tag_configure('bullet', font=('Arial', 11), foreground='#27ae60')
-        self.help_text.tag_configure('important', font=('Arial', 11, 'bold'), foreground='#e74c3c')
-        self.help_text.tag_configure('code', font=('Courier New', 10), background='#ecf0f1')
+  - Click "Load Image" to open a file from disk.
+  - Supported formats: PNG, JPEG, TIFF, BMP.
+  - Use "Screenshot" to capture any region of your screen (multi-monitor supported).
+  - Use "SpinView Camera Capture" (Windows) to grab directly from a live camera feed.
 
-    def _get_help_content(self) -> str:
-        """Get comprehensive help content."""
-        return """DIC IMAGE QUALITY INSPECTOR - COMPREHENSIVE HELP GUIDE
+# Supported Workflows
 
+  - Static image analysis: load file -> (optional ROI) -> Analyze -> review results.
+  - Live camera analysis: SpinView capture with real-time quality tracking.
+  - Screenshot mode: analyze a camera view without direct SDK integration.
 
+# Interface at a Glance
 
-    📋 GETTING STARTED
+  - Left panel: load/ROI/analyze/export controls.
+  - Top bar: zoom, metric map selector, color spectrum, theme toggle.
+  - Center: image canvas with quality map overlay and floating legend.
+  - Bottom: status bar with progress indicator.
+"""
 
-    • Loading Images:
-      - Click "Load Image" to select an image file from your computer
-      - Supported formats: PNG, JPEG, TIFF, BMP
-      - Or use "Screenshot" to capture a region of your screen
+    def _text_workflow(self) -> str:
+        return """\
+## Recommended Workflow
 
-    • Basic Workflow:
-      1. Load an image or take a screenshot
-      2. Optionally select a Region of Interest (ROI)
-      3. Click "Analyze" to process the image
-      4. View results using "Show Results" button
-      5. Export reports using "Export Report" button
+1. Load Image
+   Click "Load Image" (or Screenshot / SpinView) and select your image.
 
-    • Analysis Parameters:
-      - Adjust subset size (11-51 pixels) and step size (1-8 pixels)
-      - Choose between different color spectrums for visualization
-      - Use zoom controls for detailed examination
+2. Select Region of Interest (optional but recommended)
+   Click "Select ROI" and left-click to place polygon vertices.
+   Press Enter to close the polygon.
+   Focusing on the speckled gauge section gives more accurate results
+   than including fixture hardware or background.
 
+3. Analyze
+   Click "Analyze". A progress bar shows the map generation and scoring steps.
+   Analysis runs on a background thread — the UI stays responsive.
 
+4. View Quality Map
+   The colored overlay appears automatically. Toggle between Overall, Gradient,
+   Contrast, Entropy, Pattern, and Noise maps using the buttons in the top bar.
 
-    🎯 REGION OF INTEREST (ROI) SELECTION
+5. Show Results
+   Click "Show Results" for the full popup:
+     - Headline score (weighted 5-component sum)
+     - Score Breakdown table
+     - Improvement Feedback
+     - Recommended DIC parameters
 
-    • ROI Purpose:
-      - Focus analysis on specific image areas
-      - Reduce processing time for large images
-      - Analyze only relevant regions for your DIC setup
+6. Export Report
+   Click "Export Report" to write a text report to disk. The report includes
+   the Score Breakdown, corrected math, and DIC parameter recommendations.
 
-    • How to Select ROI:
-      - Click "Select ROI" button
-      - Left-click to add points to your polygon
-      - Move mouse to see preview line to next point
-      - Need minimum 3 points for a valid polygon
-      - Press Enter to complete the polygon selection
+# Parameter Adjustments
 
-    • Advanced ROI Features:
-      - Hold Ctrl key for enhanced ROI selection mode (auto-completes when Ctrl released)
-      - ROI information displayed in control panel
-      - Multiple ROI analyses can validate pattern consistency
-      - Right-click is used for panning, not ROI completion
+  - Subset Size (11-51 px): larger = more stable but lower spatial resolution.
+  - Step Size (1-8 px): smaller = denser map but slower.
+  - Color Spectrum: "Optimized DIC" is recommended; Viridis/Jet for alternative views.
+"""
 
+    def _text_reading_results(self) -> str:
+        return """\
+## Reading the Results Popup
 
+# Headline Score
 
-    🖥️ USER INTERFACE OVERVIEW
+  The large number at the top is the Overall Quality Score (0-100).
+  This is the ONLY score that matters — it equals the sum of the five
+  weighted component contributions shown in the Score Breakdown below it.
 
-    • Control Panel (Left Side):
-      - Image Loading: Load Image, Screenshot buttons
-      - ROI Selection: Select ROI, New ROI options
-      - Analysis: Analyze button with parameter controls
-      - Results: Quality Map, Show Results buttons
-      - Export: Export Report with multiple format options
-      - System: Reset Display, Reset Application, Help
-      - Camera: SpinView Camera Capture (Windows only)
+# Score Breakdown
 
-    • Top Navigation Bar:
-      - Zoom Controls: Zoom In, Zoom Out, Zoom to Actual Size
-      - Color Spectrum: Choose visualization method
-      - Theme Toggle: Switch between dark and light themes
+  Each row shows one component:
 
-    • Image Display Area:
-      - Main image viewing with zoom and pan support
-      - Quality map overlay visualization
-      - ROI selection and editing
-      - Legend panel for color spectrum interpretation
+    Component  — Weight % of total score
+    Score/100  — How well the image performs on that metric (0-100)
+    Contributes X pts — score × weight (these five sum to the headline)
 
-    • Status Bar:
-      - Current operation status and progress updates
-      - Error messages and completion notifications
+  The bottom line "Sum of weighted contributions = X / 100" confirms that
+  the five rows add up to the headline exactly.
 
+# Improvement Feedback
 
+  Components below 60 are flagged with specific advice:
+    "Needs work" (40-59) — orange label with targeted tip.
+    "Poor" (<40)         — red label with higher-priority advice.
 
-    📊 ANALYSIS FEATURES
+  The strongest component is also highlighted as a positive reinforcement.
 
-    • DIC Quality Analysis:
-      - Gradient Analysis: Evaluates edge content and sharpness
-      - Contrast Assessment: Measures local and global contrast
-      - Speckle Morphology: Analyzes pattern size and distribution
-      - Information Content: Calculates entropy and uniqueness
-      - Noise Evaluation: Estimates signal-to-noise ratio
+# DIC Parameter Recommendations
 
-    • Parameter Controls:
-      - Subset Size: 11-51 pixels (affects analysis precision)
-      - Step Size: 1-8 pixels (affects processing speed and resolution)
-      - Automatic parameter optimization based on pattern characteristics
+  Based on the headline score and image characteristics:
+    - Subset Size: correlation window in pixels.
+    - Step Size: spacing between subsets.
+    - Overlap %: typically 75%.
+    - Expected Accuracy: displacement precision estimate.
 
-    • Performance Optimization:
-      - ROI selection for faster processing
-      - Optimized algorithms for large images
-      - Progress tracking during analysis
+# Band Thresholds (Optimized spectrum)
 
+  75-100: Excellent     — green
+  60-75:  Very Good     — cyan
+  45-60:  Good          — yellow
+  30-45:  Acceptable    — orange
+  15-30:  Challenging   — dark red
+  0-15:   Poor          — black
+"""
 
+    def _text_quality_map(self) -> str:
+        return """\
+## Quality Map
 
-    🎨 VISUALIZATION OPTIONS
+# What the Colors Mean (Optimized DIC spectrum)
 
-    • Color Spectrums Available:
-      - Optimized DIC: Custom spectrum designed for DIC quality visualization
-      - Viridis: Perceptually uniform, color-blind friendly
-      - Plasma: High contrast for identifying subtle variations
-      - Jet: Traditional blue-to-red color scale
+  Green       — Excellent (75-100): ideal for DIC, high gradient and contrast.
+  Cyan        — Very Good (60-75): reliable correlation expected.
+  Yellow      — Good (45-60): suitable for most measurements.
+  Orange      — Acceptable (30-45): usable with care, consider larger subsets.
+  Dark Red    — Challenging (15-30): poor correlation likely, improve pattern.
+  Black       — Poor (0-15): not suitable; region will fail to correlate.
 
-    • Quality Map Features:
-      - Toggle quality map overlay on/off
-      - Interactive legend panel with color meanings
-      - Adjustable transparency and visualization options
-      - Hot colors (red/yellow) = High quality areas
-      - Cool colors (blue/green) = Lower quality areas
+  The map colors and the Score Breakdown numbers are computed with IDENTICAL
+  math since Task 2 was applied. A region shown in yellow on the map will
+  also score ~45-60 in the per-component breakdown for that metric.
 
+# Metric Map Buttons
 
+  Overall — weighted combination of all five components.
+  Gradient — sharpness / edge content of each subset.
+  Contrast — light-vs-dark spread.
+  Entropy  — information / randomness of the pattern.
+  Pattern  — speckle size and coverage quality.
+  Noise    — SNR-based resistance to sensor noise.
 
-    📈 UNDERSTANDING RESULTS
+  Toggle between maps to pinpoint which component is weakest spatially.
+  Look for dark areas in one map while the overall map looks fine — those
+  are localized weaknesses worth investigating.
 
-    • Overall Quality Score:
-      - Score range: 0-100 (higher = better for DIC)
-      - 90-100: Excellent - Ideal for high-precision DIC
-      - 75-89: Very Good - Good for DIC applications
-      - 60-74: Good - Suitable for most DIC applications
-      - 45-59: Fair - May work with careful parameter selection
-      - 30-44: Challenging - Consider pattern improvement
-      - 0-29: Poor - Not suitable for reliable DIC
+# Legend Panel
 
-    • DIC Parameter Recommendations:
-      - Optimized subset size based on speckle characteristics
-      - Step size recommendations for measurement accuracy
-      - Expected displacement accuracy estimates
-      - Overlap ratio suggestions for correlation analysis
+  The floating legend shows the color-to-quality mapping for the active map.
+  Bands match the thresholds in "Reading Results".
 
-    • Quality Map Interpretation:
-      - Spatial distribution of DIC suitability across image
-      - Identify best regions for measurement placement
-      - Avoid poor quality areas for critical measurements
-      - Use legend panel to understand color meanings
+# Tips
 
+  - Focus measurements on high-quality (green/cyan) regions.
+  - Avoid placing strain gauges or extensometers in red/black areas.
+  - Uniform color across the map = consistent speckle application.
+"""
 
+    def _text_dic_parameters(self) -> str:
+        return """\
+## DIC Parameters
 
-    💾 EXPORT AND REPORTING
+# Subset (Facet) Size
 
-    • Export Report Options:
-      - Complete Package: Text report + images + original + summary
-      - Text Only: Detailed analysis results in text format
+  The small window the DIC algorithm tracks between images.
+  - Recommended range: 11-51 pixels.
+  - Larger subset = more stable correlation, but lower spatial resolution.
+  - Rule of thumb: subset should contain 3-5 speckles on average.
+  - The app estimates optimal size from speckle diameter.
 
-    • Export File Contents:
-      - Comprehensive text analysis report with statistics
-      - Original image for reference and documentation
-      - Quality map overlay visualization with chosen spectrum
-      - Package summary with usage notes and interpretation
-      - Timestamped folders for easy organization
+# Step Size
 
-    • Report Information Includes:
-      - Overall quality score and interpretation
-      - DIC parameter recommendations (subset size, step size)
-      - Technical analysis details and metrics
-      - Image information and ROI details
-      - Quality assessment criteria and thresholds
+  Spacing between consecutive subset centers.
+  - Small step = denser displacement field, slower computation.
+  - Typical: step = subset_size × (1 - overlap_fraction).
+  - Default 75% overlap → step = subset_size / 4.
 
+# Overlap
 
+  Percentage of adjacent subsets that share pixels.
+  - 75% overlap is the standard starting point.
+  - Higher overlap = smoother displacement field.
+  - Lower overlap = faster computation.
 
-    🔧 DISPLAY AND NAVIGATION CONTROLS
+# Expected Accuracy
 
-    • Zoom Controls:
-      - Zoom In/Out: Examine image details at different scales
-      - Zoom to Actual Size: View image at 100% scale
-      - Mouse wheel scrolling for smooth zoom adjustment
-      - Pan functionality for navigating large images
+  Estimated displacement measurement precision based on quality score:
+  - Score ≥ 90: ±0.005-0.01 pixels
+  - Score ≥ 75: ±0.01-0.02 pixels
+  - Score ≥ 60: ±0.02-0.05 pixels
+  - Score ≥ 45: ±0.05-0.1 pixels
+  - Score < 45: ±0.1+ pixels (use with extreme caution)
 
-    • View Controls:
-      - Reset Display: Clear overlays and return to original view
-      - Quality Map Toggle: Show/hide quality visualization
-      - Theme Toggle: Switch between dark and light interface themes
-      - ROI visibility controls integrated with selection tools
+# Adjusting Parameters
 
-    • Window Management:
-      - Resizable interface with responsive layout
-      - Floating legend panel with quality interpretation
-      - Context-sensitive status updates
-      - Multi-monitor support for screenshot capture
+  If correlation quality is poor after analysis:
+  1. Increase subset size by 30-50%.
+  2. Verify step ≤ subset/2 (at least 50% overlap).
+  3. Apply stricter correlation coefficient threshold in your DIC software.
+"""
 
+    def _text_definitions(self) -> str:
+        return """\
+## Definitions
 
+# DIC — Digital Image Correlation
 
-    📷 SCREENSHOT AND CAMERA FEATURES
+  A full-field optical measurement technique that tracks a random speckle
+  pattern painted on a specimen's surface. By comparing images before and
+  after deformation, it computes displacement and strain fields without
+  contact. Pattern quality directly determines measurement accuracy — a
+  poor pattern means poor measurements regardless of DIC software used.
 
-    • Screenshot Capture:
-      - Full screen or region-based capture
-      - Multi-monitor support for complex setups
-      - Interactive selection with visual feedback
-      - Automatic window hiding during capture
+# Subset / Facet
 
-    • SpinView Camera Capture (Windows only):
-      - Real-time camera feed analysis
-      - Region selection for focused monitoring
-      - Performance mode options: Fast, Balanced, Accurate
-      - Live quality assessment with historical tracking
-      - Rectangle and polygon region selection modes
+  A small rectangular window (e.g. 21×21 px) that the DIC algorithm tracks
+  from the reference image to each deformed image. Larger subsets are more
+  stable (more pixels = better statistics) but reduce spatial resolution.
 
-    • Capture Tips:
-      - Ensure good lighting and focus before capture
-      - Avoid reflections and shadows in camera feeds
-      - Use appropriate region selection for optimal analysis
-      - Consider lighting consistency for reliable results
+# Step Size / Overlap
 
+  Step is the pixel distance between adjacent subset centers. Overlap =
+  1 - (step / subset_size). The default 75% overlap means each step is
+  1/4 of the subset width, producing a dense displacement grid.
 
+# The Five Components and Their Weights
+  (keep in sync with QualityCalculator.__init__)
 
-    🛠️ TROUBLESHOOTING
+  Gradient  40%
+    Measures how sharp and edgy the pattern is — the single biggest driver
+    of DIC accuracy. Computed via MIG and Ef (see below). High gradient means
+    the correlation peak is narrow and precise.
 
-    • Common Issues and Solutions:
+  Contrast  25%
+    Light-vs-dark separation across the image. Combines RMS, Michelson, and
+    Weber contrast measures. Too flat (low contrast) = nothing to track.
+    Over-exposure that washes out speckles hurts contrast severely.
 
-      Image Loading Problems:
-      - Check file format (PNG, JPEG, TIFF, BMP supported)
-      - Verify file permissions and path accessibility
-      - Try reducing image size if memory errors occur
+  Entropy   20%
+    Shannon information content of the intensity histogram. Higher entropy =
+    more unique local patterns = better subset identifiability. Repetitive
+    or very regular speckle patterns score low on entropy.
 
-      ROI Selection Issues:
-      - Ensure left-clicking to start selection
-      - Use right-clicking to complete ROI definition
-      - Clear existing ROI by clicking "New ROI"
-      - Hold Ctrl key for enhanced selection mode
+  Pattern   10%
+    Evaluates speckle size and coverage using connected-component analysis.
+    Ideal speckles are a few pixels across (3-5 px diameter) with good
+    density (50-5000 speckles per million pixels). Too large or too small
+    speckles reduce this score.
 
-      Analysis Performance:
-      - Use ROI selection to focus on specific regions
-      - Adjust step size to balance speed vs. resolution
-      - Monitor progress in status bar during analysis
+  Noise      5%
+    SNR-based resistance to sensor noise. Computed by comparing the raw
+    image to a bilaterally-filtered version. High sensor gain / ISO or
+    out-of-focus images lower this score.
 
-      Quality Map Display:
-      - Ensure analysis completed successfully before viewing
-      - Try different color spectrums for better visibility
-      - Check that legend panel is enabled and visible
-      - Use Reset Display to clear any display issues
+# MIG — Mean Intensity Gradient (Pan et al. 2009)
 
-      Camera Capture (Windows):
-      - Verify SpinView application is running
-      - Check camera feed visibility and positioning
-      - Ensure proper region selection before analysis
-      - Monitor performance mode for optimal results
+  MIG = (1/N) × Σ |∇I(x,y)|   (average gradient magnitude over all pixels)
 
+  Higher MIG → sharper speckle edges → more trackable detail.
+  Normalisation: MIG_score = min(1.0, (MIG / 50) × 2.0)
+  (normalization_factor=50, score_multiplier=2.0 in QualityCalculator)
 
+# Ef — Enhanced Feature (Hu et al. 2021)
 
-    💡 BEST PRACTICES
+  Ef = 0.7 × MIG + 0.3 × mean|∇²I|
 
-    • Image Preparation:
-      - Ensure good lighting and focus before capture
-      - Avoid reflections, shadows, and glare
-      - Use appropriate speckle pattern density for DIC
-      - Maintain consistent illumination across the image
+  Combines first-order (MIG) and second-order gradients. The Laplacian term
+  captures curvature detail that MIG misses (e.g. speckle interiors with
+  curved edges). Scored as: Ef_score = min(1.0, (Ef / 40) × 1.2)
+  (normalization_factor=40, score_multiplier=1.2 in QualityCalculator)
 
-    • Pattern Assessment:
-      - Look for random, non-repetitive speckle patterns
-      - Avoid regular geometric patterns or periodic structures
-      - Ensure sufficient contrast between speckles and background
-      - Test multiple ROI regions for pattern consistency
+  Q_gradient = (Ef_score × 0.8 + MIG_score × 0.2) × distribution_bonus
 
-    • Analysis Strategy:
-      - Start with full image analysis, then use ROI for detail
-      - Compare results with different color spectrums
-      - Save reports for documentation and comparison
-      - Use recommended parameters from analysis results
+# Distribution Bonus
 
-    • Parameter Selection:
-      - Use larger subset sizes for lower quality patterns
-      - Adjust step size based on measurement requirements
-      - Consider processing time vs. accuracy trade-offs
-      - Follow automated recommendations when available
+  A multiplier (≥1.0) that rewards gradient energy spread uniformly across
+  the whole ROI rather than concentrated in a few bright spots. A speckle
+  pattern with uniform coverage scores higher than an equivalent pattern
+  with hot-spots.
 
-    • Results Interpretation:
-      - Focus measurements on high-quality regions (warm colors)
-      - Avoid critical measurements in poor-quality areas
-      - Use quality scores to validate pattern suitability
-      - Document analysis settings for reproducible results
+# RMS / Michelson / Weber Contrast
 
+  RMS contrast:      C_rms = σ / μ   (std / mean intensity)
+  Michelson:         C_m   = (I_max - I_min) / (I_max + I_min)
+  Weber:             C_w   = (I_max - μ) / μ
 
+  Combined: 0.4×C_rms + 0.3×C_m + 0.2×C_w + 0.1×C_local
 
-    ⚙️ ADVANCED FEATURES
+# SNR — Signal-to-Noise Ratio (dB)
 
-    • Keyboard Shortcuts:
-      - Ctrl + Hold: Enhanced ROI selection mode
-      - Mouse wheel: Zoom in/out on image
-      - Right-click: Complete ROI selection
-      - Left-click + drag: Create ROI rectangle
+  SNR = signal_std / noise_std   (noise estimated via bilateral filtering)
+  SNR_dB = 20 × log10(SNR)
+  Noise score = min(1.0, SNR_dB / 30)
 
-    • Theme Support:
-      - Dark and light themes for different preferences
-      - Automatic color scheme adaptation
-      - Consistent styling across all interface elements
-      - Theme persistence between application sessions
+  A good speckle image typically has SNR_dB > 20 dB (score > 0.67).
 
-    • Technical Features:
-      - Multi-threading for responsive user interface
-      - DPI awareness for consistent display scaling
-      - Robust error handling and recovery mechanisms
-      - Modern clean architecture for reliability
+# Overall Score
 
-    • Integration Capabilities:
-      - Compatible export formats for documentation
-      - Timestamped file organization for project management
-      - Comprehensive logging for troubleshooting
-      - Extensible design for future enhancements
+  The headline score is the sum of the five weighted contributions:
 
+    Q_total = 0.40×Q_gradient + 0.25×Q_contrast + 0.20×Q_entropy
+            + 0.10×Q_pattern + 0.05×Q_noise
 
+  Each Q is on 0-100 scale. The five "Contributes X pts" values in the
+  Score Breakdown sum exactly to this number.
+"""
 
-    🔬 TECHNICAL BACKGROUND
+    def _text_troubleshooting(self) -> str:
+        return """\
+## Troubleshooting
 
-    This tool analyzes digital image correlation (DIC) pattern quality by evaluating:
+# Score Inconsistency
 
-    • Gradient Analysis: Edge content and sharpness assessment
-    • Contrast Evaluation: Local and global contrast measurement
-    • Speckle Morphology: Pattern size and distribution analysis
-    • Information Content: Entropy and uniqueness calculation
-    • Noise Assessment: Signal-to-noise ratio estimation
+  If the headline score and the "Sum of weighted contributions" line in the
+  popup differ by more than 0.2 pts, re-run the analysis — the breakdown
+  path may have failed silently. Check the log for warnings.
 
-    The analysis provides scientifically-based recommendations for DIC correlation
-    parameters and expected measurement accuracy. Quality scores are calculated
-    using established metrics from DIC research literature.
+# Dark Red Map Despite Decent Score
 
-    DIC Parameter Calculations:
-    • Subset size optimization based on speckle characteristics
-    • Step size recommendations for desired overlap ratios
-    • Expected displacement accuracy estimates
-    • Pattern quality thresholds for reliable correlation
+  Before the fix (Tasks 1-2), fast per-subset functions systematically scored
+  lower than the full functions used for the breakdown. After applying the
+  fix, the map uses the same full functions. If you still see dark red:
+  - The component really is low for those subsets.
+  - Open the Noise or Entropy map to identify which component is pulling the
+    color down spatially.
 
+# ROI Selection Issues
 
+  - Left-click to place polygon vertices.
+  - Press Enter to close the polygon (need ≥ 3 points).
+  - Hold Ctrl for enhanced mode (auto-closes when Ctrl is released).
+  - "New ROI" clears the current selection.
 
-    📞 SUPPORT AND RESOURCES
+# Analysis Performance
 
-    For additional support:
-    • Review the comprehensive analysis reports generated by the tool
-    • Consult published research on DIC pattern quality assessment
-    • Check DIC software manuals for correlation parameter guidance
-    • Use the export features to document and share analysis results
+  - Use ROI to limit the region — smaller area = faster analysis.
+  - Large images (>1500 px) are automatically downscaled for map generation.
+  - If analysis takes too long, increase step size (lower map density).
 
-    Version: 2.0.0 - Clean Architecture Implementation
-    Last Updated: 2025
+# Low Gradient Score
 
-    This application provides professional-grade DIC pattern quality assessment
-    with comprehensive analysis capabilities and user-friendly visualization tools.
+  - Speckles have soft edges or are too large.
+  - Use finer airbrush nozzle or higher-contrast paint.
+  - Check that the image is in sharp focus.
 
-    """
+# Low Contrast Score
+
+  - Use true matte black on matte white paint (avoid gloss).
+  - Check for lighting glare or over-exposure washout.
+  - Histogram should span most of 0-255 range.
+
+# Low Entropy Score
+
+  - Pattern is too repetitive or regular.
+  - Increase randomness in speckle application.
+  - Avoid stamping or stencil methods that create periodic patterns.
+
+# Low Noise Score
+
+  - Reduce ISO/gain on the camera.
+  - Improve lighting to allow shorter exposure without high gain.
+  - Ensure the specimen is in focus.
+
+# Image Loading Problems
+
+  - Supported formats: PNG, JPEG, TIFF, BMP.
+  - Check file permissions.
+  - Try reducing image size if memory errors occur.
+
+# Camera Capture (SpinView, Windows only)
+
+  - Verify SpinView is running and the camera feed is visible.
+  - Ensure proper region selection before capturing.
+  - Switch to "Balanced" or "Accurate" performance mode for better quality.
+"""
+
+    # ------------------------------------------------------------------
 
     def _close_help(self):
         """Close the help dialog."""
@@ -505,28 +529,22 @@ class HelpDialog:
         if not self.help_window:
             return
 
-        # Update window to get accurate dimensions
         self.help_window.update_idletasks()
 
-        # Get window dimensions
         window_width = self.help_window.winfo_width()
         window_height = self.help_window.winfo_height()
 
-        # Get parent window position and size
         parent_x = self.parent.winfo_rootx()
         parent_y = self.parent.winfo_rooty()
         parent_width = self.parent.winfo_width()
         parent_height = self.parent.winfo_height()
 
-        # Calculate center position
         x = parent_x + (parent_width - window_width) // 2
         y = parent_y + (parent_height - window_height) // 2
 
-        # Ensure window is not off-screen
         x = max(0, x)
         y = max(0, y)
 
-        # Set window position
         self.help_window.geometry(f"+{x}+{y}")
 
     def is_open(self) -> bool:

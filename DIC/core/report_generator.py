@@ -64,6 +64,9 @@ class ReportGenerator:
         # Executive Summary
         sections.append(self._generate_executive_summary(analysis_results))
 
+        # Score Breakdown (new: per-component table)
+        sections.append(self._generate_score_breakdown(analysis_results))
+
         # Image Information
         if image_info or roi_info:
             sections.append(self._generate_image_information(image_info, roi_info))
@@ -121,29 +124,92 @@ Method Used: {spectrum_used.replace('_', ' ').title()}
 BOTTOM LINE UP FRONT:
 {self._generate_bluf(overall_score, spectrum_used)}"""
 
+    def _generate_score_breakdown(self, results: Dict) -> str:
+        """Generate per-component score breakdown table."""
+        cs = results.get('component_scores', {})
+
+        header = f"""SCORE BREAKDOWN
+{"-" * 40}"""
+
+        if not cs or not any(k in cs for k in ('gradient', 'contrast', 'entropy', 'pattern', 'noise')):
+            return header + "\nScore breakdown unavailable for this analysis."
+
+        order = ['gradient', 'contrast', 'entropy', 'pattern', 'noise']
+        labels = {'gradient': 'Gradient', 'contrast': 'Contrast',
+                  'entropy': 'Entropy', 'pattern': 'Pattern', 'noise': 'Noise'}
+
+        rows = [f"{'Component':<12}  {'Weight':>6}  {'Score/100':>9}  {'Contributes':>12}"]
+        rows.append("-" * 44)
+
+        total = 0.0
+        for name in order:
+            if name not in cs:
+                continue
+            comp = cs[name]
+            weight = comp.get('weight', 0)
+            score = comp.get('score', 0)
+            contrib = comp.get('weighted_contribution', 0)
+            total += contrib
+            rows.append(f"{labels[name]:<12}  {weight*100:>5.0f}%  {score:>9.1f}  {contrib:>10.1f} pts")
+
+        rows.append("-" * 44)
+        rows.append(f"Overall score (sum of contributions): {total:.1f} / 100")
+
+        # Key sub-metrics
+        sub_lines = []
+        if 'gradient' in cs:
+            gm = cs['gradient'].get('sub_metrics', {})
+            if gm.get('MIG', 0) or gm.get('Ef', 0):
+                sub_lines.append(f"  Gradient sub-metrics: MIG={gm.get('MIG', 0):.2f}, Ef={gm.get('Ef', 0):.2f}, "
+                                  f"distribution_bonus={gm.get('distribution_bonus', 0):.3f}")
+        if 'noise' in cs:
+            nm = cs['noise'].get('sub_metrics', {})
+            if nm.get('snr_db', 0):
+                sub_lines.append(f"  Noise sub-metrics: SNR={nm.get('snr_db', 0):.1f} dB")
+
+        body = "\n".join(rows)
+        if sub_lines:
+            body += "\n\n" + "\n".join(sub_lines)
+
+        return header + "\n" + body
+
     def _generate_technical_analysis(self, results: Dict) -> str:
         """Generate technical analysis section."""
         overall_score = results.get('overall_score', 0)
-        quality_std = results.get('quality_std', 0)
         stats = results.get('quality_map_stats', {})
 
-        return f"""TECHNICAL ANALYSIS
-{"-" * 40}
-Quality Statistics:
-  • Maximum Quality: {stats.get('max_quality', 0):.1f}%
-  • Average Quality: {overall_score:.1f}%
-  • Minimum Quality: {stats.get('min_quality', 0):.1f}%
-  • Median Quality: {stats.get('median_quality', 0):.1f}%
-  • Standard Deviation: {quality_std:.1f}%
+        mean_map = stats.get('mean_quality', overall_score)
+        max_q = stats.get('max_quality', 0)
+        min_q = stats.get('min_quality', 0)
+        median_q = stats.get('median_quality', 0)
+        std_q = stats.get('std_quality', 0)
 
-Analysis Algorithm:
-  The analysis uses advanced subset-based quality assessment including:
-  • Gradient content analysis (Mean Intensity Gradient - MIG)
-  • Enhanced feature calculation (Ef) combining first and second-order gradients
-  • Speckle morphology evaluation
-  • Contrast distribution assessment
-  • Pattern uniqueness calculation
-  • Noise resistance evaluation"""
+        lines = [
+            f"TECHNICAL ANALYSIS",
+            f"{'-' * 40}",
+            f"Quality Statistics:",
+            f"  • Maximum map quality: {max_q:.1f}%",
+            f"  • Average map quality (spatial): {mean_map:.1f}%",
+            f"  • Minimum map quality: {min_q:.1f}%",
+        ]
+        if median_q != 0.0:
+            lines.append(f"  • Median: {median_q:.1f}%")
+        if std_q != 0.0:
+            lines.append(f"  • Std Deviation: {std_q:.1f}%")
+
+        lines += [
+            "",
+            "Analysis Algorithm:",
+            "  The analysis uses advanced subset-based quality assessment including:",
+            "  • Gradient content analysis (Mean Intensity Gradient - MIG)",
+            "  • Enhanced feature calculation (Ef) combining first and second-order gradients",
+            "  • Speckle morphology evaluation",
+            "  • Contrast distribution assessment",
+            "  • Pattern uniqueness calculation",
+            "  • Noise resistance evaluation",
+        ]
+
+        return "\n".join(lines)
 
     def _generate_dic_parameters(self, results: Dict) -> str:
         """Generate DIC parameters section."""
@@ -181,77 +247,32 @@ Parameter Explanation:
     def _generate_non_technical_explanation(self, results: Dict) -> str:
         """Generate non-technical explanation section."""
         score = results.get('overall_score', 0)
-        analysis_method = results.get('analysis_method', 'Full image')
+        spectrum_used = results.get('spectrum_used', 'optimized')
+        quality_text, _ = self._assess_quality_level(score, spectrum_used)
 
-        explanation = f"""WHAT THIS MEANS (NON-TECHNICAL EXPLANATION)
-{"-" * 60}
-Digital Image Correlation (DIC) Analysis Explanation:
-
-WHAT WE MEASURED:
-This analysis examined your image to determine how well it will work for measuring
-tiny movements and deformations. Think of it like checking if a photograph has
-enough detail and contrast to track specific points accurately.
-
-YOUR RESULT: {score:.1f}/100
-
-WHAT THIS SCORE MEANS:"""
-
-        if score >= 90:
-            explanation += """
-• EXCELLENT: Your image has outstanding quality for precise measurements
-• The pattern has excellent contrast and detail
-• You can expect very accurate displacement measurements
-• Perfect for critical engineering applications"""
-        elif score >= 75:
-            explanation += """
-• VERY GOOD: Your image has good quality for reliable measurements
-• The pattern has good contrast and sufficient detail
-• You can expect reliable displacement measurements
-• Suitable for most engineering applications"""
+        if score >= 75:
+            action = "Proceed with DIC analysis using recommended parameters."
         elif score >= 60:
-            explanation += """
-• GOOD: Your image has acceptable quality for measurements
-• The pattern has reasonable contrast and detail
-• You can expect moderately accurate measurements
-• May need careful analysis parameter selection"""
+            action = "Proceed with caution — consider larger subset sizes."
         elif score >= 45:
-            explanation += """
-• ACCEPTABLE: Your image has marginal quality for measurements
-• The pattern has limited contrast or detail
-• Measurements may have increased uncertainty
-• Consider improving lighting or pattern if possible"""
+            action = "Use with care; larger subsets and strict filtering recommended."
         elif score >= 30:
-            explanation += """
-• CHALLENGING: Your image has poor quality for precise measurements
-• The pattern lacks sufficient contrast or detail
-• Measurements will have significant uncertainty
-• Strong recommendation to improve the image quality"""
+            action = "Pattern improvement strongly recommended before proceeding."
         else:
-            explanation += """
-• POOR: Your image is not suitable for reliable measurements
-• The pattern lacks the necessary contrast and detail
-• Measurements will be unreliable or may fail completely
-• Image quality improvement is essential before proceeding"""
+            action = "Pattern is not suitable — reapply or enhance speckle pattern first."
 
-        explanation += f"""
+        return f"""WHAT THIS MEANS (NON-TECHNICAL EXPLANATION)
+{"-" * 60}
+DIC (Digital Image Correlation) tracks a speckle pattern between images to
+measure displacement and strain. Pattern quality directly determines how
+accurately those measurements can be made.
 
-HOW THE ANALYSIS WORKS:
-The software examines small regions (subsets) across your image, looking for:
-• Sharp edges and clear patterns that can be tracked accurately
-• Good contrast between light and dark areas
-• Consistent lighting without shadows or glare
-• Appropriate speckle or texture patterns for correlation
+Overall score: {score:.1f}/100 — {quality_text}
 
-ANALYSIS METHOD USED:
-{analysis_method} - This tells you whether we analyzed your entire image or
-just the region you selected.
+Next step: {action}
 
-NEXT STEPS:
-Based on your score of {score:.1f}/100, please review the recommendations
-section for specific guidance on whether to proceed with your current setup
-or make improvements first."""
-
-        return explanation
+Consult the Score Breakdown above and the Recommendations section for
+specific guidance on which aspects of the pattern to improve."""
 
     def _generate_mathematical_content(self, results: Dict) -> str:
         """Generate mathematical background section."""
@@ -308,25 +329,28 @@ Combined Contrast Score:
 
 3. OVERALL QUALITY COMPUTATION
 {"=" * 30}
-The final quality score is a weighted combination emphasizing MIG/Ef metrics:
+The final quality score is a weighted combination of all five components:
 
-Q_total = w₁×Q_gradient + w₂×Q_contrast + w₃×Q_entropy + w₄×Q_pattern + w₅×Q_noise
+Q_total = w_gradient×Q_gradient + w_contrast×Q_contrast + w_entropy×Q_entropy
+        + w_pattern×Q_pattern + w_noise×Q_noise
+(each Q on 0–1 scale, then ×100 for the 0–100 score)
 
 where Q_gradient is computed using MIG and Ef:
     Q_gradient = (Ef_score × 0.8 + MIG_score × 0.2) × distribution_bonus
 
 MIG and Ef Scoring:
-    MIG_score = min(1.0, normalized_MIG × 6)
-    Ef_score = min(1.0, normalized_Ef × 4)
-    normalized_MIG = MIG / 255.0
-    normalized_Ef = Ef / 255.0
+    # keep in sync with QualityCalculator.__init__
+    normalized_MIG = MIG / 50      (mig_normalization_factor = 50)
+    normalized_Ef  = Ef  / 40      (ef_normalization_factor = 40)
+    MIG_score = min(1.0, normalized_MIG × 2.0)   (mig_score_multiplier = 2.0)
+    Ef_score  = min(1.0, normalized_Ef  × 1.2)   (ef_score_multiplier = 1.2)
 
-Standard weights:
-    w₁ = 0.60  (Gradient content - MIG/Ef emphasis for DIC)
-    w₂ = 0.20  (Contrast quality)
-    w₃ = 0.10  (Information content)
-    w₄ = 0.05  (Pattern complexity)
-    w₅ = 0.05  (Noise level)
+Component Weights (must sum to 1.0):
+    w_gradient = 0.40   (Gradient content — MIG/Ef, most important for DIC)
+    w_contrast = 0.25   (Contrast quality)
+    w_entropy  = 0.20   (Information content)
+    w_pattern  = 0.10   (Speckle pattern quality)
+    w_noise    = 0.05   (Noise resistance)
 
 Constraint: Σwᵢ = 1.0
 
@@ -379,19 +403,18 @@ Using STRICT DIC-ONLY Assessment Criteria:
   • 75-80%:  Minimum for DIC (Red)
   • 0-75%:   NOT suitable for DIC (Black)
 
-NOTE: This strict assessment only considers patterns with 75%+ scores
-      as suitable for DIC applications."""
+NOTE: Only patterns rated 75%+ are considered suitable for DIC work."""
         else:
             criteria += f"""
 Using {spectrum_used.replace('_', ' ').title()} Assessment Criteria:
-  • 75-100%: Excellent for DIC
-  • 60-75%:  Very Good for DIC
-  • 45-60%:  Good for DIC
-  • 30-45%:  Acceptable for DIC
-  • 15-30%:  Challenging for DIC
-  • 0-15%:   Poor for DIC
+  • 75-100%: Excellent  (green on map)
+  • 60-75%:  Very Good  (cyan on map)
+  • 45-60%:  Good       (yellow on map)
+  • 30-45%:  Acceptable (orange on map)
+  • 15-30%:  Challenging (dark red on map)
+  • 0-15%:   Poor       (black on map)
 
-NOTE: More lenient thresholds suitable for general pattern evaluation."""
+NOTE: Map colors, legend labels, and these thresholds all use the same bands."""
 
         return criteria
 
@@ -544,19 +567,6 @@ End of Report
                     "If proceeding: use maximum subset sizes and very strict filtering.",
                     "Consider alternative measurement techniques if high accuracy needed."
                 ])
-
-        # Add spectrum-specific note
-        if spectrum_type == 'custom_dic':
-            recommendations.extend([
-                " Note: Using strict DIC-only quality assessment.",
-                "Only patterns rated 75%+ are considered suitable for DIC work."
-            ])
-        else:
-            spectrum_name = spectrum_type.replace('_', ' ').title()
-            recommendations.extend([
-                f" Note: Using {spectrum_name} spectrum assessment.",
-                "Professional DIC quality evaluation with appropriate thresholds."
-            ])
 
         return recommendations
 

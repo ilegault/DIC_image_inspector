@@ -89,6 +89,12 @@ class ColormapGenerator:
                         'colors': rgb_colors
                     }
 
+    # Assessment-aligned color stop positions (normalized 0-1) for 'optimized'/'controlled'.
+    # Each position is the START of that color band, matching _assess_quality_level thresholds:
+    #   0-15  Poor / 15-30  Challenging / 30-45  Acceptable / 45-60  Good / 60-75  Very Good / 75+  Excellent
+    # Values above 0.75 clip to green (the last segment's end-color).
+    _ASSESSMENT_POSITIONS = np.array([0.0, 0.15, 0.30, 0.45, 0.60, 0.75], dtype=np.float32)
+
     def apply_colormap(self, quality_map: np.ndarray, spectrum_type: str = 'custom_dic',
                        interpolation: str = 'smooth') -> np.ndarray:
         """
@@ -108,18 +114,27 @@ class ColormapGenerator:
         spectrum = self.detailed_spectrums[spectrum_type]
         colors = spectrum['colors']
 
+        # Use assessment-aligned stops for the two DIC spectrums so the map colors
+        # agree with the quality-level labels shown in the legend and breakdown.
+        # Other spectrums keep evenly-spaced stops (np.linspace default).
+        if spectrum_type in ('optimized', 'controlled'):
+            positions = self._ASSESSMENT_POSITIONS
+        else:
+            positions = None  # _apply_smooth_colormap will use np.linspace
+
         # Create RGB output image
         h, w = quality_map.shape
         colored_map = np.zeros((h, w, 3), dtype=np.uint8)
 
         if interpolation == 'smooth':
-            colored_map = self._apply_smooth_colormap(quality_map, colors)
+            colored_map = self._apply_smooth_colormap(quality_map, colors, positions)
         else:
             colored_map = self._apply_discrete_colormap(quality_map, colors)
 
         return colored_map
 
-    def _apply_smooth_colormap(self, quality_map: np.ndarray, colors: list) -> np.ndarray:
+    def _apply_smooth_colormap(self, quality_map: np.ndarray, colors: list,
+                               positions: np.ndarray = None) -> np.ndarray:
         """Apply smooth interpolated colormap using vectorized operations."""
         h, w = quality_map.shape
 
@@ -127,8 +142,11 @@ class ColormapGenerator:
         rgb_colors = np.array([[r, g, b] for r, g, b, _ in colors], dtype=np.float32)
         n_colors = len(rgb_colors)
 
-        # Create interpolation points (0 to 1)
-        color_positions = np.linspace(0, 1, n_colors)
+        # Use explicit positions if provided, otherwise evenly spaced 0-1
+        if positions is not None and len(positions) == n_colors:
+            color_positions = positions.astype(np.float32)
+        else:
+            color_positions = np.linspace(0, 1, n_colors)
 
         # Clamp quality values to [0, 1]
         quality_clamped = np.clip(quality_map, 0, 1)

@@ -240,6 +240,18 @@ class ControlPanel:
         file_row.grid_columnconfigure(0, weight=1)
         file_row.grid_columnconfigure(1, weight=1)
 
+        # Settings button (full-width row)
+        settings_row = tk.Frame(actions_frame, bg=colors['panel_bg'])
+        settings_row.pack(fill='x', pady=(0, 8))
+
+        settings_btn = self._create_modern_button(
+            settings_row, "Settings", colors.get('btn_secondary', '#6b7280'),
+            command=lambda: self._execute_callback('show_settings'),
+            style='secondary'
+        )
+        settings_btn.pack(fill='x')
+        self.buttons['settings_btn'] = settings_btn
+
         # Row 3: System Controls
         system_row = tk.Frame(actions_frame, bg=colors['panel_bg'])
         system_row.pack(fill='x')
@@ -589,6 +601,7 @@ class ControlPanel:
             'theme_btn': colors.get('btn_secondary', '#6b7280'),
             'reset_display_btn': colors.get('btn_warning', '#f59e0b'),
             'reset_btn': colors.get('btn_danger', '#ef4444'),
+            'settings_btn': colors.get('btn_secondary', '#6b7280'),
             'zoom_in_btn': colors.get('btn_info', '#3b82f6'),
             'zoom_out_btn': colors.get('btn_info', '#3b82f6'),
             'zoom_actual_btn': colors.get('btn_neutral', '#64748b')
@@ -646,7 +659,8 @@ class ControlPanel:
         # Enhanced state configurations with live analysis
         state_configs = {
             'no_image': {
-                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu'],
+                'enabled': ['load_btn', 'screenshot_btn', 'help_btn', 'theme_btn', 'live_analysis_btn',
+                           'live_freq_menu', 'settings_btn'],
                 'disabled': ['roi_btn', 'analyze_btn', 'quality_map_btn', 'results_btn', 'save_btn',
                            'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
                            'zoom_actual_btn'],
@@ -655,19 +669,21 @@ class ControlPanel:
             'image_loaded': {
                 'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn',
                            'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
-                           'zoom_actual_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu'],
+                           'zoom_actual_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu',
+                           'settings_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
-                'special': {'roi_btn': {'text': ' Select ROI'}}
+                'special': {'roi_btn': {'text': ' Select ROI'}, 'analyze_btn': {'text': ' Analyze'}}
             },
             'roi_selected': {
                 'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'help_btn',
                            'reset_btn', 'reset_display_btn', 'zoom_in_btn', 'zoom_out_btn',
-                           'zoom_actual_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu'],
+                           'zoom_actual_btn', 'theme_btn', 'live_analysis_btn', 'live_freq_menu',
+                           'settings_btn'],
                 'disabled': ['quality_map_btn', 'results_btn', 'save_btn'],
-                'special': {'roi_btn': {'text': ' New ROI'}}
+                'special': {'roi_btn': {'text': ' New ROI'}, 'analyze_btn': {'text': ' Analyze'}}
             },
             'analyzing': {
-                'enabled': ['help_btn', 'theme_btn'],
+                'enabled': ['help_btn', 'theme_btn', 'settings_btn'],
                 'disabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn',
                            'results_btn', 'save_btn', 'reset_btn', 'reset_display_btn', 'zoom_in_btn',
                            'zoom_out_btn', 'zoom_actual_btn', 'live_analysis_btn', 'live_freq_menu'],
@@ -677,7 +693,7 @@ class ControlPanel:
                 'enabled': ['load_btn', 'screenshot_btn', 'roi_btn', 'analyze_btn', 'quality_map_btn',
                            'results_btn', 'save_btn', 'help_btn', 'reset_btn', 'reset_display_btn',
                            'zoom_in_btn', 'zoom_out_btn', 'zoom_actual_btn', 'theme_btn',
-                           'live_analysis_btn', 'live_freq_menu'],
+                           'live_analysis_btn', 'live_freq_menu', 'settings_btn'],
                 'disabled': [],
                 'special': {
                     'analyze_btn': {'text': ' Analyze'},

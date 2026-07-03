@@ -332,7 +332,7 @@ class ResultsPopup:
         )
         tk.Label(
             total_frame,
-            text=f"Sum of weighted contributions: {total_contrib:.1f}  ≈  Overall score: {cs['overall_score']:.1f}",
+            text=f"Sum of weighted contributions = {total_contrib:.1f} / 100  (this is the overall score)",
             font=('Arial', 11, 'bold'),
             fg=colors['primary'],
             bg=colors['panel_bg']
@@ -389,7 +389,7 @@ class ResultsPopup:
                 font=APP_CONFIG['fonts']['body'],
                 fg=colors['text_secondary'],
                 bg=colors['panel_bg']
-            ).pack(pady=10)
+            ).pack(padx=(0,10), pady=10)
             return
 
         component_order = ['gradient', 'contrast', 'entropy', 'pattern', 'noise']

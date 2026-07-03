@@ -12,6 +12,7 @@ Usage:
 
 import cv2
 import numpy as np
+import threading
 from typing import Tuple, Optional, TYPE_CHECKING, Callable
 import logging
 
@@ -23,6 +24,11 @@ if TYPE_CHECKING:
     from DIC.models.roi_data import ROIData
 
 logger = logging.getLogger(__name__)
+
+
+class AnalysisCancelled(Exception):
+    """Raised when the user cancels an in-progress analysis."""
+    pass
 
 # Downscale images larger than this (longest side) before map generation.
 # Maps are heavily smoothed, so sub-pixel accuracy is not needed.
@@ -575,6 +581,7 @@ class QualityMapGenerator:
             subset_size: Optional[int] = None,
             step_size: Optional[int] = None,
             progress_cb: Optional[Callable[[float, str], None]] = None,
+            cancel_event: Optional[threading.Event] = None,
     ) -> Tuple[np.ndarray, np.ndarray, dict]:
         """
         Single-pass generation of the overall quality map AND all 5 component maps.
@@ -649,11 +656,11 @@ class QualityMapGenerator:
         # Single-pass combined computation
         if work_roi is not None:
             quality_map_work, comp_maps_work = self._combined_pass_with_roi(
-                work_gray, work_roi, work_subset, work_step, progress_cb
+                work_gray, work_roi, work_subset, work_step, progress_cb, cancel_event
             )
         else:
             quality_map_work, comp_maps_work = self._combined_pass_standard(
-                work_gray, work_subset, work_step, progress_cb
+                work_gray, work_subset, work_step, progress_cb, cancel_event
             )
 
         # Upscale maps back to original image size if we downscaled
@@ -682,7 +689,8 @@ class QualityMapGenerator:
 
     def _combined_pass_standard(
             self, gray: np.ndarray, subset_size: int, step_size: int,
-            progress_cb: Optional[Callable] = None
+            progress_cb: Optional[Callable] = None,
+            cancel_event: Optional[threading.Event] = None,
     ) -> Tuple[np.ndarray, dict]:
         """Single subset loop over the full image — returns quality_map + component maps."""
         h, w = gray.shape
@@ -697,6 +705,8 @@ class QualityMapGenerator:
         n_rows = len(row_ys)
 
         for i_y, y in enumerate(row_ys):
+            if cancel_event is not None and cancel_event.is_set():
+                raise AnalysisCancelled("Analysis cancelled by user")
             for x in xs:
                 subset = gray[y:y + subset_size, x:x + subset_size]
                 q, comp = self.quality_calculator.calculate_subset_all(subset)
@@ -736,7 +746,8 @@ class QualityMapGenerator:
 
     def _combined_pass_with_roi(
             self, gray: np.ndarray, roi: 'ROIData', subset_size: int, step_size: int,
-            progress_cb: Optional[Callable] = None
+            progress_cb: Optional[Callable] = None,
+            cancel_event: Optional[threading.Event] = None,
     ) -> Tuple[np.ndarray, dict]:
         """Single pass restricted to ROI bounding box."""
         from DIC.models.roi_data import ROIData
@@ -763,6 +774,8 @@ class QualityMapGenerator:
         n_rows = len(row_ys)
 
         for i_y, y in enumerate(row_ys):
+            if cancel_event is not None and cancel_event.is_set():
+                raise AnalysisCancelled("Analysis cancelled by user")
             for x in xs:
                 subset_mask = roi_mask[y:y + subset_size, x:x + subset_size]
                 if np.sum(subset_mask > 0) / subset_mask.size < 0.25:

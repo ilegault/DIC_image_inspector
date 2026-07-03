@@ -15,10 +15,11 @@ Usage:
 
 import cv2
 import numpy as np
+import threading
 from typing import Optional, Tuple, Dict, Any, Callable
 import logging
 
-from DIC.analysis.quality_map.generator import QualityMapGenerator
+from DIC.analysis.quality_map.generator import QualityMapGenerator, AnalysisCancelled
 from DIC.core.quality_calculator import QualityCalculator
 from DIC.core.dic_parameters import DICParameterCalculator
 from DIC.models.analysis_result import AnalysisResult, QualityMapStats
@@ -49,6 +50,7 @@ class ImageAnalyzer:
             subset_size: Optional[int] = None,
             step_size: Optional[int] = None,
             progress_callback: Optional[Callable[[float, str], None]] = None,
+            cancel_event: Optional[threading.Event] = None,
     ) -> AnalysisResult:
         """
         Perform complete DIC quality analysis on an image.
@@ -85,7 +87,10 @@ class ImageAnalyzer:
                 subset_size=subset_size,
                 step_size=step_size,
                 progress_cb=lambda f, lbl: _progress(0.05 + f * 0.75, lbl),
+                cancel_event=cancel_event,
             )
+        except AnalysisCancelled:
+            raise
         except Exception as e:
             logger.warning(f"Combined map generation failed, falling back: {e}")
             quality_map, visualization = self._generate_quality_map(
@@ -93,16 +98,20 @@ class ImageAnalyzer:
             )
             metric_maps = None
 
-        # Calculate overall quality score
-        _progress(0.82, "Calculating overall score…")
-        overall_score = self._calculate_overall_score(quality_map, roi)
-
-        # Calculate detailed metrics (normalized breakdown via QualityCalculator)
-        _progress(0.84, "Computing metric breakdown…")
+        # Calculate detailed metrics FIRST — single source of truth for the headline score
+        _progress(0.82, "Computing metric breakdown…")
         detailed_metrics = self._calculate_detailed_metrics(
             gray_image, quality_map, roi,
-            progress_callback=lambda f, lbl: _progress(0.84 + f * 0.09, lbl),
+            progress_callback=lambda f, lbl: _progress(0.82 + f * 0.09, lbl),
         )
+
+        # Headline = breakdown's weighted 5-component score (consistent with popup display)
+        _progress(0.92, "Finalising overall score…")
+        if detailed_metrics and 'overall_score' in detailed_metrics:
+            overall_score = float(detailed_metrics['overall_score'])
+        else:
+            # Fallback only if breakdown failed
+            overall_score = self._calculate_overall_score(quality_map, roi)
 
         # Calculate DIC parameters
         _progress(0.94, "Estimating DIC parameters…")

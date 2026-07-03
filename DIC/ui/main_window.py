@@ -22,6 +22,8 @@ from typing import Optional, Dict, Any
 import threading
 import numpy as np
 import logging
+import json
+import os
 from datetime import datetime
 
 from DIC.ui.main_components.control_panel import ControlPanel
@@ -91,6 +93,13 @@ class DICQualityInspector:
 
         # Track which metric map is currently displayed (Task 4)
         self.current_metric = 'overall'
+
+        # Cancel token for in-progress analysis
+        self._cancel_event = threading.Event()
+
+        # Application settings (persisted to JSON)
+        self._settings_file = os.path.join(os.path.expanduser('~'), '.dic_inspector_settings.json')
+        self.settings = self._load_settings()
 
         # Create UI
         self._create_ui()
@@ -325,7 +334,8 @@ class DICQualityInspector:
             'reset_application': self.reset_application,
             'reset_display_results': self.reset_display,
             # ADDED: SpinView capture callbacks
-            'start_spinview_capture': self.start_spinview_capture
+            'start_spinview_capture': self.start_spinview_capture,
+            'show_settings': self.show_settings,
         }
 
         self.control_panel = ControlPanel(left_panel, control_callbacks)
@@ -452,6 +462,21 @@ class DICQualityInspector:
         )
         # Don't pack yet — shown only during analysis
 
+        # Cancel button (shown only during analysis, between progress bar and status label)
+        self.cancel_btn = tk.Button(
+            inner,
+            text="Cancel",
+            command=self.cancel_analysis,
+            font=APP_CONFIG['fonts']['status'],
+            bg=colors.get('btn_danger', '#ef4444'),
+            fg='white',
+            relief='flat',
+            padx=10,
+            pady=2,
+            cursor='hand2',
+        )
+        # Not packed yet — shown only during analysis
+
         # Status label
         self.status_var = tk.StringVar(value="Ready - Load an image to begin analysis")
         self.status_label = tk.Label(
@@ -468,14 +493,21 @@ class DICQualityInspector:
         self.status_label.pack(side='left', fill='x', expand=True)
 
     def _show_progress_bar(self):
-        """Show the progress bar during analysis."""
+        """Show the progress bar and cancel button during analysis."""
         self.progress_var.set(0.0)
         self.progress_bar.pack(side='left', padx=(16, 0), pady=6, before=self.status_label)
+        self.cancel_btn.pack(side='left', padx=(6, 0), pady=4, before=self.status_label)
 
     def _hide_progress_bar(self):
-        """Hide the progress bar when analysis completes."""
+        """Hide the progress bar and cancel button when analysis completes."""
         self.progress_bar.pack_forget()
+        self.cancel_btn.pack_forget()
         self.progress_var.set(0.0)
+
+    def cancel_analysis(self):
+        """Request cancellation of the running analysis."""
+        self._cancel_event.set()
+        self.status_var.set("Cancelling analysis…")
 
     def _on_analysis_progress(self, fraction: float, label: str):
         """Thread-safe progress update — schedules the actual Tk call on the main thread."""
@@ -790,6 +822,7 @@ class DICQualityInspector:
         spectrum_type = self.top_navigation.get_spectrum_method() if self.top_navigation else 'optimized'
 
         # Set analysis in progress
+        self._cancel_event.clear()
         self.state.set_analysis_in_progress(True)
         self._show_progress_bar()
         self.status_var.set("Starting analysis…")
@@ -803,6 +836,7 @@ class DICQualityInspector:
 
     def _run_analysis(self, spectrum_type: str):
         """Run analysis in background thread."""
+        from DIC.analysis.quality_map.generator import AnalysisCancelled
         try:
             # Get image and ROI
             image = self.state.get_image()
@@ -823,12 +857,15 @@ class DICQualityInspector:
                 image=image,
                 roi=roi,
                 progress_callback=self._on_analysis_progress,
+                cancel_event=self._cancel_event,
                 **analysis_kwargs
             )
 
             # Update UI on main thread
             self.root.after(0, lambda: self._on_analysis_complete(result))
 
+        except AnalysisCancelled:
+            self.root.after(0, self._on_analysis_cancelled)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -841,11 +878,12 @@ class DICQualityInspector:
         self._hide_progress_bar()
         self.status_var.set(f"Analysis complete — overall score: {result.overall_score:.1f}/100")
 
-        # Automatically save analysis data to shared logging system
-        try:
-            self.save_analysis_data_to_shared_logging()
-        except Exception as e:
-            logger.warning(f"Failed to auto-save analysis data: {e}")
+        # Automatically save analysis data (if enabled in settings)
+        if self.settings.get('auto_save_enabled', True):
+            try:
+                self.save_analysis_data_to_shared_logging()
+            except Exception as e:
+                logger.warning(f"Failed to auto-save analysis data: {e}")
 
         # Auto-show quality map after short delay
         self.root.after(500, self._auto_show_quality_map)
@@ -855,6 +893,17 @@ class DICQualityInspector:
         self.state.set_analysis_in_progress(False)
         self._hide_progress_bar()
         messagebox.showerror("Analysis Error", f"Analysis failed: {error_message}")
+
+    def _on_analysis_cancelled(self):
+        """Handle user-requested cancellation of analysis."""
+        self.state.set_analysis_in_progress(False)
+        self._hide_progress_bar()
+        if self.state.get_roi() is not None:
+            self.state.set_application_state('roi_selected')
+        else:
+            self.state.set_application_state('image_loaded')
+        self._update_ui_state()
+        self.status_var.set("Analysis cancelled")
 
     def _auto_show_quality_map(self):
         """Automatically show quality map after analysis."""
@@ -958,9 +1007,8 @@ class DICQualityInspector:
                 roi_info
             )
 
-            # Use default location or ask user
-            base_folder = self._get_reports_folder()
-            
+            base_folder = export_options.get('folder') or self._get_reports_folder()
+
             if base_folder:
                 if export_options['format'] == 'package':
                     # Save as complete package (always creates new folder)
@@ -1031,8 +1079,8 @@ class DICQualityInspector:
         dialog = WindowManager.create_child_window(
             parent=self.root,
             title="Export Report Options",
-            width=450,
-            height=600,
+            width=480,
+            height=720,
             resizable=False,
             topmost=False,
             center=True,
@@ -1080,8 +1128,8 @@ class DICQualityInspector:
         )
         format_frame.pack(fill='x', pady=(0, 15))
         
-        format_var = tk.StringVar(value='package')
-        
+        format_var = tk.StringVar(value=self.settings.get('export_format', 'package'))
+
         tk.Radiobutton(
             format_frame,
             text="Complete Package (Recommended)",
@@ -1122,8 +1170,8 @@ class DICQualityInspector:
         )
         qmap_frame.pack(fill='x', pady=(0, 15))
         
-        include_overlay_var = tk.BooleanVar(value=True)
-        include_raw_var = tk.BooleanVar(value=True)
+        include_overlay_var = tk.BooleanVar(value=self.settings.get('export_include_overlay', True))
+        include_raw_var = tk.BooleanVar(value=self.settings.get('export_include_raw', True))
         
         tk.Checkbutton(
             qmap_frame,
@@ -1161,6 +1209,53 @@ class DICQualityInspector:
             bg=colors['background']
         ).pack(anchor='w', padx=20, pady=(0, 5))
         
+        # Export folder selection
+        folder_frame = tk.LabelFrame(
+            main_frame,
+            text="Export Location",
+            font=APP_CONFIG['fonts']['default'],
+            fg=colors['text_primary'],
+            bg=colors['background']
+        )
+        folder_frame.pack(fill='x', pady=(0, 15))
+
+        default_folder = self.settings.get('export_location', '') or self._get_reports_folder() or ''
+        folder_var = tk.StringVar(value=default_folder)
+
+        folder_entry_frame = tk.Frame(folder_frame, bg=colors['background'])
+        folder_entry_frame.pack(fill='x', padx=10, pady=8)
+
+        folder_entry = tk.Entry(
+            folder_entry_frame,
+            textvariable=folder_var,
+            font=APP_CONFIG['fonts']['small'],
+            bg=colors.get('canvas_bg', '#ffffff'),
+            fg=colors['text_primary'],
+            relief='flat',
+            bd=1
+        )
+        folder_entry.pack(side='left', fill='x', expand=True, padx=(0, 6))
+
+        def browse_folder():
+            chosen = filedialog.askdirectory(
+                title="Select Export Location",
+                initialdir=folder_var.get() or self.file_operations.get_last_directory()
+            )
+            if chosen:
+                folder_var.set(chosen)
+
+        tk.Button(
+            folder_entry_frame,
+            text="Browse…",
+            command=browse_folder,
+            font=APP_CONFIG['fonts']['small'],
+            bg=colors.get('btn_secondary', '#6b7280'),
+            fg='white',
+            relief='flat',
+            padx=8,
+            pady=2,
+        ).pack(side='left')
+
         # Spectrum selection
         spectrum_frame = tk.LabelFrame(
             main_frame,
@@ -1171,7 +1266,7 @@ class DICQualityInspector:
         )
         spectrum_frame.pack(fill='x', pady=(0, 20))
         
-        spectrum_var = tk.StringVar(value='optimized')
+        spectrum_var = tk.StringVar(value=self.settings.get('export_spectrum', 'optimized'))
         spectrum_options = [
             ('optimized', 'Optimized (Hot-Cold, Recommended)'),
             ('viridis', 'Viridis (Purple-Yellow)'),
@@ -1201,7 +1296,8 @@ class DICQualityInspector:
                 'format': format_var.get(),
                 'include_overlay': include_overlay_var.get(),
                 'include_raw': include_raw_var.get(),
-                'spectrum': spectrum_var.get()
+                'spectrum': spectrum_var.get(),
+                'folder': folder_var.get().strip() or default_folder,
             })
             dialog.destroy()
         
@@ -1437,6 +1533,192 @@ in the DIC Quality Inspector application.
         except Exception as e:
             logging.error(f"Failed to create package summary: {e}")
 
+    # ------------------------------------------------------------------
+    # Settings
+    # ------------------------------------------------------------------
+
+    def _load_settings(self) -> dict:
+        """Load settings from JSON file, returning defaults if not found."""
+        defaults = {
+            'auto_save_enabled': True,
+            'auto_save_location': '',
+            'auto_save_quality_map': True,
+            'export_format': 'package',
+            'export_include_overlay': True,
+            'export_include_raw': True,
+            'export_spectrum': 'optimized',
+            'export_location': '',
+        }
+        try:
+            if os.path.exists(self._settings_file):
+                with open(self._settings_file, 'r') as f:
+                    saved = json.load(f)
+                defaults.update(saved)
+        except Exception as e:
+            logger.warning(f"Could not load settings: {e}")
+        return defaults
+
+    def _save_settings(self):
+        """Persist settings to JSON file."""
+        try:
+            with open(self._settings_file, 'w') as f:
+                json.dump(self.settings, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not save settings: {e}")
+
+    def show_settings(self):
+        """Show the settings dialog."""
+        colors = get_theme_colors()
+
+        dialog = WindowManager.create_child_window(
+            parent=self.root,
+            title="Settings",
+            width=500,
+            height=620,
+            resizable=False,
+            topmost=False,
+            center=True,
+        )
+        dialog.grab_set()
+        dialog.configure(bg=colors['background'])
+
+        # ── scrollable frame ──────────────────────────────────────────
+        outer = tk.Frame(dialog, bg=colors['background'])
+        outer.pack(fill='both', expand=True, padx=0, pady=0)
+
+        canvas = tk.Canvas(outer, bg=colors['background'], highlightthickness=0)
+        sb = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
+        inner = tk.Frame(canvas, bg=colors['background'])
+        inner.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        win = canvas.create_window((0, 0), window=inner, anchor='nw')
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.bind('<Configure>', lambda e: canvas.itemconfig(win, width=e.width))
+        canvas.pack(side='left', fill='both', expand=True)
+        sb.pack(side='right', fill='y')
+
+        def _mw(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        dialog.bind('<MouseWheel>', _mw)
+
+        pad = {'padx': 20, 'pady': 8}
+
+        def section(title):
+            tk.Label(inner, text=title, font=APP_CONFIG['fonts']['heading'],
+                     fg=colors['primary'], bg=colors['background']).pack(anchor='w', **pad)
+            tk.Frame(inner, bg=colors['panel_border'], height=1).pack(fill='x', padx=20, pady=(0, 4))
+
+        def row(parent, label):
+            f = tk.Frame(parent, bg=colors['background'])
+            f.pack(fill='x', padx=20, pady=3)
+            tk.Label(f, text=label, font=APP_CONFIG['fonts']['body'],
+                     fg=colors['text_primary'], bg=colors['background'],
+                     width=30, anchor='w').pack(side='left')
+            return f
+
+        def folder_row(parent, label, var):
+            f = row(parent, label)
+            e = tk.Entry(f, textvariable=var, font=APP_CONFIG['fonts']['small'],
+                         bg=colors.get('canvas_bg', '#ffffff'), fg=colors['text_primary'],
+                         relief='flat', bd=1, width=22)
+            e.pack(side='left', padx=(0, 4))
+            def browse():
+                chosen = filedialog.askdirectory(title=f"Select {label}", initialdir=var.get() or os.path.expanduser('~'))
+                if chosen:
+                    var.set(chosen)
+            tk.Button(f, text="Browse…", command=browse,
+                      font=APP_CONFIG['fonts']['small'],
+                      bg=colors.get('btn_secondary', '#6b7280'), fg='white',
+                      relief='flat', padx=6, pady=1).pack(side='left')
+
+        # ── build tk vars from current settings ───────────────────────
+        s = self.settings
+        v_auto_save    = tk.BooleanVar(value=s['auto_save_enabled'])
+        v_auto_loc     = tk.StringVar(value=s['auto_save_location'])
+        v_auto_qmap    = tk.BooleanVar(value=s['auto_save_quality_map'])
+        v_fmt          = tk.StringVar(value=s['export_format'])
+        v_overlay      = tk.BooleanVar(value=s['export_include_overlay'])
+        v_raw          = tk.BooleanVar(value=s['export_include_raw'])
+        v_spectrum     = tk.StringVar(value=s['export_spectrum'])
+        v_exp_loc      = tk.StringVar(value=s['export_location'])
+
+        def check(parent, label, var):
+            f = row(parent, label)
+            tk.Checkbutton(f, variable=var, bg=colors['background'],
+                           selectcolor=colors['hover_bg'], relief='flat').pack(side='left')
+
+        # ── Auto-save section ─────────────────────────────────────────
+        section("Auto-Save")
+        check(inner, "Enable auto-save after analysis", v_auto_save)
+        folder_row(inner, "Auto-save location", v_auto_loc)
+        tk.Label(inner, text="  (blank = default shared-logger directory)",
+                 font=APP_CONFIG['fonts']['small'], fg=colors['text_secondary'],
+                 bg=colors['background']).pack(anchor='w', padx=36)
+        check(inner, "Include quality map CSV", v_auto_qmap)
+
+        # ── Export defaults section ───────────────────────────────────
+        section("Export Report Defaults")
+
+        # Format
+        f_fmt = tk.Frame(inner, bg=colors['background'])
+        f_fmt.pack(fill='x', padx=20, pady=3)
+        tk.Label(f_fmt, text="Report type:", font=APP_CONFIG['fonts']['body'],
+                 fg=colors['text_primary'], bg=colors['background'], width=30, anchor='w').pack(side='left')
+        for val, lbl in [('package', 'Complete Package'), ('text_only', 'Text Only')]:
+            tk.Radiobutton(f_fmt, text=lbl, variable=v_fmt, value=val,
+                           font=APP_CONFIG['fonts']['small'],
+                           fg=colors['text_primary'], bg=colors['background'],
+                           selectcolor=colors['hover_bg']).pack(side='left', padx=4)
+
+        check(inner, "Include quality map overlay image", v_overlay)
+        check(inner, "Include raw quality map image", v_raw)
+        folder_row(inner, "Default export location", v_exp_loc)
+        tk.Label(inner, text="  (blank = default shared-logger directory)",
+                 font=APP_CONFIG['fonts']['small'], fg=colors['text_secondary'],
+                 bg=colors['background']).pack(anchor='w', padx=36)
+
+        # Spectrum
+        f_spec = tk.Frame(inner, bg=colors['background'])
+        f_spec.pack(fill='x', padx=20, pady=3)
+        tk.Label(f_spec, text="Default color scheme:", font=APP_CONFIG['fonts']['body'],
+                 fg=colors['text_primary'], bg=colors['background'], width=30, anchor='w').pack(side='left')
+        spec_sub = tk.Frame(f_spec, bg=colors['background'])
+        spec_sub.pack(side='left')
+        for val, lbl in [('optimized','Optimized'), ('viridis','Viridis'), ('plasma','Plasma'), ('jet','Jet')]:
+            tk.Radiobutton(spec_sub, text=lbl, variable=v_spectrum, value=val,
+                           font=APP_CONFIG['fonts']['small'],
+                           fg=colors['text_primary'], bg=colors['background'],
+                           selectcolor=colors['hover_bg']).pack(anchor='w')
+
+        # ── Buttons ───────────────────────────────────────────────────
+        tk.Frame(inner, bg=colors['panel_border'], height=1).pack(fill='x', padx=20, pady=(12, 4))
+        btn_row = tk.Frame(inner, bg=colors['background'])
+        btn_row.pack(fill='x', padx=20, pady=(4, 16))
+
+        def save_and_close():
+            self.settings.update({
+                'auto_save_enabled':    v_auto_save.get(),
+                'auto_save_location':   v_auto_loc.get().strip(),
+                'auto_save_quality_map': v_auto_qmap.get(),
+                'export_format':        v_fmt.get(),
+                'export_include_overlay': v_overlay.get(),
+                'export_include_raw':   v_raw.get(),
+                'export_spectrum':      v_spectrum.get(),
+                'export_location':      v_exp_loc.get().strip(),
+            })
+            self._save_settings()
+            dialog.destroy()
+
+        tk.Button(btn_row, text="Save", command=save_and_close,
+                  font=APP_CONFIG['fonts']['default'],
+                  bg=colors.get('btn_primary', '#2563eb'), fg='white',
+                  relief='flat', padx=20, pady=6).pack(side='right', padx=(6, 0))
+        tk.Button(btn_row, text="Cancel", command=dialog.destroy,
+                  font=APP_CONFIG['fonts']['default'],
+                  bg=colors.get('btn_secondary', '#6b7280'), fg='white',
+                  relief='flat', padx=20, pady=6).pack(side='right')
+
+        dialog.wait_window()
+
     def show_help(self):
         """Show help dialog."""
         try:
@@ -1533,33 +1815,49 @@ in the DIC Quality Inspector application.
         return self.state.get_roi_info()
 
     def save_analysis_data_to_shared_logging(self):
-        """Save current analysis data using shared logging system."""
+        """Save current analysis data using shared logging system (or custom location)."""
         if not self.state.has_analysis_result():
             return
-        
+
         try:
             result = self.state.get_analysis_result()
             image_info = self.state.get_image_info()
             roi_info = self.state.get_roi_info()
-            
-            # Save analysis results as JSON
-            analysis_data = {
-                'analysis_result': result.to_dict(),
-                'image_info': image_info,
-                'roi_info': roi_info,
-                'timestamp': datetime.now().isoformat(),
-                'application': 'DIC Quality Inspector'
-            }
-            
-            # Use shared logging to save analysis data
-            self.file_operations.save_analysis_results_with_shared_logging(analysis_data)
-            
-            # Save quality map data as CSV
-            if hasattr(result, 'quality_map') and result.quality_map is not None:
-                self.file_operations.save_quality_map_csv_with_shared_logging(result.quality_map)
-                
+
+            custom_dir = self.settings.get('auto_save_location', '').strip()
+
+            if custom_dir and os.path.isdir(custom_dir):
+                # Save directly to the user-chosen directory
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                json_path = os.path.join(custom_dir, f"dic_analysis_{timestamp}.json")
+                analysis_data = {
+                    'analysis_result': result.to_dict(),
+                    'image_info': image_info,
+                    'roi_info': roi_info,
+                    'timestamp': datetime.now().isoformat(),
+                    'application': 'DIC Quality Inspector'
+                }
+                with open(json_path, 'w') as f:
+                    json.dump(analysis_data, f, indent=2)
+                if self.settings.get('auto_save_quality_map', True) and result.quality_map is not None:
+                    import numpy as np_csv
+                    csv_path = os.path.join(custom_dir, f"quality_map_{timestamp}.csv")
+                    np_csv.savetxt(csv_path, result.quality_map * 100, delimiter=',', fmt='%.2f')
+            else:
+                # Fall back to shared logging system
+                analysis_data = {
+                    'analysis_result': result.to_dict(),
+                    'image_info': image_info,
+                    'roi_info': roi_info,
+                    'timestamp': datetime.now().isoformat(),
+                    'application': 'DIC Quality Inspector'
+                }
+                self.file_operations.save_analysis_results_with_shared_logging(analysis_data)
+                if self.settings.get('auto_save_quality_map', True) and result.quality_map is not None:
+                    self.file_operations.save_quality_map_csv_with_shared_logging(result.quality_map)
+
         except Exception as e:
-            logger.error(f"Failed to save analysis data to shared logging: {e}")
+            logger.error(f"Failed to save analysis data: {e}")
 
     def start_spinview_capture(self):
         """Start SpinView camera capture mode."""

@@ -503,6 +503,8 @@ class QualityCalculator:
         """
         Return all 5 component quality scores (0-1) for a single image subset.
 
+        Uses the same full metric functions as the breakdown so map colors and
+        breakdown numbers are computed with identical math.
         Used by the map generator for single-pass component map generation.
         """
         try:
@@ -512,11 +514,11 @@ class QualityCalculator:
             gray = cv2.cvtColor(subset, cv2.COLOR_RGB2GRAY) if len(subset.shape) == 3 else subset.copy()
 
             return {
-                'gradient': self._calculate_fast_gradient_quality(gray),
-                'contrast': self._calculate_fast_contrast_quality(gray),
-                'entropy': self._calculate_fast_entropy_quality(gray),
-                'pattern': self._calculate_fast_pattern_quality(gray),
-                'noise': self._calculate_fast_noise_quality(gray),
+                'gradient': self._calculate_gradient_quality(gray)['score'],
+                'contrast': self._calculate_contrast_quality(gray)['score'],
+                'entropy':  self._calculate_entropy_quality(gray)['score'],
+                'pattern':  self._calculate_pattern_quality(gray)['score'],
+                'noise':    self._calculate_noise_quality(gray)['score'],
             }
         except Exception as e:
             logger.warning(f"Error calculating subset component scores: {e}")
@@ -526,8 +528,9 @@ class QualityCalculator:
         """
         Return (overall_score_0to1, component_scores_dict) in a single call.
 
-        Computes all 5 components once, then derives the overall quality score
-        from the same components — no duplicate gradient/contrast/entropy work.
+        Uses the same full metric functions and official 5-component weights as
+        get_component_breakdown() so the map colors, headline, and breakdown
+        numbers are all consistent.
         Used by the combined single-pass map generator.
         """
         _default_comp = {'gradient': 0.0, 'contrast': 0.0, 'entropy': 0.0, 'pattern': 0.5, 'noise': 0.5}
@@ -537,23 +540,20 @@ class QualityCalculator:
 
             gray = cv2.cvtColor(subset, cv2.COLOR_RGB2GRAY) if len(subset.shape) == 3 else subset.copy()
 
-            g = self._calculate_fast_gradient_quality(gray)
-            c = self._calculate_fast_contrast_quality(gray)
-            e = self._calculate_fast_entropy_quality(gray)
-            p = self._calculate_fast_pattern_quality(gray)
-            n = self._calculate_fast_noise_quality(gray)
+            comp = {
+                'gradient': self._calculate_gradient_quality(gray)['score'],
+                'contrast': self._calculate_contrast_quality(gray)['score'],
+                'entropy':  self._calculate_entropy_quality(gray)['score'],
+                'pattern':  self._calculate_pattern_quality(gray)['score'],
+                'noise':    self._calculate_noise_quality(gray)['score'],
+            }
 
-            comp = {'gradient': g, 'contrast': c, 'entropy': e, 'pattern': p, 'noise': n}
-
-            # Same weighting logic as calculate_subset_quality (gradient-heavy, 3-component)
-            q = g * 0.60 + c * 0.25 + e * 0.15
-            critical = sum(1 for v in (g, c, e) if v < 0.05)
-            if critical >= 3:
-                q *= 0.3
-            elif critical >= 2:
-                q *= 0.6
-            elif critical == 1:
-                q *= 0.8
+            # Official 5-component weighted sum — same formula as get_component_breakdown
+            q = (comp['gradient'] * self.weights['gradient'] +
+                 comp['contrast'] * self.weights['contrast'] +
+                 comp['entropy']  * self.weights['entropy'] +
+                 comp['pattern']  * self.weights['pattern'] +
+                 comp['noise']    * self.weights['noise'])
 
             return max(0.0, min(1.0, q)), comp
 
