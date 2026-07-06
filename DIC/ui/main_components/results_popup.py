@@ -448,8 +448,10 @@ class ResultsPopup:
                 font=('Arial', 11, 'bold'),
                 fg=level_color,
                 bg=colors['panel_bg'],
+                wraplength=460,
+                justify='left',
                 anchor='w'
-            ).pack(anchor='w')
+            ).pack(anchor='w', fill='x')
 
             tk.Label(
                 row,
@@ -457,10 +459,10 @@ class ResultsPopup:
                 font=APP_CONFIG['fonts']['body'],
                 fg=colors['text_primary'],
                 bg=colors['panel_bg'],
-                wraplength=520,
+                wraplength=440,
                 justify='left',
                 anchor='w'
-            ).pack(anchor='w', padx=(16, 0))
+            ).pack(anchor='w', padx=(16, 0), fill='x')
 
         if not issues_found:
             tk.Label(

@@ -898,7 +898,10 @@ class DICQualityInspector:
         """Handle user-requested cancellation of analysis."""
         self.state.set_analysis_in_progress(False)
         self._hide_progress_bar()
-        if self.state.get_roi() is not None:
+        # If a previous analysis result exists, keep actions/results buttons available
+        if self.state.has_analysis_result():
+            self.state.set_application_state('analysis_complete')
+        elif self.state.get_roi() is not None:
             self.state.set_application_state('roi_selected')
         else:
             self.state.set_application_state('image_loaded')
